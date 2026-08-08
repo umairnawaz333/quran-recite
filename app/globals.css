@@ -66,3 +66,13 @@ rule[class='idgham_wo_ghunnah']  { color: #6b7280; }
 rule[class='idgham_shafawi']     { color: #6b7280; }
 rule[class='idgham_mutajanisayn'] { color: #6b7280; }
 rule[class='idgham_mutaqaribayn'] { color: #6b7280; }
+
+@media (max-width: 640px) {
+  .quran-text {
+    font-size: clamp(1.5rem, 7vw, 2rem);
+    line-height: 2.2;
+  }
+}
+
+/* The fixed player is roughly 96px tall; keep the last ayah reachable. */
+main { padding-bottom: 7rem; }
