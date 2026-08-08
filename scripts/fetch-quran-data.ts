@@ -1,4 +1,4 @@
-import { mkdir, writeFile, access } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeAyah } from '../lib/normalize/segments';
 import type { RawSegment, WordTiming } from '../lib/normalize/types';
@@ -16,8 +16,74 @@ const ROOT = process.cwd();
 const DATA = path.join(ROOT, 'data');
 const AUDIO_DIR = path.join(ROOT, 'public', 'audio', RECITER_SLUG);
 
+// --- Retry with exponential backoff -------------------------------------
+
+const MAX_ATTEMPTS = 5;
+const BASE_DELAY_MS = 500;
+/** Transient — worth retrying. */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function backoffDelayMs(attempt: number): number {
+  return BASE_DELAY_MS * 2 ** (attempt - 1);
+}
+
+/** Honours Retry-After as either delta-seconds or an HTTP-date. */
+function retryAfterMs(res: Response): number | null {
+  const header = res.headers.get('retry-after');
+  if (!header) return null;
+  const seconds = Number(header);
+  if (!Number.isNaN(seconds)) return seconds * 1000;
+  const dateMs = Date.parse(header);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+  return null;
+}
+
+/**
+ * fetch() with exponential backoff. Retries network errors and 429/500/502/
+ * 503/504, honouring a Retry-After header when the response carries one.
+ * 400/401/403/404 and any other 4xx are permanent failures and are returned
+ * to the caller immediately, un-retried — retrying those wastes time and
+ * looks like abuse. `label` is only for the retry log line.
+ */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  label: string,
+): Promise<Response> {
+  for (let attempt = 1; ; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch (err) {
+      if (attempt >= MAX_ATTEMPTS) throw err;
+      const delay = backoffDelayMs(attempt);
+      console.warn(
+        `  [retry] network error for ${label} (attempt ${attempt}/${MAX_ATTEMPTS}): ` +
+        `${(err as Error).message} — retrying in ${delay}ms`,
+      );
+      await sleep(delay);
+      continue;
+    }
+
+    if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= MAX_ATTEMPTS) {
+      return res;
+    }
+
+    const delay = retryAfterMs(res) ?? backoffDelayMs(attempt);
+    console.warn(
+      `  [retry] ${res.status} ${res.statusText} for ${label} ` +
+      `(attempt ${attempt}/${MAX_ATTEMPTS}) — retrying in ${delay}ms`,
+    );
+    await sleep(delay);
+  }
+}
+
 async function api<T>(pathname: string): Promise<T> {
-  const res = await fetch(`${API}${pathname}`, { headers: { 'User-Agent': UA } });
+  const res = await fetchWithRetry(`${API}${pathname}`, { headers: { 'User-Agent': UA } }, pathname);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${pathname}`);
   return res.json() as Promise<T>;
 }
@@ -58,7 +124,7 @@ async function downloadAudio(remotePath: string): Promise<string> {
   const filename = remotePath.split('/').pop()!;
   const dest = path.join(AUDIO_DIR, filename);
   if (!(await exists(dest))) {
-    const res = await fetch(AUDIO_HOST + remotePath, { headers: { 'User-Agent': UA } });
+    const res = await fetchWithRetry(AUDIO_HOST + remotePath, { headers: { 'User-Agent': UA } }, remotePath);
     if (!res.ok) throw new Error(`audio ${res.status} for ${remotePath}`);
     await writeFile(dest, Buffer.from(await res.arrayBuffer()));
   }
@@ -75,6 +141,13 @@ async function fetchSurahMeta(): Promise<Omit<SurahMeta, 'available'>[]> {
     ayahCount: c.verses_count,
     revelationPlace: c.revelation_place,
   }));
+}
+
+/** A surah is available once its text and timings files actually exist on disk. */
+async function isSurahAvailable(surah: number): Promise<boolean> {
+  const textPath = path.join(DATA, 'text', `${surah}.json`);
+  const timingsPath = path.join(DATA, 'timings', RECITER_SLUG, `${surah}.json`);
+  return (await exists(textPath)) && (await exists(timingsPath));
 }
 
 /**
@@ -231,6 +304,17 @@ async function buildSurah(surah: number): Promise<SurahReport> {
   return report;
 }
 
+/** Reads the existing validation report, if any, keyed by surah number. */
+async function loadExistingReports(): Promise<Map<number, SurahReport>> {
+  try {
+    const raw = await readFile(path.join(DATA, 'validation-report.json'), 'utf-8');
+    const parsed = JSON.parse(raw) as SurahReport[];
+    return new Map(parsed.map(r => [r.surah, r]));
+  } catch {
+    return new Map();
+  }
+}
+
 async function main() {
   const surahs = parseSurahArg();
   console.log(`Fetching surahs: ${surahs.join(', ')}`);
@@ -239,40 +323,56 @@ async function main() {
   await mkdir(path.join(DATA, 'timings', RECITER_SLUG), { recursive: true });
   await mkdir(AUDIO_DIR, { recursive: true });
 
+  // reciters.json is static and independent of the surah loop, so it is safe
+  // to write up front rather than deferring it to a successful full run.
+  await writeFile(
+    path.join(DATA, 'reciters.json'),
+    JSON.stringify([{ id: RECITER_SLUG, name: 'AbdulBaset AbdulSamad', style: 'Murattal' }], null, 2),
+  );
+
   const meta = await fetchSurahMeta();
-  const reports: SurahReport[] = [];
+
+  // Merge with whatever an earlier invocation already recorded, so surahs
+  // fetched in a previous run keep their entries even though this run only
+  // touches a subset.
+  const reportsById = await loadExistingReports();
+
+  /**
+   * Writes surahs.json and validation-report.json from current in-memory
+   * state. Called after every surah (success or validation failure) so an
+   * interrupted multi-surah run leaves the manifests consistent with what is
+   * actually on disk, instead of only writing them once at the very end.
+   */
+  async function writeManifests(): Promise<void> {
+    const withAvailability: SurahMeta[] = await Promise.all(
+      meta.map(async m => ({ ...m, available: await isSurahAvailable(m.id) })),
+    );
+    await writeFile(path.join(DATA, 'surahs.json'), JSON.stringify(withAvailability, null, 2));
+
+    const sortedReports = [...reportsById.values()].sort((a, b) => a.surah - b.surah);
+    await writeFile(
+      path.join(DATA, 'validation-report.json'),
+      JSON.stringify(sortedReports, null, 2),
+    );
+  }
 
   for (const surah of surahs) {
     try {
-      reports.push(await buildSurah(surah));
+      const report = await buildSurah(surah);
+      reportsById.set(surah, report);
+      await writeManifests();
     } catch (err) {
       if (err instanceof SegmentValidationError) {
-        reports.push(err.report);
+        reportsById.set(surah, err.report);
         // Write out the report before failing so the violation is on record,
         // even though the corrupt surah's text/timings files were never written.
-        await writeFile(
-          path.join(DATA, 'validation-report.json'),
-          JSON.stringify(reports, null, 2),
-        );
+        await writeManifests();
         console.error(`\n${err.message}`);
         process.exit(1);
       }
       throw err;
     }
   }
-
-  const fetched = new Set(surahs);
-  const withAvailability: SurahMeta[] = meta.map(m => ({ ...m, available: fetched.has(m.id) }));
-
-  await writeFile(path.join(DATA, 'surahs.json'), JSON.stringify(withAvailability, null, 2));
-  await writeFile(
-    path.join(DATA, 'reciters.json'),
-    JSON.stringify([{ id: RECITER_SLUG, name: 'AbdulBaset AbdulSamad', style: 'Murattal' }], null, 2),
-  );
-  await writeFile(
-    path.join(DATA, 'validation-report.json'),
-    JSON.stringify(reports, null, 2),
-  );
 
   console.log('Done.');
 }
