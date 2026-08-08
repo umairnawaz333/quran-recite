@@ -592,6 +592,15 @@ Candidate approaches, to be decided before Phase 2 starts:
 All four keep the project independent of Quran.com, which is the actual
 requirement. Phase 1 proceeds identically under every option.
 
+**Current leaning (deferred, revisit before Phase 2):** a hybrid — commit the
+smaller surahs' audio to GitHub, and keep the large ones (Al-Baqarah at 232 MB
+being the obvious case) out of the repository. Nothing in Phase 1 depends on this
+resolving one way or the other.
+
+To keep that option open at no cost, the audio path is resolved through a single
+helper (`lib/data/audioUrl.ts`) rather than being hard-coded into components. If
+some surahs later move to external storage, only that helper changes.
+
 `.gitignore` covers `node_modules/`, `.next/`, `out/`, and local env files.
 
 Static export means hosting is a static file drop — GitHub Pages, Vercel, or
