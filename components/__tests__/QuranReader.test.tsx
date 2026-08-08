@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuranReader } from '../QuranReader';
 import { WordRegistry } from '@/lib/reader/wordRegistry';
@@ -70,6 +70,13 @@ describe('QuranReader', () => {
   it('calls onWordClick with the word id', async () => {
     const { onWordClick } = setup();
     await userEvent.click(document.querySelector('[data-word-id="1:1:2"]')!);
+    expect(onWordClick).toHaveBeenCalledWith('1:1:2');
+  });
+
+  it('activates a word on Space, per ARIA button semantics', () => {
+    const { onWordClick } = setup();
+    const word = document.querySelector('[data-word-id="1:1:2"]')!;
+    fireEvent.keyDown(word, { key: ' ', code: 'Space' });
     expect(onWordClick).toHaveBeenCalledWith('1:1:2');
   });
 

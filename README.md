@@ -70,10 +70,23 @@ no segment at all and must be absorbed into a neighbouring segment's span.
   audio position on `requestAnimationFrame` (rather than the coarser
   `timeupdate` event) and resolves the active word by binary search over its
   `[startMs, endMs)` timings.
-- Highlighting bypasses React's render cycle entirely: the surah renders once,
-  and `lib/reader/wordRegistry.ts` toggles a class directly on two DOM nodes
-  (the previously active word and the newly active one) per change.
+- Highlighting bypasses React's render cycle entirely: `lib/reader/wordRegistry.ts`
+  toggles a class directly on two DOM nodes (the previously active word and
+  the newly active one) per change, at frame rate. The word tree itself does
+  re-render on the 250ms progress-bar tick because that state lives in
+  `SurahClient`, but `QuranReader` is wrapped in `React.memo` with
+  referentially-stable props, so React bails out before reconciling
+  `AyahBlock`/`QuranWord` — the tree is not walked 4×/sec.
 
 See [`docs/superpowers/specs/`](docs/superpowers/specs/) for the full design
 and [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for licensing, including the
 unresolved audio-redistribution question.
+
+## License
+
+The source code in this repository is licensed under the [MIT License](LICENSE).
+
+That covers the code only. The Quran text, word-timing data, audio, and fonts
+are each third-party content with their own terms, not MIT — see
+[`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for the licence and status of
+each.
