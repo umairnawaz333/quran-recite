@@ -6,3 +6,5 @@ out/
 .env*
 .superpowers/
 tsconfig.tsbuildinfo
+AGENTS.md
+CLAUDE.md

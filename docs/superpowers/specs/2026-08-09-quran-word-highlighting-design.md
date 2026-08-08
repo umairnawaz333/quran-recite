@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-09
 **Status:** Approved for planning
-**Source PRD:** `Quran Recitation & Word-by-Word Highlighting Web App.md`
+**Source PRD:** [`docs/PRD.md`](../../PRD.md)
 
 ---
 

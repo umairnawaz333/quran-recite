@@ -29,10 +29,6 @@ export class WordRegistry {
     this.activeId = id;
   }
 
-  getNode(id: string): HTMLElement | undefined {
-    return this.nodes.get(id);
-  }
-
   clear(): void {
     this.setActive(null, false);
     this.nodes.clear();
