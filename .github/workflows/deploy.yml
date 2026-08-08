@@ -1,0 +1,123 @@
+name: Deploy to Vercel
+
+# Manual trigger only — nothing deploys on push.
+# Run it from the Actions tab, or with:  gh workflow run deploy.yml
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to deploy
+        type: choice
+        default: production
+        options:
+          - production
+          - preview
+      skip_tests:
+        description: Deploy even if tests fail (emergency only)
+        type: boolean
+        default: false
+
+# Two deploys racing each other would be worse than waiting.
+concurrency:
+  group: vercel-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Check out the ref being deployed
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Runs before the build so a broken commit never reaches production.
+      # The suite covers the word-timing normalizer, the sync engine, the
+      # timeline, and the audio playlist — the parts that silently corrupt
+      # the reading experience when they regress.
+      - name: Run tests
+        if: ${{ !inputs.skip_tests }}
+        run: npm test
+
+      - name: Type check
+        if: ${{ !inputs.skip_tests }}
+        run: npx tsc --noEmit
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      # Pulls the project's build settings and environment from Vercel so the
+      # build here matches the build Vercel would have run itself.
+      - name: Pull Vercel environment
+        run: |
+          vercel pull --yes \
+            --environment=${{ inputs.target }} \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: |
+          vercel build ${{ inputs.target == 'production' && '--prod' || '' }} \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+      # --prebuilt uploads the artifacts built above rather than rebuilding on
+      # Vercel, so what was tested is exactly what ships.
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt \
+            ${{ inputs.target == 'production' && '--prod' || '' }} \
+            --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url"
+
+      # A deploy that reports success while serving a broken page is worse
+      # than a failed deploy, so check real content rather than just a 200.
+      - name: Verify the deployment actually works
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$url/")
+          echo "home page: $code"
+          [ "$code" = "200" ] || { echo "::error::Home page returned $code"; exit 1; }
+
+          words=$(curl -s "$url/surah/1/" | grep -c 'data-word-id' || true)
+          echo "Al-Fatihah word spans found: $words"
+          [ "$words" -gt 0 ] || { echo "::error::Surah page rendered no words"; exit 1; }
+
+          audio=$(curl -s -o /dev/null -w '%{http_code}' \
+            "$url/audio/abdulbasit-murattal/001001.mp3")
+          echo "audio: $audio"
+          [ "$audio" = "200" ] || { echo "::error::Audio returned $audio"; exit 1; }
+
+          font=$(curl -s -o /dev/null -w '%{http_code}' "$url/fonts/amiri-quran.woff2")
+          echo "font: $font"
+          [ "$font" = "200" ] || { echo "::error::Font returned $font"; exit 1; }
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Deploy — ${{ inputs.target }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| URL | ${{ steps.deploy.outputs.url }} |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Ref | \`${{ github.ref_name }}\` |"
+            echo "| Tests | ${{ inputs.skip_tests && 'SKIPPED' || 'passed' }} |"
+            echo "| Result | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
