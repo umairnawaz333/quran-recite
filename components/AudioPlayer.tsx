@@ -17,9 +17,11 @@ interface Props {
 }
 
 /**
- * Fixed player bar pinned to the bottom of the viewport. On mobile it stays
- * reachable without covering the Arabic text, which scrolls independently
- * above it.
+ * Fixed player bar pinned to the bottom of the viewport, stacked above other
+ * content via z-index. This component only controls its own position and
+ * stacking order — it does not reserve layout space, so the consuming page
+ * is responsible for padding its scrollable content (e.g. the Arabic text)
+ * so this bar never covers it.
  */
 export function AudioPlayer({
   isPlaying,

@@ -31,6 +31,15 @@ export function ProgressBar({ valueMs, totalMs, onSeek }: Props) {
     }
   };
 
+  // A pointer interaction can end without a `pointerup` (interrupted touch,
+  // browser scroll-cancel, system interruption). If we didn't also listen for
+  // `pointercancel`, dragMs would stay set forever and the thumb would stay
+  // frozen at the abandoned position. Discard the drag without seeking —
+  // the user abandoned the gesture rather than choosing a position.
+  const cancel = () => {
+    setDragMs(null);
+  };
+
   return (
     <div className="flex items-center gap-3">
       <span className="w-10 text-right text-xs tabular-nums text-neutral-500">
@@ -44,6 +53,7 @@ export function ProgressBar({ valueMs, totalMs, onSeek }: Props) {
         aria-label="Seek within surah"
         onChange={e => setDragMs(Number(e.target.value))}
         onPointerUp={commit}
+        onPointerCancel={cancel}
         onKeyUp={commit}
         className="h-1 flex-1 cursor-pointer appearance-none rounded bg-neutral-200 accent-amber-600"
       />

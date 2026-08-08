@@ -48,4 +48,33 @@ describe('ProgressBar', () => {
     rerender(<ProgressBar valueMs={100} totalMs={10000} onSeek={vi.fn()} />);
     expect(slider.value).toBe('7000');
   });
+
+  it('discards the drag on pointercancel without seeking', () => {
+    const onSeek = vi.fn();
+    render(<ProgressBar valueMs={0} totalMs={10000} onSeek={onSeek} />);
+    const slider = screen.getByRole('slider');
+    fireEvent.change(slider, { target: { value: '5000' } });
+    fireEvent.pointerCancel(slider);
+    expect(onSeek).not.toHaveBeenCalled();
+  });
+
+  it('follows an updated valueMs prop again after a cancelled drag', () => {
+    const { rerender } = render(
+      <ProgressBar valueMs={0} totalMs={10000} onSeek={vi.fn()} />,
+    );
+    const slider = screen.getByRole('slider') as HTMLInputElement;
+    fireEvent.change(slider, { target: { value: '5000' } });
+    fireEvent.pointerCancel(slider);
+    rerender(<ProgressBar valueMs={200} totalMs={10000} onSeek={vi.fn()} />);
+    expect(slider.value).toBe('200');
+  });
+
+  it('still commits on pointerup', () => {
+    const onSeek = vi.fn();
+    render(<ProgressBar valueMs={0} totalMs={10000} onSeek={onSeek} />);
+    const slider = screen.getByRole('slider');
+    fireEvent.change(slider, { target: { value: '6000' } });
+    fireEvent.pointerUp(slider);
+    expect(onSeek).toHaveBeenCalledWith(6000);
+  });
 });
