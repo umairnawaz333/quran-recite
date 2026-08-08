@@ -19,3 +19,18 @@ export function countBaseLetters(text: string): number {
     .replace(NON_LETTER_MARKS, '')
     .replace(/\s+/g, '').length;
 }
+
+/** Marks that lengthen a vowel: superscript (dagger) alef (U+0670), and maddah (U+0653). */
+const LONG_VOWEL_MARKS = /[\u0670\u0653]/g;
+
+/**
+ * Weight used to apportion a shared audio segment across words.
+ *
+ * Base letters plus elongation marks: a long vowel takes real time to recite,
+ * so it counts here even though it is not a letter.
+ */
+export function countRecitationWeight(text: string): number {
+  const plain = text.replace(HTML_TAG, '');
+  const elongations = (plain.match(LONG_VOWEL_MARKS) ?? []).length;
+  return countBaseLetters(text) + elongations;
+}

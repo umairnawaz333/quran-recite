@@ -1,4 +1,4 @@
-import { countBaseLetters } from './arabic';
+import { countRecitationWeight } from './arabic';
 import type {
   NormalizeInput, NormalizeResult, NormalizeWord, WordTiming,
 } from './types';
@@ -88,9 +88,10 @@ export function normalizeAyah(input: NormalizeInput): NormalizeResult {
 }
 
 /**
- * Splits one segment's duration across several words, weighted by base-letter
- * count. Every resulting timing is flagged `estimated` — sub-word timing does
- * not exist in the source data, so this is interpolation, not measurement.
+ * Splits one segment's duration across several words, weighted by recitation
+ * weight (base letters plus elongation marks — a long vowel takes real time
+ * to recite). Every resulting timing is flagged `estimated` — sub-word timing
+ * does not exist in the source data, so this is interpolation, not measurement.
  */
 function apportion(
   groupWords: NormalizeWord[],
@@ -100,7 +101,7 @@ function apportion(
   ayah: number,
   groupId: string,
 ): WordTiming[] {
-  const weights = groupWords.map(w => Math.max(countBaseLetters(w.text), 1));
+  const weights = groupWords.map(w => Math.max(countRecitationWeight(w.text), 1));
   const total = weights.reduce((sum, w) => sum + w, 0);
   const span = endMs - startMs;
 
