@@ -22,7 +22,7 @@
 - **Segment format is `[startWordIndex, endWordIndexExclusive, startMs, endMs]`** — a word *range*, not one entry per word.
 - **Word timings are local to their own ayah's audio file** (each file starts at 0). `startOffsetMs` maps an ayah into the global surah timeline.
 - **Audio files are copied byte-for-byte, never re-encoded** — encoder delay would shift sync by tens of milliseconds.
-- **Git identity:** `umairnawaz333 <umair.nawaz1997@gmail.com>` (already configured locally).
+- **Git identity:** already configured locally; commit authorship follows the local git config, not a value recorded here.
 - **Node:** 20+. Package manager: `npm`.
 
 ### Spec refinement
