@@ -113,7 +113,10 @@ jobs:
           echo "home page: $code"
           [ "$code" = "200" ] || { echo "::error::Home page returned $code"; exit 1; }
 
-          words=$(curl -s "$url/surah/1/" | grep -c 'data-word-id' || true)
+          # grep -o then count lines: grep -c counts matching LINES, and the
+          # exported HTML is one long line, so it would report 1 for any
+          # number of words.
+          words=$(curl -s "$url/surah/1/" | grep -o 'data-word-id' | wc -l | tr -d ' ')
           echo "Al-Fatihah word spans found: $words"
           [ "$words" -gt 0 ] || { echo "::error::Surah page rendered no words"; exit 1; }
 
