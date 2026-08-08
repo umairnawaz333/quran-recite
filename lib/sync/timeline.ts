@@ -61,6 +61,7 @@ export class Timeline {
    * cannot jump backward while the user is watching it.
    */
   setActualDuration(ayahIndex: number, durationMs: number, playheadAyahIndex: number): void {
+    if (ayahIndex < 0 || ayahIndex >= this.durations.length) return;
     if (ayahIndex < playheadAyahIndex) return;
     if (!Number.isFinite(durationMs) || durationMs <= 0) return;
     if (this.durations[ayahIndex] === durationMs) return;

@@ -29,7 +29,12 @@ export function QuranWord({ word, script, registry, onClick }: Props) {
         role="button"
         tabIndex={0}
         onClick={() => onClick(word.id)}
-        onKeyDown={e => { if (e.key === 'Enter') onClick(word.id); }}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick(word.id);
+          }
+        }}
         dangerouslySetInnerHTML={{ __html: word.tajweed }}
       />
     );

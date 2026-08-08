@@ -58,4 +58,16 @@ describe('Timeline', () => {
     expect(t.localToGlobal(1, 0)).toBe(4000);  // unchanged
     expect(t.totalMs).toBe(13000);
   });
+
+  it('ignores an out-of-range ayah index instead of sparsely growing durations', () => {
+    const t = build();
+    // A `loadedmetadata` event arriving with an index equal to (or past) the
+    // array length must not corrupt totalMs / later offsets.
+    t.setActualDuration(3, 9999, 0);
+    expect(t.totalMs).toBe(13000);
+    expect(t.localToGlobal(2, 0)).toBe(9000);
+
+    t.setActualDuration(-1, 9999, 0);
+    expect(t.totalMs).toBe(13000);
+  });
 });

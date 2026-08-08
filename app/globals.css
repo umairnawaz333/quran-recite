@@ -48,24 +48,29 @@
    the source data does not have. */
 .word--active-estimated { background-color: #fef3c7; }
 
-/* Tajweed rule palette. Contrast-checked against both highlight tints above. */
-rule[class='madda_necessary']    { color: #9b1c1c; }
-rule[class='madda_obligatory']   { color: #b45309; }
-rule[class='madda_permissible']  { color: #b45309; }
-rule[class='madda_normal']       { color: #1d4ed8; }
-rule[class='qalqalah']           { color: #a30006; }
-rule[class='ikhafa']             { color: #6b21a8; }
-rule[class='ikhafa_shafawi']     { color: #6b21a8; }
-rule[class='idgham_ghunnah']     { color: #0f6b00; }
-rule[class='ghunnah']            { color: #0f6b00; }
-rule[class='iqlab']              { color: #0369a1; }
-rule[class='ham_wasl']           { color: #6b7280; }
-rule[class='slnt']               { color: #6b7280; }
-rule[class='laam_shamsiyah']     { color: #6b7280; }
-rule[class='idgham_wo_ghunnah']  { color: #6b7280; }
-rule[class='idgham_shafawi']     { color: #6b7280; }
-rule[class='idgham_mutajanisayn'] { color: #6b7280; }
-rule[class='idgham_mutaqaribayn'] { color: #6b7280; }
+/*
+ * Tajweed rule palette. Contrast-checked against both highlight tints above.
+ * Class selectors, not attribute-equality (`[class='x']`) — a <rule> can
+ * carry more than one class, and equality selectors would silently drop the
+ * colour for any element that does.
+ */
+rule.madda_necessary    { color: #9b1c1c; }
+rule.madda_obligatory   { color: #b45309; }
+rule.madda_permissible  { color: #b45309; }
+rule.madda_normal       { color: #1d4ed8; }
+rule.qalqalah           { color: #a30006; }
+rule.ikhafa             { color: #6b21a8; }
+rule.ikhafa_shafawi     { color: #6b21a8; }
+rule.idgham_ghunnah     { color: #0f6b00; }
+rule.ghunnah             { color: #0f6b00; }
+rule.iqlab               { color: #0369a1; }
+rule.ham_wasl            { color: #6b7280; }
+rule.slnt                { color: #6b7280; }
+rule.laam_shamsiyah      { color: #6b7280; }
+rule.idgham_wo_ghunnah   { color: #6b7280; }
+rule.idgham_shafawi      { color: #6b7280; }
+rule.idgham_mutajanisayn { color: #6b7280; }
+rule.idgham_mutaqaribayn { color: #6b7280; }
 
 @media (max-width: 640px) {
   .quran-text {
