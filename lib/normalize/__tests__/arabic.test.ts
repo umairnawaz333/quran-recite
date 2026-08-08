@@ -31,4 +31,17 @@ describe('countBaseLetters', () => {
   it('never returns 0 for a string containing only marks', () => {
     expect(countBaseLetters('ِّ')).toBe(0);
   });
+
+  it('counts dotless beh and dotless qaf as letters', () => {
+    expect(countBaseLetters('ٮٯ')).toBe(2);
+  });
+
+  it('does not silently delete Arabic-Indic digits', () => {
+    expect(countBaseLetters('٠١')).toBe(2);
+  });
+
+  it('strips IndoPak sukun U+06E1', () => {
+    // بِسۡمِ — b + i (mark) + s + INDOPAK_SUKUN + m + i (mark)
+    expect(countBaseLetters('بِسۡمِ')).toBe(3);
+  });
 });
