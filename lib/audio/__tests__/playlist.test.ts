@@ -28,23 +28,6 @@ describe('AyahPlaylist', () => {
     p.destroy();
   });
 
-  it('reports global time from the current ayah offset', () => {
-    const p = new AyahPlaylist(ayahs);
-    p.seekToAyah(1, 500);
-    expect(p.globalTimeMs()).toBe(4500);
-    p.destroy();
-  });
-
-  it('seekGlobal lands on the right ayah', () => {
-    const p = new AyahPlaylist(ayahs);
-    const seen: number[] = [];
-    p.on('ayahchange', i => seen.push(i));
-    p.seekGlobal(9500);
-    expect(p.currentAyahIndex).toBe(2);
-    expect(seen).toContain(2);
-    p.destroy();
-  });
-
   it('advances to the next ayah when one ends', () => {
     const p = new AyahPlaylist(ayahs);
     const seen: number[] = [];
@@ -141,13 +124,46 @@ describe('AyahPlaylist', () => {
     p.destroy();
   });
 
-  it('after final-ayah ended, currentAyahIndex is 0 and globalTimeMs() is 0', () => {
+  it('after final-ayah ended, currentAyahIndex resets to 0', () => {
     const p = new AyahPlaylist(ayahs);
     p.seekToAyah(2, 0);
     p.play();
     p.handleEndedForTest();
     expect(p.currentAyahIndex).toBe(0);
-    expect(p.globalTimeMs()).toBe(0);
+    p.destroy();
+  });
+
+  it('setVolume applies to both the active and the idle/preloading element', () => {
+    const p = new AyahPlaylist(ayahs);
+    p.setVolume(0.3);
+    expect(p.current.volume).toBeCloseTo(0.3);
+    expect(p.idleForTest.volume).toBeCloseTo(0.3);
+    p.destroy();
+  });
+
+  it('an error on the preloading element does not emit an error for the currently playing ayah', () => {
+    const p = new AyahPlaylist(ayahs);
+    const errors: number[] = [];
+    p.on('error', i => errors.push(i));
+
+    // ayah 0 is active and playing fine; ayah 1 is preloading into the idle
+    // element and fails (e.g. bad network). That must not be blamed on the
+    // ayah currently playing, nor surfaced as a playback error at all.
+    p.idleForTest.dispatchEvent(new Event('error'));
+
+    expect(errors).toEqual([]);
+    expect(p.currentAyahIndex).toBe(0);
+    p.destroy();
+  });
+
+  it('an error on the active element reports the ayah that is actually failing', () => {
+    const p = new AyahPlaylist(ayahs);
+    const errors: number[] = [];
+    p.on('error', i => errors.push(i));
+
+    p.current.dispatchEvent(new Event('error'));
+
+    expect(errors).toEqual([0]);
     p.destroy();
   });
 
@@ -160,7 +176,6 @@ describe('AyahPlaylist', () => {
     p.play();
 
     expect(p.currentAyahIndex).toBe(0);
-    expect(p.globalTimeMs()).toBe(0);
     expect(p.current.getAttribute('src')).toBe(ayahs[0].audioUrl);
     p.destroy();
   });

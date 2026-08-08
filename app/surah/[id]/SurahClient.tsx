@@ -120,7 +120,7 @@ export function SurahClient({ meta, text, timings }: Props) {
 
   useEffect(() => {
     const playlist = playlistRef.current;
-    if (playlist) playlist.current.volume = volume;
+    if (playlist) playlist.setVolume(volume);
   }, [volume, ayahIndex]);
 
   const togglePlay = useCallback(() => {
@@ -135,7 +135,7 @@ export function SurahClient({ meta, text, timings }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'Space') return;
       const target = e.target as HTMLElement;
-      if (target.closest('input, button, textarea')) return;
+      if (target.closest('input, button, textarea, [role="button"]')) return;
       e.preventDefault();
       togglePlay();
     };

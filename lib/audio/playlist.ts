@@ -20,6 +20,8 @@ type Events = {
 export class AyahPlaylist {
   private readonly ayahs: AyahTiming[];
   private readonly elements: [HTMLAudioElement, HTMLAudioElement];
+  /** Which ayah index each element in `elements` currently holds. */
+  private readonly slotAyahIndex: [number, number] = [0, 0];
   private activeSlot = 0;
   private index = 0;
   private playing = false;
@@ -34,14 +36,22 @@ export class AyahPlaylist {
     this.elements.forEach(el => {
       el.preload = 'auto';
       el.addEventListener('ended', () => this.handleEnded(el));
-      el.addEventListener('error', () => this.emit('error', this.index));
+      el.addEventListener('error', () => {
+        // Only the currently-playing element's failure is a real playback
+        // error. The idle/preloading element can fail (bad network, wrong
+        // URL) without affecting the ayah that is happily playing right
+        // now; that failure is recoverable silently — the boundary
+        // transition will retry the load or surface it then.
+        if (el !== this.current) return;
+        const slot = this.elements.indexOf(el);
+        this.emit('error', this.slotAyahIndex[slot]);
+      });
       el.addEventListener('waiting', () => this.emit('loading', true));
       el.addEventListener('playing', () => this.emit('loading', false));
       el.addEventListener('loadedmetadata', () => {
         const slot = this.elements.indexOf(el);
-        const idx = slot === this.activeSlot ? this.index : this.index + 1;
         if (Number.isFinite(el.duration)) {
-          this.emit('duration', idx, Math.round(el.duration * 1000));
+          this.emit('duration', this.slotAyahIndex[slot], Math.round(el.duration * 1000));
         }
       });
     });
@@ -53,14 +63,14 @@ export class AyahPlaylist {
   get isPlaying(): boolean { return this.playing; }
   get current(): HTMLAudioElement { return this.elements[this.activeSlot]; }
 
+  /** Exposed so tests can dispatch events on the preloading element. */
+  get idleForTest(): HTMLAudioElement {
+    return this.elements[this.activeSlot === 0 ? 1 : 0];
+  }
+
   on<K extends keyof Events>(event: K, cb: Events[K]): () => void {
     this.listeners[event].add(cb as never);
     return () => { this.listeners[event].delete(cb as never); };
-  }
-
-  globalTimeMs(): number {
-    const local = this.current.currentTime * 1000;
-    return this.ayahs[this.index].startOffsetMs + local;
   }
 
   localTimeMs(): number {
@@ -79,6 +89,16 @@ export class AyahPlaylist {
     this.emit('state', false);
   }
 
+  /**
+   * Applies volume to BOTH elements, not just the active one. Otherwise the
+   * idle/preloading element keeps whatever volume it last had (or its
+   * default of 1) and a boundary swap makes playback blip back to full
+   * volume even though the user turned it down.
+   */
+  setVolume(volume: number): void {
+    this.elements.forEach(el => { el.volume = volume; });
+  }
+
   seekToAyah(index: number, localMs = 0): void {
     const clamped = Math.min(Math.max(index, 0), this.ayahs.length - 1);
     if (clamped !== this.index) {
@@ -89,14 +109,6 @@ export class AyahPlaylist {
     }
     this.current.currentTime = localMs / 1000;
     if (this.playing) this.attemptPlay(this.current, this.index);
-  }
-
-  seekGlobal(globalMs: number): void {
-    let index = 0;
-    for (let i = this.ayahs.length - 1; i >= 0; i -= 1) {
-      if (globalMs >= this.ayahs[i].startOffsetMs) { index = i; break; }
-    }
-    this.seekToAyah(index, globalMs - this.ayahs[index].startOffsetMs);
   }
 
   next(): void { this.seekToAyah(this.index + 1, 0); }
@@ -121,7 +133,7 @@ export class AyahPlaylist {
       this.emit('state', false);
 
       // "Stop and reset to the surah's start": normalise the cursor so
-      // currentAyahIndex/globalTimeMs report the truth and a bare play()
+      // currentAyahIndex reports the truth and a bare play()
       // afterwards starts from ayah 0 rather than replaying the last ayah's
       // tail. This does not itself resume playback.
       const changed = this.index !== 0;
@@ -153,6 +165,7 @@ export class AyahPlaylist {
 
   private loadInto(slot: number, ayahIndex: number): void {
     const el = this.elements[slot];
+    this.slotAyahIndex[slot] = ayahIndex;
     const url = resolveAudioUrl(this.ayahs[ayahIndex].audioUrl);
     if (el.getAttribute('src') === url) return;
     el.setAttribute('src', url);
