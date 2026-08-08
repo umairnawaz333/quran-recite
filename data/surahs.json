@@ -852,7 +852,7 @@
     "nameEnglish": "The Fig",
     "ayahCount": 8,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 96,
@@ -861,7 +861,7 @@
     "nameEnglish": "The Clot",
     "ayahCount": 19,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 97,
@@ -870,7 +870,7 @@
     "nameEnglish": "The Power",
     "ayahCount": 5,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 98,
@@ -879,7 +879,7 @@
     "nameEnglish": "The Clear Proof",
     "ayahCount": 8,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 99,
@@ -888,7 +888,7 @@
     "nameEnglish": "The Earthquake",
     "ayahCount": 8,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 100,
@@ -897,7 +897,7 @@
     "nameEnglish": "The Courser",
     "ayahCount": 11,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 101,
@@ -906,7 +906,7 @@
     "nameEnglish": "The Calamity",
     "ayahCount": 11,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 102,
@@ -915,7 +915,7 @@
     "nameEnglish": "The Rivalry in world increase",
     "ayahCount": 8,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 103,
@@ -924,7 +924,7 @@
     "nameEnglish": "The Declining Day",
     "ayahCount": 3,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 104,
@@ -933,7 +933,7 @@
     "nameEnglish": "The Traducer",
     "ayahCount": 9,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 105,
@@ -942,7 +942,7 @@
     "nameEnglish": "The Elephant",
     "ayahCount": 5,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 106,
@@ -951,7 +951,7 @@
     "nameEnglish": "Quraysh",
     "ayahCount": 4,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 107,
@@ -960,7 +960,7 @@
     "nameEnglish": "The Small kindnesses",
     "ayahCount": 7,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 108,
@@ -969,7 +969,7 @@
     "nameEnglish": "The Abundance",
     "ayahCount": 3,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 109,
@@ -978,7 +978,7 @@
     "nameEnglish": "The Disbelievers",
     "ayahCount": 6,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 110,
@@ -987,7 +987,7 @@
     "nameEnglish": "The Divine Support",
     "ayahCount": 3,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 111,
@@ -996,7 +996,7 @@
     "nameEnglish": "The Palm Fiber",
     "ayahCount": 5,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 112,
@@ -1005,7 +1005,7 @@
     "nameEnglish": "The Sincerity",
     "ayahCount": 4,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 113,
@@ -1014,7 +1014,7 @@
     "nameEnglish": "The Daybreak",
     "ayahCount": 5,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 114,
@@ -1023,6 +1023,6 @@
     "nameEnglish": "Mankind",
     "ayahCount": 6,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   }
 ]

@@ -5,6 +5,207 @@
     "mergedGroups": 1,
     "interpolatedWords": 3,
     "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 95,
+    "ayahs": 8,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 96,
+    "ayahs": 19,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 97,
+    "ayahs": 5,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 98,
+    "ayahs": 8,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 99,
+    "ayahs": 8,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 100,
+    "ayahs": 11,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 101,
+    "ayahs": 11,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 102,
+    "ayahs": 8,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 103,
+    "ayahs": 3,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 104,
+    "ayahs": 9,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 105,
+    "ayahs": 5,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 106,
+    "ayahs": 4,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 107,
+    "ayahs": 7,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 108,
+    "ayahs": 3,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 109,
+    "ayahs": 6,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 110,
+    "ayahs": 3,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 111,
+    "ayahs": 5,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 112,
+    "ayahs": 4,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 113,
+    "ayahs": 5,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 114,
+    "ayahs": 6,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
     "untimedAyahs": [],
     "violations": []
   }
