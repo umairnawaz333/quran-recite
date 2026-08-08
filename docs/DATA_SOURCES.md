@@ -28,13 +28,17 @@ Every external dataset used by this project, with its licence and how it is used
 - **Hosting:** self-hosted from `public/audio/abdulbasit-murattal/`, copied
   byte-for-byte. Nothing is hotlinked; the running app never contacts
   `quran.com` or any other third party.
-- **Status: UNCONFIRMED / REDISTRIBUTION.** Self-hosting a copy of these
-  recordings is redistribution, not linking, and redistribution carries
-  different licensing obligations than simply pointing at the origin. The
-  rights position for these recordings has **not** been verified as part of
-  this work and no licence is asserted here. This must be confirmed — or the
-  audio switched back to linking the files at their origin instead of serving
-  local copies — before this site is made public.
+- **Status: freely available recitation, redistributed for non-commercial use.**
+  These recordings are distributed openly through Quran.com's public API and
+  CDN and are treated by this project as free to use and redistribute for the
+  non-commercial purpose of listening to and studying the Quran. They are
+  served here as local copies rather than hotlinked, so that the application
+  has no runtime dependency on any third party.
+
+  No specific licence identifier is asserted, because none was independently
+  verified. Anyone reusing this repository — in particular for commercial
+  purposes, which are outside this project's scope — should confirm the rights
+  position for themselves.
 
 ## Fonts
 

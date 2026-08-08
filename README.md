@@ -79,8 +79,8 @@ no segment at all and must be absorbed into a neighbouring segment's span.
   `AyahBlock`/`QuranWord` — the tree is not walked 4×/sec.
 
 See [`docs/superpowers/specs/`](docs/superpowers/specs/) for the full design
-and [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for licensing, including the
-unresolved audio-redistribution question.
+and [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for the source and licence
+of every external dataset.
 
 ## License
 
