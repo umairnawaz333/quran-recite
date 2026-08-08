@@ -60,6 +60,20 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
+      # The CLI does not reliably pick up the project link from the
+      # VERCEL_ORG_ID / VERCEL_PROJECT_ID environment variables alone — it
+      # errors with "Could not retrieve Project Settings". Writing the link
+      # file it actually reads is deterministic.
+      - name: Link the Vercel project
+        run: |
+          mkdir -p .vercel
+          cat > .vercel/project.json <<JSON
+          {
+            "projectId": "${{ secrets.VERCEL_PROJECT_ID }}",
+            "orgId": "${{ secrets.VERCEL_ORG_ID }}"
+          }
+          JSON
+
       # Pulls the project's build settings and environment from Vercel so the
       # build here matches the build Vercel would have run itself.
       - name: Pull Vercel environment
