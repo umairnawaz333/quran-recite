@@ -8,6 +8,12 @@ const ayahs: AyahTiming[] = [
   { ayah: 3, audioUrl: '/audio/x/3.mp3', startOffsetMs: 9000, durationMs: 4000, words: [] },
 ];
 
+// Flushes the microtask queue so a play() promise's .catch handler (and any
+// synchronous retry it issues) has had a chance to run before assertions.
+const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+const domError = (name: string): DOMException => new DOMException(name, name);
+
 beforeEach(() => {
   // jsdom does not implement media playback.
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
@@ -79,6 +85,83 @@ describe('AyahPlaylist', () => {
     p.play();
     p.pause();
     expect(seen).toEqual([true, false]);
+    p.destroy();
+  });
+
+  it('a rejected play() results in isPlaying === false and an emitted error, not a stuck true', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValueOnce(domError('NotAllowedError'));
+    const p = new AyahPlaylist(ayahs);
+    const errors: number[] = [];
+    p.on('error', i => errors.push(i));
+
+    p.play();
+    expect(p.isPlaying).toBe(true); // optimistic until the promise settles
+
+    await flush();
+
+    expect(p.isPlaying).toBe(false);
+    expect(errors).toEqual([0]);
+    p.destroy();
+  });
+
+  it('a rejected boundary transition does not leave the playlist claiming to play', async () => {
+    const p = new AyahPlaylist(ayahs);
+    const errors: number[] = [];
+    p.on('error', i => errors.push(i));
+
+    p.play();
+    await flush();
+    expect(p.isPlaying).toBe(true);
+
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValueOnce(domError('NotAllowedError'));
+    p.handleEndedForTest();
+    expect(p.currentAyahIndex).toBe(1);
+
+    await flush();
+
+    expect(p.isPlaying).toBe(false);
+    expect(errors).toEqual([1]);
+    p.destroy();
+  });
+
+  it('retries once and recovers when play() is aborted by a concurrent load()', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValueOnce(domError('AbortError'));
+    const p = new AyahPlaylist(ayahs);
+    const errors: number[] = [];
+    const seen: boolean[] = [];
+    p.on('error', i => errors.push(i));
+    p.on('state', s => seen.push(s));
+
+    p.play();
+    await flush();
+
+    expect(errors).toEqual([]);
+    expect(p.isPlaying).toBe(true);
+    expect(seen).toEqual([true]);
+    p.destroy();
+  });
+
+  it('after final-ayah ended, currentAyahIndex is 0 and globalTimeMs() is 0', () => {
+    const p = new AyahPlaylist(ayahs);
+    p.seekToAyah(2, 0);
+    p.play();
+    p.handleEndedForTest();
+    expect(p.currentAyahIndex).toBe(0);
+    expect(p.globalTimeMs()).toBe(0);
+    p.destroy();
+  });
+
+  it('calling play() after ended starts from the surah beginning, not the last ayah\'s tail', () => {
+    const p = new AyahPlaylist(ayahs);
+    p.seekToAyah(2, 0);
+    p.play();
+    p.handleEndedForTest();
+
+    p.play();
+
+    expect(p.currentAyahIndex).toBe(0);
+    expect(p.globalTimeMs()).toBe(0);
+    expect(p.current.getAttribute('src')).toBe(ayahs[0].audioUrl);
     p.destroy();
   });
 });

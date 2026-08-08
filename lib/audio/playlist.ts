@@ -69,8 +69,8 @@ export class AyahPlaylist {
 
   play(): void {
     this.playing = true;
-    void this.current.play();
     this.emit('state', true);
+    this.attemptPlay(this.current, this.index);
   }
 
   pause(): void {
@@ -88,7 +88,7 @@ export class AyahPlaylist {
       this.preloadNext();
     }
     this.current.currentTime = localMs / 1000;
-    if (this.playing) void this.current.play();
+    if (this.playing) this.attemptPlay(this.current, this.index);
   }
 
   seekGlobal(globalMs: number): void {
@@ -119,6 +119,19 @@ export class AyahPlaylist {
     if (this.index >= this.ayahs.length - 1) {
       this.playing = false;
       this.emit('state', false);
+
+      // "Stop and reset to the surah's start": normalise the cursor so
+      // currentAyahIndex/globalTimeMs report the truth and a bare play()
+      // afterwards starts from ayah 0 rather than replaying the last ayah's
+      // tail. This does not itself resume playback.
+      const changed = this.index !== 0;
+      this.index = 0;
+      this.activeSlot = 0;
+      this.loadInto(0, 0);
+      this.current.currentTime = 0;
+      this.preloadNext();
+      if (changed) this.emit('ayahchange', 0);
+
       this.emit('ended');
       return;
     }
@@ -127,7 +140,7 @@ export class AyahPlaylist {
     this.activeSlot = this.activeSlot === 0 ? 1 : 0;
     this.index += 1;
     this.current.currentTime = 0;
-    if (this.playing) void this.current.play();
+    if (this.playing) this.attemptPlay(this.current, this.index);
     this.emit('ayahchange', this.index);
     this.preloadNext();
   }
@@ -145,6 +158,40 @@ export class AyahPlaylist {
     el.setAttribute('src', url);
     el.src = url;
     el.load();
+  }
+
+  /**
+   * Calls play() on `el` and never lets a rejection pass unnoticed.
+   *
+   * `play()` rejects for two distinct reasons in practice:
+   *  - AbortError: the browser interrupted this play() with a concurrent
+   *    load() — exactly what happens right after a boundary swap or seek.
+   *    This is transient; retrying once on the same element is legitimate.
+   *  - Anything else (notably NotAllowedError from an autoplay-policy
+   *    block): terminal for this gesture. The playlist must not keep
+   *    claiming to play — it flips to paused and surfaces `error` so the UI
+   *    can offer retry instead of sitting on a silently stalled ayah.
+   *
+   * `ayahIndexAtCall` guards against a stale rejection landing after the
+   * playlist has already moved on (seek/next/ended) by the time the promise
+   * settles.
+   */
+  private attemptPlay(el: HTMLAudioElement, ayahIndexAtCall: number, allowRetry = true): void {
+    const result = el.play();
+    if (!result || typeof result.catch !== 'function') return;
+    result.catch((err: unknown) => {
+      if (el !== this.current || this.index !== ayahIndexAtCall) return;
+
+      const name = (err as { name?: string } | null | undefined)?.name;
+      if (name === 'AbortError' && allowRetry) {
+        this.attemptPlay(el, ayahIndexAtCall, false);
+        return;
+      }
+
+      this.playing = false;
+      this.emit('state', false);
+      this.emit('error', this.index);
+    });
   }
 
   private emit<K extends keyof Events>(event: K, ...args: Parameters<Events[K]>): void {
