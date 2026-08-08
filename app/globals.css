@@ -1,1 +1,68 @@
 @import "tailwindcss";
+
+@font-face {
+  font-family: 'Amiri Quran';
+  src: url('/fonts/amiri-quran.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Noto Naskh Arabic';
+  src: url('/fonts/noto-naskh-arabic.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400;
+}
+
+.quran-text {
+  direction: rtl;
+  text-align: center;
+  font-size: clamp(1.75rem, 5vw, 2.75rem);
+  line-height: 2.4;
+  word-spacing: 0.15em;
+}
+
+.script-tajweed { font-family: 'Amiri Quran', serif; }
+.script-indopak { font-family: 'Noto Naskh Arabic', serif; }
+
+.word {
+  display: inline-block;
+  padding: 0.05em 0.18em;
+  margin: 0 0.04em;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  background-color: transparent;
+  transition: background-color 140ms ease-out;
+}
+
+.word:hover { background-color: rgb(0 0 0 / 0.05); }
+
+/*
+ * The highlight is a BACKGROUND, never a colour change: tajweed rules own the
+ * text colour, and recolouring the active word would destroy that information.
+ * The tint is kept light so every rule colour below stays legible on top of it.
+ */
+.word--active { background-color: #fde68a; }
+
+/* Interpolated timings get a softer tint — the UI must not imply precision
+   the source data does not have. */
+.word--active-estimated { background-color: #fef3c7; }
+
+/* Tajweed rule palette. Contrast-checked against both highlight tints above. */
+rule[class='madda_necessary']    { color: #9b1c1c; }
+rule[class='madda_obligatory']   { color: #b45309; }
+rule[class='madda_permissible']  { color: #b45309; }
+rule[class='madda_normal']       { color: #1d4ed8; }
+rule[class='qalqalah']           { color: #a30006; }
+rule[class='ikhafa']             { color: #6b21a8; }
+rule[class='ikhafa_shafawi']     { color: #6b21a8; }
+rule[class='idgham_ghunnah']     { color: #0f6b00; }
+rule[class='ghunnah']            { color: #0f6b00; }
+rule[class='iqlab']              { color: #0369a1; }
+rule[class='ham_wasl']           { color: #6b7280; }
+rule[class='slnt']               { color: #6b7280; }
+rule[class='laam_shamsiyah']     { color: #6b7280; }
+rule[class='idgham_wo_ghunnah']  { color: #6b7280; }
+rule[class='idgham_shafawi']     { color: #6b7280; }
+rule[class='idgham_mutajanisayn'] { color: #6b7280; }
+rule[class='idgham_mutaqaribayn'] { color: #6b7280; }
