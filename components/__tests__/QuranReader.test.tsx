@@ -73,11 +73,25 @@ describe('QuranReader', () => {
     expect(onWordClick).toHaveBeenCalledWith('1:1:2');
   });
 
-  it('activates a word on Space, per ARIA button semantics', () => {
-    const { onWordClick } = setup();
-    const word = document.querySelector('[data-word-id="1:1:2"]')!;
-    fireEvent.keyDown(word, { key: ' ', code: 'Space' });
-    expect(onWordClick).toHaveBeenCalledWith('1:1:2');
+  // Parameterised over both scripts on purpose: QuranWord has two near-
+  // duplicate branches (tajweed vs indopak) differing only in how the text
+  // is injected, and a keyboard fix applied to only one branch previously
+  // slipped through review. Running the same assertion over both scripts
+  // catches that class of drift instead of re-proving it once.
+  describe.each(['tajweed', 'indopak'] as const)('keyboard activation (%s script)', script => {
+    it('activates a word on Enter, per ARIA button semantics', () => {
+      const { onWordClick } = setup({ script });
+      const word = document.querySelector('[data-word-id="1:1:2"]')!;
+      fireEvent.keyDown(word, { key: 'Enter' });
+      expect(onWordClick).toHaveBeenCalledWith('1:1:2');
+    });
+
+    it('activates a word on Space, per ARIA button semantics', () => {
+      const { onWordClick } = setup({ script });
+      const word = document.querySelector('[data-word-id="1:1:2"]')!;
+      fireEvent.keyDown(word, { key: ' ', code: 'Space' });
+      expect(onWordClick).toHaveBeenCalledWith('1:1:2');
+    });
   });
 
   it('calls onAyahPlay with the ayah number', async () => {
