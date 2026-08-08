@@ -32,4 +32,6 @@ export interface NormalizeResult {
   mergedGroups: number;
   interpolatedWords: number;
   uncoveredWords: number;
+  /** Segments dropped for carrying no usable duration or word range. */
+  invalidSegments: number;
 }

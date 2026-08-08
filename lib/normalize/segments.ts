@@ -1,7 +1,23 @@
 import { countRecitationWeight } from './arabic';
 import type {
-  NormalizeInput, NormalizeResult, NormalizeWord, WordTiming,
+  NormalizeInput, NormalizeResult, NormalizeWord, RawSegment, WordTiming,
 } from './types';
+
+/**
+ * A segment must have a well-formed, non-empty word range and a positive,
+ * finite duration to be usable. Real Quran.com data violates this — e.g.
+ * surah 96 ayah 7 carries the segment [0, 1, 750, 400], where endMs (400)
+ * precedes startMs (750). Such a segment carries no usable duration and is
+ * dropped before any other processing.
+ */
+function isValidSegment(seg: RawSegment): boolean {
+  const [startWord, endWord, startMs, endMs] = seg;
+  if (endWord <= startWord) return false;
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return false;
+  if (startMs < 0 || endMs < 0) return false;
+  if (endMs <= startMs) return false;
+  return true;
+}
 
 /**
  * Converts Quran.com range-segments into exactly one timing per word.
@@ -12,13 +28,24 @@ import type {
 export function normalizeAyah(input: NormalizeInput): NormalizeResult {
   const { surah, ayah, words, segments } = input;
   const empty: NormalizeResult = {
-    timings: [], mergedGroups: 0, interpolatedWords: 0, uncoveredWords: 0,
+    timings: [], mergedGroups: 0, interpolatedWords: 0, uncoveredWords: 0, invalidSegments: 0,
   };
 
   if (words.length === 0) return empty;
-  if (segments.length === 0) return { ...empty, uncoveredWords: words.length };
 
-  const ordered = [...segments].sort((a, b) => a[2] - b[2]);
+  // Dropping an invalid segment turns the words it covered into "uncovered".
+  // We know those words are recited somewhere in the ayah, just not exactly
+  // when — the existing Case C logic (absorb into a neighbouring segment's
+  // group, split proportionally, flag `estimated`) already means precisely
+  // that, so uncovered-by-drop reuses it rather than a parallel repair path.
+  const validSegments = segments.filter(isValidSegment);
+  const invalidSegments = segments.length - validSegments.length;
+
+  if (validSegments.length === 0) {
+    return { ...empty, uncoveredWords: words.length, invalidSegments };
+  }
+
+  const ordered = [...validSegments].sort((a, b) => a[2] - b[2]);
 
   // Which segment owns each word index. -1 means uncovered.
   const owner = new Array<number>(words.length).fill(-1);
@@ -44,7 +71,7 @@ export function normalizeAyah(input: NormalizeInput): NormalizeResult {
         if (owner[j] !== -1) { adopted = owner[j]; break; }
       }
     }
-    if (adopted === -1) return { ...empty, uncoveredWords: words.length };
+    if (adopted === -1) return { ...empty, uncoveredWords: words.length, invalidSegments };
     owner[i] = adopted;
   }
 
@@ -84,7 +111,7 @@ export function normalizeAyah(input: NormalizeInput): NormalizeResult {
   }
 
   timings.sort((a, b) => a.position - b.position);
-  return { timings, mergedGroups, interpolatedWords, uncoveredWords };
+  return { timings, mergedGroups, interpolatedWords, uncoveredWords, invalidSegments };
 }
 
 /**

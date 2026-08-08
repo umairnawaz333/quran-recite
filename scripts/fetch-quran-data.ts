@@ -209,6 +209,7 @@ interface SurahReport {
   mergedGroups: number;
   interpolatedWords: number;
   uncoveredWords: number;
+  invalidSegments: number;
   untimedAyahs: number[];
   violations: string[];
 }
@@ -232,7 +233,7 @@ async function buildSurah(surah: number): Promise<SurahReport> {
   const text: SurahText = { surah, ayahs: [] };
   const ayahTimings: AyahTiming[] = [];
   const report: SurahReport = {
-    surah, ayahs: 0, mergedGroups: 0, interpolatedWords: 0, uncoveredWords: 0,
+    surah, ayahs: 0, mergedGroups: 0, interpolatedWords: 0, uncoveredWords: 0, invalidSegments: 0,
     untimedAyahs: [], violations: [],
   };
 
@@ -265,6 +266,7 @@ async function buildSurah(surah: number): Promise<SurahReport> {
     report.mergedGroups += result.mergedGroups;
     report.interpolatedWords += result.interpolatedWords;
     report.uncoveredWords += result.uncoveredWords;
+    report.invalidSegments += result.invalidSegments;
     if (result.timings.length === 0) report.untimedAyahs.push(ayah);
 
     const ayahViolations = validateAyahTimings(surah, ayah, words, result.timings);
@@ -300,7 +302,8 @@ async function buildSurah(surah: number): Promise<SurahReport> {
   );
 
   console.log(`\n  surah ${surah}: ${report.ayahs} ayahs, ` +
-    `${report.mergedGroups} merged groups, ${report.uncoveredWords} uncovered words`);
+    `${report.mergedGroups} merged groups, ${report.uncoveredWords} uncovered words, ` +
+    `${report.invalidSegments} invalid segments`);
   return report;
 }
 
@@ -360,18 +363,28 @@ async function main() {
     try {
       const report = await buildSurah(surah);
       reportsById.set(surah, report);
-      await writeManifests();
     } catch (err) {
       if (err instanceof SegmentValidationError) {
+        // Malformed upstream data for one surah — the normalizer's own
+        // repair path (dropping invalid segments, re-absorbing their words,
+        // flagging them `estimated`) already handles the known bad shapes,
+        // so a SegmentValidationError here means a NEW, unrecognised shape
+        // slipped through. Record it and carry on to the next surah rather
+        // than aborting a 114-surah run over one bad ayah; the corrupt
+        // surah's text/timings files are simply never written, and its
+        // entry stays absent from surahs.json until this is fixed upstream.
+        // A genuine programming error (network, parsing, etc.) is NOT a
+        // SegmentValidationError and falls through to the rethrow below,
+        // failing the run loudly as it should.
         reportsById.set(surah, err.report);
-        // Write out the report before failing so the violation is on record,
-        // even though the corrupt surah's text/timings files were never written.
-        await writeManifests();
         console.error(`\n${err.message}`);
-        process.exit(1);
+      } else {
+        throw err;
       }
-      throw err;
     }
+    // Write manifests after every surah attempt (success or recorded data
+    // problem) so an interrupted run leaves them consistent with disk.
+    await writeManifests();
   }
 
   console.log('Done.');

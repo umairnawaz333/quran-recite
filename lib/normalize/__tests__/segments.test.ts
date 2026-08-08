@@ -135,6 +135,16 @@ describe('normalizeAyah — post-conditions', () => {
         segments: [[0, 3, 0, 4573]] as RawSegment[],
       },
     },
+    {
+      // Real, verified case: surah 96 ayah 7's invalid segment [0, 1, 750, 400]
+      // is dropped and repaired via Case C absorption.
+      name: 'case D (repaired after dropping an invalid segment)',
+      input: {
+        surah: 96, ayah: 7,
+        words: words('أَن', 'رَّآهُ'),
+        segments: [[0, 1, 750, 400], [1, 2, 1000, 1800]] as RawSegment[],
+      },
+    },
   ];
 
   for (const { name, input } of cases) {
@@ -148,6 +158,62 @@ describe('normalizeAyah — post-conditions', () => {
       });
     });
   }
+});
+
+describe('normalizeAyah — Case D, invalid segments are dropped', () => {
+  // Real, verified case: surah 96 ayah 7 — endMs (400) is BEFORE startMs (750).
+  it('drops an inverted-duration segment and absorbs its word into the neighbouring group', () => {
+    const r = normalizeAyah({
+      surah: 96,
+      ayah: 7,
+      words: words('أَن', 'رَّآهُ'),
+      segments: [
+        [0, 1, 750, 400],
+        [1, 2, 1000, 1800],
+      ],
+    });
+
+    expect(r.invalidSegments).toBe(1);
+    expect(r.timings).toHaveLength(2);
+    expect(r.timings.map(t => t.position)).toEqual([1, 2]);
+    r.timings.forEach(t => expect(t.startMs).toBeLessThan(t.endMs));
+
+    // Both words now share the sole remaining (valid) segment.
+    expect(r.timings.every(t => t.estimated)).toBe(true);
+    expect(r.timings[0].startMs).toBe(1000);
+    expect(r.timings[1].endMs).toBe(1800);
+  });
+
+  it('returns no timings, all words uncovered, when every segment is invalid', () => {
+    const r = normalizeAyah({
+      surah: 96,
+      ayah: 7,
+      words: words('أَن', 'رَّآهُ'),
+      segments: [
+        [0, 1, 750, 400], // inverted duration
+        [1, 2, -100, 200], // negative startMs
+      ],
+    });
+
+    expect(r.timings).toEqual([]);
+    expect(r.uncoveredWords).toBe(2);
+    expect(r.invalidSegments).toBe(2);
+  });
+
+  it('drops a segment with an inverted word range', () => {
+    const r = normalizeAyah({
+      surah: 96,
+      ayah: 7,
+      words: words('أَن', 'رَّآهُ'),
+      segments: [
+        [1, 1, 100, 900], // endWordIndex === startWordIndex: empty range
+        [0, 2, 100, 900],
+      ],
+    });
+
+    expect(r.invalidSegments).toBe(1);
+    expect(r.timings).toHaveLength(2);
+  });
 });
 
 describe('normalizeAyah — degenerate input', () => {
