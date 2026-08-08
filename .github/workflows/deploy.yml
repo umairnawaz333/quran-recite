@@ -82,25 +82,30 @@ jobs:
             --environment=${{ inputs.target }} \
             --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Build
-        run: |
-          vercel build ${{ inputs.target == 'production' && '--prod' || '' }} \
-            --token=${{ secrets.VERCEL_TOKEN }}
-
-      # --prebuilt uploads the artifacts built above rather than rebuilding on
-      # Vercel, so what was tested is exactly what ships.
+      # Deliberately NOT using `vercel build` + `--prebuilt`. That path is
+      # appealing — it ships the exact artifact CI tested — but for this
+      # project's `output: 'export'` Next config it produced a deployment
+      # that returned 404 on every route, including the home page. Uploading
+      # the source and letting Vercel build is what actually works.
+      #
+      # The test gate above still protects production; Vercel simply rebuilds
+      # the same commit that just passed.
       - name: Deploy
         id: deploy
         run: |
-          url=$(vercel deploy --prebuilt \
+          url=$(vercel deploy \
             ${{ inputs.target == 'production' && '--prod' || '' }} \
+            --yes \
             --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed to $url"
 
       # A deploy that reports success while serving a broken page is worse
       # than a failed deploy, so check real content rather than just a 200.
+      # This is not theoretical: a `--prebuilt` deploy once shipped a build
+      # that 404'd on every route, and this step is what caught it.
       - name: Verify the deployment actually works
+        id: verify
         run: |
           url="${{ steps.deploy.outputs.url }}"
 
@@ -120,6 +125,20 @@ jobs:
           font=$(curl -s -o /dev/null -w '%{http_code}' "$url/fonts/amiri-quran.woff2")
           echo "font: $font"
           [ "$font" = "200" ] || { echo "::error::Font returned $font"; exit 1; }
+
+      # If a production deploy went out but failed verification, put the
+      # previous working deployment back immediately rather than leaving a
+      # broken site up while someone reads the logs.
+      - name: Roll back a failed production deploy
+        if: failure() && inputs.target == 'production' && steps.deploy.outcome == 'success'
+        run: |
+          echo "::warning::Verification failed — rolling back to the previous production deployment"
+          vercel rollback --yes --token=${{ secrets.VERCEL_TOKEN }}
+
+          sleep 10
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://quran-recite-eta.vercel.app/)
+          echo "site after rollback: $code"
+          [ "$code" = "200" ] || echo "::error::Rollback did not restore the site — needs manual attention"
 
       - name: Summary
         if: always()
