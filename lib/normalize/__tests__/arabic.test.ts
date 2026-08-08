@@ -1,0 +1,34 @@
+import { describe, it, expect } from 'vitest';
+import { countBaseLetters } from '../arabic';
+
+describe('countBaseLetters', () => {
+  it('counts plain letters', () => {
+    expect(countBaseLetters('بسم')).toBe(3);
+  });
+
+  it('ignores fatha, kasra, sukun and shadda', () => {
+    // بِسْمِ — 3 letters, 3 marks
+    expect(countBaseLetters('بِسْمِ')).toBe(3);
+  });
+
+  it('ignores superscript alef and Quranic annotation marks', () => {
+    // ٱلرَّحۡمَـٰنِ — hamzat wasl + ل ر ح م ـٰ ن
+    expect(countBaseLetters('ٱلرَّحۡمَـٰنِ')).toBe(6);
+  });
+
+  it('ignores tatweel', () => {
+    expect(countBaseLetters('بــســم')).toBe(3);
+  });
+
+  it('strips HTML tajweed rule markup before counting', () => {
+    expect(countBaseLetters('<rule class=ham_wasl>ٱ</rule>للَّهِ')).toBe(4);
+  });
+
+  it('returns 0 for an empty string', () => {
+    expect(countBaseLetters('')).toBe(0);
+  });
+
+  it('never returns 0 for a string containing only marks', () => {
+    expect(countBaseLetters('ِّ')).toBe(0);
+  });
+});
