@@ -112,20 +112,34 @@ Instead, each ayah's true duration becomes known the moment its audio loads
 Uninterrupted playback through the whole surah is the actual priority, not
 progress-bar precision.
 
-### 2.6 Audio is hotlinked, never re-hosted
+### 2.6 Audio is downloaded and self-hosted
 
-Per-ayah MP3s are referenced at `https://verses.quran.com/{url}`. We do not copy
-or re-serve them, which keeps PRD §19/§42 licensing obligations satisfied for a
-non-commercial public site.
+The application must not depend on any third party at runtime. Per-ayah MP3s are
+downloaded once by the build script and served from the project itself. Quran.com
+is a build-time source only; nothing calls out to it when a user loads the page.
 
-Verified response headers:
+Measured size, from 640 sampled ayahs across eight surahs:
 
-```
-access-control-allow-origin: *
-cache-control: max-age=25600000
-```
+| Metric | Value |
+|---|---|
+| Bitrate | 194 kbps |
+| Per ayah | 0.54 MB |
+| Al-Baqarah alone | 232 MB |
+| **Full Quran (6,236 ayahs)** | **~3.35 GB** |
 
-Cross-origin playback and long-lived caching both work.
+Phase 1 (Al-Fatihah, 7 files, 1.0 MB) is committed directly with no complications.
+
+Phase 2's 3.35 GB exceeds what a normal Git repository should carry, so the
+storage mechanism for the full set is decided before Phase 2 begins — see §14.
+
+Files are downloaded byte-for-byte unmodified. Re-encoding is avoided by default
+because codec encoder delay shifts playback by tens of milliseconds, which is
+significant against the 50–100 ms sync accuracy target.
+
+**Licensing note (PRD §42):** hotlinking and self-hosting carry different
+obligations. Self-hosting AbdulBaset AbdulSamad's recordings is a redistribution,
+and the rights position must be recorded in `DATA_SOURCES.md` before the site goes
+public.
 
 ---
 
@@ -190,7 +204,12 @@ Steps per surah:
 4. Read each ayah's `duration` (integer seconds) from
    `/recitations/2/by_chapter/{n}?fields=segments,duration`
 5. Compute the cumulative offset table from those durations
-6. Write JSON; append anomalies to the validation report
+6. **Download each ayah MP3** into `public/audio/abdulbasit-murattal/`, skipping
+   files already present so re-runs are incremental and resumable
+7. Write JSON; append anomalies to the validation report
+
+Downloads are concurrency-limited and retried on failure. The script is
+idempotent: interrupting and re-running it resumes rather than restarting.
 
 ### Output files
 
@@ -234,7 +253,7 @@ data/
   "ayahs": [
     {
       "ayah": 1,
-      "audioUrl": "https://verses.quran.com/AbdulBaset/Murattal/mp3/001001.mp3",
+      "audioUrl": "/audio/abdulbasit-murattal/001001.mp3",
       "startOffsetMs": 0,
       "durationMs": 4000,
       "words": [
@@ -538,20 +557,46 @@ available.
 
 ## 14. Repository and hosting
 
-The whole project — application code, `data/`, fonts, and docs — lives in a new
-public GitHub repository under the personal account **`umairnawaz333`**.
+The whole project — application code, `data/`, audio, fonts, and docs — lives in a
+new public GitHub repository under the personal account **`umairnawaz333`**.
 
-The committed `data/` directory is intentional, not an oversight: it is what makes
-the app independent of the Quran.com API at runtime. Phase 1 commits Al-Fatihah
-only; Phase 2 adds the remaining 113 surahs (~20 MB, well within normal Git
-limits — no LFS needed).
+Committing `data/` and the audio is the deliberate mechanism for runtime
+independence: once fetched, nothing external is contacted when a user loads a
+page.
 
-Audio MP3s are never committed; they are hotlinked from the Quran.com CDN (§2.6).
+### Phase 1 — no complications
+
+Al-Fatihah's text and timing JSON (a few KB) plus 7 MP3s (1.0 MB) commit
+directly.
+
+### Phase 2 — the full set needs a storage decision
+
+| Content | Size |
+|---|---|
+| Text + timings, all 114 surahs | ~20 MB |
+| **Audio, all 6,236 ayahs** | **~3.35 GB** |
+
+The JSON is trivial. The audio is not: 3.35 GB exceeds GitHub's ~1 GB recommended
+repository size, makes `git clone` slow, and needs a paid Git LFS plan (free tier
+is 1 GB storage and 1 GB/month bandwidth).
+
+Candidate approaches, to be decided before Phase 2 starts:
+
+| Approach | Repo size | Runtime dependency | Cost |
+|---|---|---|---|
+| Commit originals via Git LFS | 3.35 GB | None | ~$5/mo |
+| Re-encode to 64 kbps MP3, commit | ~1.1 GB | None | Free; small constant sync offset to calibrate |
+| Self-host on own object storage (e.g. Cloudflare R2) | ~20 MB | Own infrastructure only | Free tier covers it |
+| Commit popular surahs, stream rest from own storage | ~300 MB | Own infrastructure only | Free tier covers it |
+
+All four keep the project independent of Quran.com, which is the actual
+requirement. Phase 1 proceeds identically under every option.
 
 `.gitignore` covers `node_modules/`, `.next/`, `out/`, and local env files.
 
 Static export means hosting is a static file drop — GitHub Pages, Vercel, or
-Netlify all work at no cost.
+Netlify all work at no cost, though a 3.35 GB deployment would exceed several free
+hosting tiers.
 
 ---
 
@@ -562,7 +607,9 @@ Netlify all work at no cost.
 | Word timing availability | **Resolved** — verified for all 114 surahs of Murattal | — |
 | Mismatched word segmentation across sources | **Resolved** — text and timings come from one API call | Cross-script invariant test |
 | Merged / missing segments | **Known and handled** | Normalizer §5, validation report, `estimated` flag |
-| Quran.com CDN blocks hotlinking or rate-limits | Open | Data layer is a thin interface; everyayah.com is a drop-in mirror for the same per-ayah file naming |
+| Third-party runtime dependency | **Eliminated** — audio and data are both self-hosted | — |
+| Full audio set is 3.35 GB | Open, decided before Phase 2 | Four storage options costed in §14 |
+| Audio redistribution rights | Open | Rights position recorded in `DATA_SOURCES.md` before the site goes public |
 | API shape changes | Low — data is fetched once and committed | Committed JSON means runtime never touches the API |
 | Font licensing | Resolved — both fonts are SIL OFL | Recorded in `DATA_SOURCES.md` |
 
