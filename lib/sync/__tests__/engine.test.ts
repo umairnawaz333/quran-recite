@@ -120,4 +120,60 @@ describe('SyncEngine', () => {
     expect(cb).not.toHaveBeenCalled();
     engine.detach();
   });
+
+  it('replays the current word to a listener that subscribes after attach, with no frame tick required', () => {
+    const now = 700;
+    const engine = new SyncEngine();
+    engine.attach(() => now, WORDS);
+    tick(); // establishes an active word ('1:1:1')
+
+    const cb = vi.fn();
+    engine.onChange(cb); // subscribes mid-playback, no tick() afterward
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(cb).toHaveBeenCalledWith('1:1:1');
+    engine.detach();
+  });
+
+  it('does not fire a listener that subscribes before attach until the first frame', () => {
+    const engine = new SyncEngine();
+    const cb = vi.fn();
+    engine.onChange(cb);
+    expect(cb).not.toHaveBeenCalled();
+
+    engine.attach(() => 700, WORDS);
+    expect(cb).not.toHaveBeenCalled(); // still no frame processed yet
+
+    tick();
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(cb).toHaveBeenCalledWith('1:1:1');
+    engine.detach();
+  });
+
+  it('does not duplicate-deliver to a replayed listener when the word stays active', () => {
+    const now = 700;
+    const engine = new SyncEngine();
+    engine.attach(() => now, WORDS);
+    tick();
+
+    const cb = vi.fn();
+    engine.onChange(cb); // replay: 1 call
+
+    tick(); // same word still active; should not call again
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    engine.detach();
+  });
+
+  it('does not replay a stale word id after detach followed by a new subscription', () => {
+    const engine = new SyncEngine();
+    engine.attach(() => 700, WORDS);
+    tick(); // active word becomes '1:1:1'
+    engine.detach();
+
+    const cb = vi.fn();
+    engine.onChange(cb);
+
+    expect(cb).not.toHaveBeenCalled();
+  });
 });
