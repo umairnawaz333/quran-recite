@@ -17,6 +17,7 @@
 - **Highlights are painted only when the attached registry's surah is the playing surah.** Browsing surah 5 while surah 2 plays must never paint surah 5's words.
 - **Audio files are immutable** — a given ayah's bytes never change — so cached audio is never stale.
 - **The service worker cannot use `localStorage`.** Its bookkeeping lives in IndexedDB.
+- **`public/sw.js` is generated, never hand-edited.** It is bundled from `lib/offline/sw.ts` by `scripts/build-sw.mjs` so the eviction rule has one source of truth. It is gitignored.
 - **Runtime cache budget: 100 MB.** Pinned downloads are exempt and are only ever removed by explicit deletion.
 - **Audio origin** comes from `NEXT_PUBLIC_AUDIO_BASE_URL`; `resolveAudioUrl` maps `/audio/abdulbasit-murattal/002255.mp3` to `{BASE}/audio-002/002255.mp3`. Filenames are `SSSAAA.mp3`.
 - **Static export** (`output: 'export'`): no server routes. `sw.js` is served from `public/`.
@@ -81,7 +82,8 @@ class WordRegistry {
 | `lib/offline/db.ts` | IndexedDB access for the runtime cache index |
 | `lib/offline/downloadManager.ts` | Page-side messaging to the service worker |
 | `lib/offline/registerServiceWorker.ts` | Registration, guarded for unsupported browsers |
-| `public/sw.js` | Fetch interception, pinned + runtime caches, download/delete |
+| `lib/offline/sw.ts` | Worker source: fetch interception, pinned + runtime caches, download/delete |
+| `scripts/build-sw.mjs` | Bundles the worker to `public/sw.js` |
 | `app/downloads/page.tsx` | Storage screen |
 | `app/surah/[id]/SurahClient.tsx` | Rewritten as a provider consumer |
 | `app/layout.tsx` | Mounts `PlayerProvider` and `PlayerBar` |
@@ -617,53 +619,106 @@ git commit -m "feat: add pure LRU eviction selection for the runtime audio cache
 ## Task 5: The service worker
 
 **Files:**
-- Create: `public/sw.js`
+- Create: `lib/offline/sw.ts` (worker source, TypeScript)
+- Create: `scripts/build-sw.mjs` (bundles it to `public/sw.js`)
 - Create: `lib/offline/registerServiceWorker.ts`
 - Test: `lib/offline/__tests__/registerServiceWorker.test.ts`
+- Modify: `package.json` (esbuild dep, `prebuild`/`predev` scripts), `.gitignore`
 
 **Interfaces:**
-- Consumes: eviction logic is duplicated in plain JS inside `sw.js` (see note below)
+- Consumes: `selectEvictions`, `RUNTIME_BUDGET_BYTES` from Task 4
 - Produces:
   - `registerServiceWorker(): Promise<ServiceWorkerRegistration | null>`
-  - Message protocol: page sends `{type:'download'|'delete'|'status', surahId?, urls?}`; worker replies `{type:'progress'|'complete'|'failed'|'status', ...}`
+  - `public/sw.js` as a build artifact
+  - Message protocol: page sends `{type:'download'|'delete'|'status', surahId?, urls?}`; worker replies `{type:'progress'|'complete'|'failed'|'deleted'|'status', ...}`
 
-**Note on duplication:** `sw.js` is plain JavaScript loaded outside the bundler, so it cannot import from `lib/`. The eviction rule is therefore expressed twice: once in `lib/offline/evictions.ts` (tested) and once inline in `sw.js`. Keep the inline copy a faithful transcription and reference the tested module in a comment — this is deliberate, not an oversight.
+**Why the worker is bundled rather than hand-written:** a service worker runs
+outside the app bundle and cannot `import` from `lib/` at runtime. Writing it in
+TypeScript and bundling it means the eviction rule has exactly one source of
+truth — the unit-tested `lib/offline/evictions.ts` — instead of a hand-copied
+duplicate that can silently drift. `public/sw.js` is generated and gitignored.
 
-- [ ] **Step 1: Write the service worker**
+- [ ] **Step 1: Add esbuild and the build hooks**
 
-Create `public/sw.js`:
+```bash
+npm install -D esbuild
+```
+
+Add to `package.json` scripts, so the worker is always regenerated before the
+app is built or served:
+
+```json
+"build:sw": "node scripts/build-sw.mjs",
+"prebuild": "npm run build:sw",
+"predev": "npm run build:sw"
+```
+
+Add to `.gitignore`:
+
+```
+# Generated from lib/offline/sw.ts by scripts/build-sw.mjs
+public/sw.js
+```
+
+- [ ] **Step 2: Write the bundler**
+
+Create `scripts/build-sw.mjs`:
 
 ```js
+import { build } from 'esbuild';
+
+// The service worker cannot import from the app bundle at runtime, so it is
+// written in TypeScript and bundled here. This is what lets it share the
+// unit-tested eviction rule in lib/offline/evictions.ts rather than carrying
+// a hand-copied duplicate.
+await build({
+  entryPoints: ['lib/offline/sw.ts'],
+  outfile: 'public/sw.js',
+  bundle: true,
+  format: 'iife',
+  target: 'es2020',
+  platform: 'browser',
+  legalComments: 'none',
+  banner: { js: '/* Generated from lib/offline/sw.ts — do not edit. */' },
+});
+
+console.log('built public/sw.js');
+```
+
+- [ ] **Step 3: Write the worker in TypeScript**
+
+Create `lib/offline/sw.ts`:
+
+```ts
+/// <reference lib="webworker" />
+import { selectEvictions, RUNTIME_BUDGET_BYTES, type CacheEntry } from './evictions';
+
+declare const self: ServiceWorkerGlobalScope;
+
 /*
  * Audio cache for the Quran reader.
  *
- * Two caches:
  *   PINNED  — surahs the user explicitly downloaded. Never evicted.
- *   RUNTIME — audio fetched during ordinary playback, capped at 100 MB and
- *             evicted least-recently-used.
+ *   RUNTIME — audio fetched during ordinary playback, capped and evicted
+ *             least-recently-used.
  *
  * The runtime cache exists because GitHub release assets carry no
  * cache-control header, so without it every replay re-downloads.
  *
  * Audio files are immutable — a given ayah's bytes never change — so a cache
  * hit is always correct and never needs revalidating.
- *
- * The eviction rule mirrors lib/offline/evictions.ts, which is unit-tested.
- * This file cannot import it: a service worker runs outside the bundler.
  */
 const PINNED = 'quran-audio-pinned-v1';
 const RUNTIME = 'quran-audio-runtime-v1';
-const RUNTIME_BUDGET_BYTES = 100 * 1024 * 1024;
-
 const DB_NAME = 'quran-offline';
 const STORE = 'runtime-index';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
 
-// ---- IndexedDB helpers (the worker cannot use localStorage) ----------------
+// ---- IndexedDB (a worker cannot use localStorage) --------------------------
 
-function openDb() {
+function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => {
@@ -676,16 +731,16 @@ function openDb() {
   });
 }
 
-async function idbAll() {
+async function idbAll(): Promise<CacheEntry[]> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
-    req.onsuccess = () => resolve(req.result || []);
+    req.onsuccess = () => resolve((req.result as CacheEntry[]) || []);
     req.onerror = () => reject(req.error);
   });
 }
 
-async function idbPut(entry) {
+async function idbPut(entry: CacheEntry): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
@@ -695,7 +750,7 @@ async function idbPut(entry) {
   });
 }
 
-async function idbDelete(urls) {
+async function idbDelete(urls: string[]): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
@@ -706,25 +761,7 @@ async function idbDelete(urls) {
   });
 }
 
-// ---- Eviction (mirrors lib/offline/evictions.ts) ---------------------------
-
-function selectEvictions(entries, budgetBytes) {
-  const total = entries.reduce((sum, e) => sum + e.size, 0);
-  if (total <= budgetBytes) return [];
-  const ordered = [...entries].sort(
-    (a, b) => a.lastUsed - b.lastUsed || a.url.localeCompare(b.url),
-  );
-  const victims = [];
-  let remaining = total;
-  for (const entry of ordered) {
-    if (remaining <= budgetBytes) break;
-    victims.push(entry.url);
-    remaining -= entry.size;
-  }
-  return victims;
-}
-
-async function enforceBudget() {
+async function enforceBudget(): Promise<void> {
   const entries = await idbAll();
   const victims = selectEvictions(entries, RUNTIME_BUDGET_BYTES);
   if (victims.length === 0) return;
@@ -735,9 +772,7 @@ async function enforceBudget() {
 
 // ---- Fetch interception ----------------------------------------------------
 
-const isAudio = url => url.pathname.endsWith('.mp3');
-
-async function serveAudio(request) {
+async function serveAudio(request: Request): Promise<Response> {
   const pinned = await caches.open(PINNED);
   const pinnedHit = await pinned.match(request.url);
   if (pinnedHit) return pinnedHit;
@@ -747,52 +782,51 @@ async function serveAudio(request) {
   if (runtimeHit) {
     // Touch it so the LRU order reflects real use.
     const size = Number(runtimeHit.headers.get('content-length')) || 0;
-    idbPut({ url: request.url, size, lastUsed: Date.now() }).catch(() => {});
+    void idbPut({ url: request.url, size, lastUsed: Date.now() }).catch(() => {});
     return runtimeHit;
   }
 
   const response = await fetch(request);
   if (response.ok) {
-    const copy = response.clone();
-    const buf = await copy.arrayBuffer();
+    const buf = await response.clone().arrayBuffer();
     await runtime.put(request.url, new Response(buf, { headers: response.headers }));
     await idbPut({ url: request.url, size: buf.byteLength, lastUsed: Date.now() });
-    enforceBudget().catch(() => {});
+    void enforceBudget().catch(() => {});
   }
   return response;
 }
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || !isAudio(url)) return;
+  if (event.request.method !== 'GET' || !url.pathname.endsWith('.mp3')) return;
   event.respondWith(serveAudio(event.request).catch(() => fetch(event.request)));
 });
 
 // ---- Download / delete / status --------------------------------------------
 
-async function downloadSurah(surahId, urls, client) {
+async function downloadSurah(surahId: number, urls: string[], client: Client): Promise<void> {
   const cache = await caches.open(PINNED);
+  const added: string[] = [];
   let done = 0;
   let bytes = 0;
-  const added = [];
 
   for (const url of urls) {
     if (await cache.match(url)) { done += 1; continue; }   // resumable
     try {
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`${res.status}`);
+      if (!res.ok) throw new Error(String(res.status));
       const buf = await res.arrayBuffer();
       await cache.put(url, new Response(buf, { headers: res.headers }));
       added.push(url);
       bytes += buf.byteLength;
       done += 1;
     } catch (err) {
-      // Roll back this download so a partial surah is never reported as
-      // available offline.
+      // Roll back so a partial surah is never reported as available offline.
       await Promise.all(added.map(u => cache.delete(u)));
       client.postMessage({
-        type: 'failed', surahId,
-        reason: String(err && err.name === 'QuotaExceededError' ? 'quota' : 'network'),
+        type: 'failed',
+        surahId,
+        reason: (err as Error)?.name === 'QuotaExceededError' ? 'quota' : 'network',
       });
       return;
     }
@@ -803,7 +837,7 @@ async function downloadSurah(surahId, urls, client) {
   client.postMessage({ type: 'complete', surahId, total: urls.length, bytes });
 }
 
-async function deleteSurah(surahId, client) {
+async function deleteSurah(surahId: number, client: Client): Promise<void> {
   const cache = await caches.open(PINNED);
   const keys = await cache.keys();
   const prefix = `/audio-${String(surahId).padStart(3, '0')}/`;
@@ -812,25 +846,27 @@ async function deleteSurah(surahId, client) {
   client.postMessage({ type: 'deleted', surahId, removed: victims.length });
 }
 
-async function reportStatus(client) {
+async function reportStatus(client: Client): Promise<void> {
   const cache = await caches.open(PINNED);
   const keys = await cache.keys();
-  const bySurah = {};
+  const bySurah: Record<number, number> = {};
   for (const req of keys) {
     const match = req.url.match(/\/audio-(\d{3})\//);
     if (!match) continue;
     const id = Number(match[1]);
     bySurah[id] = (bySurah[id] || 0) + 1;
   }
-  const estimate = navigator.storage && navigator.storage.estimate
+  const estimate = navigator.storage?.estimate
     ? await navigator.storage.estimate()
     : { usage: 0, quota: 0 };
-  client.postMessage({ type: 'status', bySurah, usage: estimate.usage, quota: estimate.quota });
+  client.postMessage({
+    type: 'status', bySurah, usage: estimate.usage ?? 0, quota: estimate.quota ?? 0,
+  });
 }
 
 self.addEventListener('message', event => {
   const msg = event.data || {};
-  const client = event.source;
+  const client = event.source as Client | null;
   if (!client) return;
   if (msg.type === 'download') event.waitUntil(downloadSurah(msg.surahId, msg.urls, client));
   if (msg.type === 'delete') event.waitUntil(deleteSurah(msg.surahId, client));
@@ -838,7 +874,25 @@ self.addEventListener('message', event => {
 });
 ```
 
-- [ ] **Step 2: Write the failing registration test**
+- [ ] **Step 4: Build it and confirm the shared logic really is inlined**
+
+Run: `npm run build:sw`
+Expected: prints `built public/sw.js`.
+
+Run:
+
+```bash
+grep -c "selectEvictions\|localeCompare" public/sw.js
+```
+
+Expected: at least 1 — the eviction logic must be present in the bundle, proving
+the worker shares the tested implementation rather than a copy.
+
+Run: `npx tsc --noEmit` — clean. If `lib/offline/sw.ts` errors on DOM globals,
+add `"webworker"` to `compilerOptions.lib` in `tsconfig.json` alongside the
+existing entries.
+
+- [ ] **Step 5: Write the failing registration test**
 
 Create `lib/offline/__tests__/registerServiceWorker.test.ts`:
 
@@ -873,12 +927,12 @@ describe('registerServiceWorker', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to see it fail**
+- [ ] **Step 6: Run the test to see it fail**
 
 Run: `npx vitest run lib/offline/__tests__/registerServiceWorker.test.ts`
 Expected: FAIL — cannot resolve `../registerServiceWorker`.
 
-- [ ] **Step 4: Implement registration**
+- [ ] **Step 7: Implement registration**
 
 Create `lib/offline/registerServiceWorker.ts`:
 
@@ -899,17 +953,25 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 }
 ```
 
-- [ ] **Step 5: Run the test to see it pass**
+- [ ] **Step 8: Run the test to see it pass**
 
 Run: `npx vitest run lib/offline/__tests__/registerServiceWorker.test.ts`
 Expected: 3 passing.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 9: Verify the app still builds**
+
+Run: `npm run build` — succeeds, and `prebuild` regenerates `public/sw.js` first.
+Run: `ls out/sw.js` — the worker must be in the static export, or registration
+404s in production.
+
+- [ ] **Step 10: Commit**
 
 ```bash
-git add public/sw.js lib/offline/registerServiceWorker.ts lib/offline/__tests__/registerServiceWorker.test.ts
-git commit -m "feat: add audio caching service worker with pinned and LRU caches"
+git add lib/offline scripts/build-sw.mjs package.json package-lock.json .gitignore
+git commit -m "feat: add audio caching service worker bundled from TypeScript"
 ```
+
+Do NOT commit `public/sw.js` — it is generated and gitignored.
 
 ---
 
@@ -2358,4 +2420,4 @@ git commit -m "docs: describe the persistent player, offline downloads and resum
 
 **Type consistency:** `PlayerState` and `PlayerActions` are defined once in `usePlayer.ts` (Task 7) and consumed unchanged by `PlayerBar` (Task 8) and `SurahClient` (Task 9). `OfflineStatus` is defined in `downloadManager.ts` (Task 6) and consumed by the downloads page (Task 10). `CacheEntry`/`selectEvictions` (Task 4) are mirrored deliberately in `sw.js` (Task 5), which is called out in that task rather than left as an accident. `attachRegistry` returns a detach function in every place it appears.
 
-**Known gap, stated deliberately:** `sw.js` duplicates the eviction rule because a service worker cannot import from the bundle. The tested copy is the source of truth; Task 5 says so in the file's own comment.
+**Duplication removed:** an earlier draft had `sw.js` hand-copy the eviction rule. Task 5 now writes the worker in TypeScript and bundles it with esbuild, so `lib/offline/evictions.ts` is the single source of truth and the two cannot drift.
