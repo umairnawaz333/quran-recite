@@ -16,6 +16,7 @@ const UA = 'quran-word-sync-build-script';
 const ROOT = process.cwd();
 const DATA = path.join(ROOT, 'data');
 const AUDIO_DIR = path.join(ROOT, 'public', 'audio', RECITER_SLUG);
+const TIMINGS_DIR = path.join(ROOT, 'public', 'timings', RECITER_SLUG);
 
 // --- Retry with exponential backoff -------------------------------------
 
@@ -183,7 +184,7 @@ async function fetchSurahMeta(): Promise<Omit<SurahMeta, 'available'>[]> {
 /** A surah is available once its text and timings files actually exist on disk. */
 async function isSurahAvailable(surah: number): Promise<boolean> {
   const textPath = path.join(DATA, 'text', `${surah}.json`);
-  const timingsPath = path.join(DATA, 'timings', RECITER_SLUG, `${surah}.json`);
+  const timingsPath = path.join(TIMINGS_DIR, `${surah}.json`);
   return (await exists(textPath)) && (await exists(timingsPath));
 }
 
@@ -334,7 +335,7 @@ async function buildSurah(surah: number): Promise<SurahReport> {
 
   await writeFile(path.join(DATA, 'text', `${surah}.json`), JSON.stringify(text));
   await writeFile(
-    path.join(DATA, 'timings', RECITER_SLUG, `${surah}.json`),
+    path.join(TIMINGS_DIR, `${surah}.json`),
     JSON.stringify(timings),
   );
 
@@ -361,7 +362,7 @@ async function main() {
   console.log(`Fetching surahs: ${surahs.join(', ')}`);
 
   await mkdir(path.join(DATA, 'text'), { recursive: true });
-  await mkdir(path.join(DATA, 'timings', RECITER_SLUG), { recursive: true });
+  await mkdir(TIMINGS_DIR, { recursive: true });
   await mkdir(AUDIO_DIR, { recursive: true });
 
   // reciters.json is static and independent of the surah loop, so it is safe

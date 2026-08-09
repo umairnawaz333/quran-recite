@@ -35,5 +35,10 @@ export function getSurahText(id: number): SurahText {
 }
 
 export function getSurahTimings(id: number): SurahTimings {
-  return readJson<SurahTimings>('timings', 'abdulbasit-murattal', `${id}.json`);
+  return JSON.parse(
+    readFileSync(
+      path.join(process.cwd(), 'public', 'timings', 'abdulbasit-murattal', `${id}.json`),
+      'utf8',
+    ),
+  ) as SurahTimings;
 }
