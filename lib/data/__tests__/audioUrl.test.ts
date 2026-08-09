@@ -31,19 +31,33 @@ describe('resolveAudioUrl', () => {
     expect(resolve(PATH)).toBe(PATH);
   });
 
-  it('prefixes the base URL when one is configured', async () => {
-    const resolve = await load('https://pub-abc123.r2.dev');
-    expect(resolve(PATH)).toBe('https://pub-abc123.r2.dev/audio/abdulbasit-murattal/001001.mp3');
+  // Flat stores such as GitHub release assets have no directories, so the
+  // stored path's prefix is dropped and the filename alone is appended.
+  it('resolves to base URL plus filename, dropping the directory prefix', async () => {
+    const resolve = await load('https://github.com/u/r/releases/download/audio-v1');
+    expect(resolve(PATH)).toBe(
+      'https://github.com/u/r/releases/download/audio-v1/001001.mp3',
+    );
   });
 
   it('does not double up slashes when the base URL has a trailing one', async () => {
-    const resolve = await load('https://pub-abc123.r2.dev/');
-    expect(resolve(PATH)).toBe('https://pub-abc123.r2.dev/audio/abdulbasit-murattal/001001.mp3');
+    const resolve = await load('https://example.com/assets/');
+    expect(resolve(PATH)).toBe('https://example.com/assets/001001.mp3');
   });
 
-  it('adds a slash when the stored path lacks one', async () => {
-    const resolve = await load('https://pub-abc123.r2.dev');
-    expect(resolve('audio/x.mp3')).toBe('https://pub-abc123.r2.dev/audio/x.mp3');
+  it('handles a bare filename with no directory', async () => {
+    const resolve = await load('https://example.com/assets');
+    expect(resolve('001001.mp3')).toBe('https://example.com/assets/001001.mp3');
+  });
+
+  it('keeps filenames globally unique across surahs', async () => {
+    const resolve = await load('https://example.com/a');
+    expect(resolve('/audio/abdulbasit-murattal/002286.mp3')).toBe(
+      'https://example.com/a/002286.mp3',
+    );
+    expect(resolve('/audio/abdulbasit-murattal/114006.mp3')).toBe(
+      'https://example.com/a/114006.mp3',
+    );
   });
 
   it('leaves an already-absolute URL alone', async () => {

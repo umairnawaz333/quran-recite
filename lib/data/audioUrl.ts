@@ -7,9 +7,13 @@
  * `/audio/abdulbasit-murattal/001001.mp3`; this function decides what that
  * path actually resolves to.
  *
- * With NEXT_PUBLIC_AUDIO_BASE_URL set, paths are rewritten to that origin.
- * Without it, they stay root-relative and are served from `public/audio`,
- * so a local checkout with fetched audio still works with no configuration.
+ * With NEXT_PUBLIC_AUDIO_BASE_URL set, the file is fetched from that origin
+ * by FILENAME ALONE — the stored directory prefix is dropped. Filenames are
+ * `SSSAAA.mp3` (3-digit surah, 3-digit ayah), which is globally unique, and
+ * flat stores such as GitHub release assets cannot express directories.
+ *
+ * Without the variable, paths stay root-relative and are served from
+ * `public/audio`, so a local checkout with fetched audio needs no config.
  */
 
 const BASE = process.env.NEXT_PUBLIC_AUDIO_BASE_URL?.trim().replace(/\/+$/, '');
@@ -20,5 +24,8 @@ export function resolveAudioUrl(rawUrl: string): string {
   // Already absolute — leave it alone rather than double-prefixing.
   if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
 
-  return `${BASE}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+  const filename = rawUrl.split('/').pop();
+  if (!filename) return rawUrl;
+
+  return `${BASE}/${filename}`;
 }
