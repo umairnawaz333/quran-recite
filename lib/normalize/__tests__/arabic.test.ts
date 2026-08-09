@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { countBaseLetters, countRecitationWeight } from '../arabic';
+import { countBaseLetters, stripPrivateUse, countRecitationWeight } from '../arabic';
 
 describe('countBaseLetters', () => {
   it('counts plain letters', () => {
@@ -63,5 +63,34 @@ describe('countRecitationWeight', () => {
   it('agrees with countBaseLetters when no elongation mark is present', () => {
     const text = 'بِسۡمِ';
     expect(countRecitationWeight(text)).toBe(countBaseLetters(text));
+  });
+});
+
+describe('stripPrivateUse', () => {
+  const cps = (t: string) => [...t].map(c => c.codePointAt(0)!);
+
+  it('removes Private Use Area characters', () => {
+    // Real data: word 1:7:9 carried U+E022, which rendered as a tofu box.
+    const input = '\u0646\u064E\uE022';
+    expect(cps(stripPrivateUse(input))).toEqual([0x0646, 0x064e]);
+  });
+
+  it('keeps genuine Unicode waqf marks sitting beside them', () => {
+    // From 1:7:4 — U+E021 must go, U+06D9 must stay.
+    const input = '\u0645\u06E1\uE021\u06D9';
+    expect(cps(stripPrivateUse(input))).toEqual([0x0645, 0x06e1, 0x06d9]);
+  });
+
+  it('covers the whole PUA block, not just the codepoints seen so far', () => {
+    expect(stripPrivateUse('\uE000a\uF8FF')).toBe('a');
+  });
+
+  it('leaves ordinary Arabic untouched', () => {
+    const word = '\u0628\u0650\u0633\u06E1\u0645\u0650';
+    expect(stripPrivateUse(word)).toBe(word);
+  });
+
+  it('handles an empty string', () => {
+    expect(stripPrivateUse('')).toBe('');
   });
 });

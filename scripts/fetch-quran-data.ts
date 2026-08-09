@@ -1,6 +1,7 @@
 import { mkdir, writeFile, readFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeAyah } from '../lib/normalize/segments';
+import { stripPrivateUse } from '../lib/normalize/arabic';
 import type { RawSegment, WordTiming } from '../lib/normalize/types';
 import type {
   AyahTiming, SurahMeta, SurahText, SurahTimings, SurahWord,
@@ -283,7 +284,7 @@ async function buildSurah(surah: number): Promise<SurahReport> {
         id: `${surah}:${ayah}:${w.position}`,
         position: w.position,
         tajweed: w.text_uthmani_tajweed ?? '',
-        indopak: w.text_indopak ?? '',
+        indopak: stripPrivateUse(w.text_indopak ?? ''),
       }));
 
     text.ayahs.push({ ayah, words });

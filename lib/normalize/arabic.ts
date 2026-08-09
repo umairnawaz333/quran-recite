@@ -34,3 +34,18 @@ export function countRecitationWeight(text: string): number {
   const elongations = (plain.match(LONG_VOWEL_MARKS) ?? []).length;
   return countBaseLetters(text) + elongations;
 }
+
+/**
+ * Quran.com's IndoPak text embeds Private Use Area characters (U+E000–U+F8FF)
+ * that only render in their own proprietary IndoPak font. In any other font
+ * they appear as tofu boxes — 1,363 words across all 114 surahs are affected.
+ *
+ * They are safe to drop: they are decorative glyph variants, and the standard
+ * Unicode waqf marks they accompany (U+06D6–U+06ED) are present separately and
+ * render correctly. The Uthmani/tajweed text contains none of them.
+ */
+const PRIVATE_USE = /[\uE000-\uF8FF]/g;
+
+export function stripPrivateUse(text: string): string {
+  return text.replace(PRIVATE_USE, '');
+}

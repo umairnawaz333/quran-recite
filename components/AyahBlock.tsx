@@ -1,6 +1,7 @@
 'use client';
 
 import { QuranWord, type Script } from './QuranWord';
+import { PlayIcon } from './PlayerIcons';
 import type { SurahWord } from '@/lib/data/types';
 import type { WordRegistry } from '@/lib/reader/wordRegistry';
 
@@ -45,9 +46,12 @@ export function AyahBlock({
           type="button"
           aria-label={`Play ayah ${ayah}`}
           onClick={() => onAyahPlay(ayah)}
-          className="rounded-full px-3 py-1 text-sm text-neutral-500 hover:bg-neutral-100"
+          className="group flex items-center gap-1.5 rounded-full py-1 pl-1.5 pr-3 text-sm text-neutral-400 outline-none transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
         >
-          ▶ {surah}:{ayah}
+          <span className="grid size-6 place-items-center rounded-full bg-neutral-100 text-neutral-500 transition group-hover:bg-neutral-900 group-hover:text-white">
+            <PlayIcon className="size-3" />
+          </span>
+          <span className="tabular-nums">{surah}:{ayah}</span>
         </button>
       </div>
     </div>
