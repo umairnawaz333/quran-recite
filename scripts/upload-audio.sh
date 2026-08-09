@@ -41,6 +41,25 @@ total_uploaded=0
 total_skipped=0
 failed_surahs=""
 
+# Every asset upload spends one API request, and the whole recitation is 6,236
+# files against a 5,000/hour quota — so a single unpaced run WILL hit the limit
+# partway through and fail the rest with an opaque 403. Waiting for the reset
+# is what makes an unattended run finish.
+wait_for_quota() {
+  local need=${1:-100}
+  local remaining reset now sleep_for
+  remaining=$(gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || echo 0)
+  [ "$remaining" -ge "$need" ] && return 0
+
+  reset=$(gh api rate_limit --jq '.resources.core.reset' 2>/dev/null || echo 0)
+  now=$(date +%s)
+  sleep_for=$(( reset - now + 10 ))
+  [ "$sleep_for" -lt 10 ] && sleep_for=10
+
+  echo "  rate limit low ($remaining left) — sleeping $((sleep_for / 60))m until reset"
+  sleep "$sleep_for"
+}
+
 for s in $surahs; do
   files=$(ls "$SRC/${s}"*.mp3 2>/dev/null || true)
   [ -z "$files" ] && continue
@@ -66,13 +85,20 @@ for s in $surahs; do
   fi
 
   n=$(echo "$pending" | wc -l | tr -d ' ')
+
+  # Leave headroom for this surah's uploads plus the listing calls above.
+  wait_for_quota $((n + 50))
+
   echo "surah $s: uploading $n of $count"
 
-  if echo "$pending" | tr '\n' '\0' | xargs -0 -n "$BATCH" \
-       gh release upload "$tag" --repo "$REPO" --clobber >/dev/null 2>&1; then
+  err=$(echo "$pending" | tr '\n' '\0' | xargs -0 -n "$BATCH" \
+          gh release upload "$tag" --repo "$REPO" --clobber 2>&1 >/dev/null)
+  if [ -z "$err" ]; then
     total_uploaded=$((total_uploaded + n))
   else
-    echo "surah $s: FAILED — re-run to retry"
+    # Print the real error. Swallowing it once cost an hour of confusion when
+    # 52 surahs failed with no visible reason.
+    echo "surah $s: FAILED — $(echo "$err" | head -1)"
     failed_surahs="$failed_surahs $s"
   fi
 done
