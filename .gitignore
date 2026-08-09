@@ -9,3 +9,8 @@ tsconfig.tsbuildinfo
 AGENTS.md
 CLAUDE.md
 .vercel
+
+# Audio is served from per-surah GitHub Releases (see scripts/upload-audio.sh
+# and NEXT_PUBLIC_AUDIO_BASE_URL). 6,236 files / 2.5 GB does not belong in a
+# git clone. Fetch it locally with: npm run fetch:data -- --surahs=1-114
+public/audio
