@@ -120,10 +120,28 @@ jobs:
           echo "Al-Fatihah word spans found: $words"
           [ "$words" -gt 0 ] || { echo "::error::Surah page rendered no words"; exit 1; }
 
-          audio=$(curl -s -o /dev/null -w '%{http_code}' \
-            "$url/audio/abdulbasit-murattal/001001.mp3")
-          echo "audio: $audio"
-          [ "$audio" = "200" ] || { echo "::error::Audio returned $audio"; exit 1; }
+          # Audio may be served from the deployment itself or from an external
+          # origin (per-surah GitHub Releases), depending on whether
+          # NEXT_PUBLIC_AUDIO_BASE_URL is configured. Check whichever origin
+          # the build actually baked in — checking a fixed path would fail the
+          # deploy the moment the audio moves, and pass while pointing at an
+          # origin the app no longer uses.
+          env_file=.vercel/.env.production.local
+          base=$(grep -h '^NEXT_PUBLIC_AUDIO_BASE_URL=' "$env_file" 2>/dev/null \
+                 | head -1 | cut -d= -f2- | tr -d '"'"'"'')
+
+          if [ -n "$base" ]; then
+            # Filename-only lookup, sharded per surah — mirrors resolveAudioUrl.
+            audio_url="${base%/}/audio-001/001001.mp3"
+            echo "audio origin: external ($base)"
+          else
+            audio_url="$url/audio/abdulbasit-murattal/001001.mp3"
+            echo "audio origin: the deployment itself"
+          fi
+
+          audio=$(curl -sL -o /dev/null -w '%{http_code}' "$audio_url")
+          echo "audio: $audio  ($audio_url)"
+          [ "$audio" = "200" ] || { echo "::error::Audio returned $audio from $audio_url"; exit 1; }
 
           font=$(curl -s -o /dev/null -w '%{http_code}' "$url/fonts/amiri-quran.woff2")
           echo "font: $font"

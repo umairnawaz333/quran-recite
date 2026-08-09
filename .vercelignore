@@ -1,0 +1,13 @@
+# Audio is served from per-surah GitHub Releases via NEXT_PUBLIC_AUDIO_BASE_URL,
+# not from the deployment. The full recitation is 6,236 files / 2.5 GB, which
+# exceeds what Vercel accepts — and a local `vercel deploy` would otherwise try
+# to upload every one of them, since the CLI packages the working directory
+# rather than the git index.
+#
+# Remove this line to serve audio from the deployment again (only viable for a
+# small subset of surahs).
+public/audio
+
+# Never part of a deployment.
+.superpowers
+docs
