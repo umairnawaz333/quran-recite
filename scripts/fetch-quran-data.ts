@@ -48,16 +48,40 @@ function retryAfterMs(res: Response): number | null {
  * 400/401/403/404 and any other 4xx are permanent failures and are returned
  * to the caller immediately, un-retried — retrying those wastes time and
  * looks like abuse. `label` is only for the retry log line.
+ *
+ * The body is read by `consume` INSIDE the retry loop, deliberately. Reading
+ * it outside means a connection that drops mid-body — `UND_ERR_SOCKET: other
+ * side closed`, which the CDN does periodically on a multi-gigabyte transfer —
+ * throws past all of this and kills the run. That is exactly how a 63-surah
+ * fetch died once already.
  */
-async function fetchWithRetry(
+async function fetchWithRetry<T>(
   url: string,
   init: RequestInit,
   label: string,
-): Promise<Response> {
+  consume: (res: Response) => Promise<T>,
+): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
-    let res: Response;
     try {
-      res = await fetch(url, init);
+      const res = await fetch(url, init);
+
+      if (!res.ok && RETRYABLE_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
+        const delay = retryAfterMs(res) ?? backoffDelayMs(attempt);
+        console.warn(
+          `  [retry] ${res.status} ${res.statusText} for ${label} ` +
+          `(attempt ${attempt}/${MAX_ATTEMPTS}) — retrying in ${delay}ms`,
+        );
+        await sleep(delay);
+        continue;
+      }
+
+      if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText} for ${label}`);
+      }
+
+      // Inside the try: a mid-body socket close lands in the catch below and
+      // is retried like any other network error.
+      return await consume(res);
     } catch (err) {
       if (attempt >= MAX_ATTEMPTS) throw err;
       const delay = backoffDelayMs(attempt);
@@ -66,26 +90,17 @@ async function fetchWithRetry(
         `${(err as Error).message} — retrying in ${delay}ms`,
       );
       await sleep(delay);
-      continue;
     }
-
-    if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= MAX_ATTEMPTS) {
-      return res;
-    }
-
-    const delay = retryAfterMs(res) ?? backoffDelayMs(attempt);
-    console.warn(
-      `  [retry] ${res.status} ${res.statusText} for ${label} ` +
-      `(attempt ${attempt}/${MAX_ATTEMPTS}) — retrying in ${delay}ms`,
-    );
-    await sleep(delay);
   }
 }
 
 async function api<T>(pathname: string): Promise<T> {
-  const res = await fetchWithRetry(`${API}${pathname}`, { headers: { 'User-Agent': UA } }, pathname);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${pathname}`);
-  return res.json() as Promise<T>;
+  return fetchWithRetry<T>(
+    `${API}${pathname}`,
+    { headers: { 'User-Agent': UA } },
+    pathname,
+    res => res.json() as Promise<T>,
+  );
 }
 
 /** Walks a paginated endpoint and returns every item. */
@@ -124,9 +139,13 @@ async function downloadAudio(remotePath: string): Promise<string> {
   const filename = remotePath.split('/').pop()!;
   const dest = path.join(AUDIO_DIR, filename);
   if (!(await exists(dest))) {
-    const res = await fetchWithRetry(AUDIO_HOST + remotePath, { headers: { 'User-Agent': UA } }, remotePath);
-    if (!res.ok) throw new Error(`audio ${res.status} for ${remotePath}`);
-    await writeFile(dest, Buffer.from(await res.arrayBuffer()));
+    const bytes = await fetchWithRetry(
+      AUDIO_HOST + remotePath,
+      { headers: { 'User-Agent': UA } },
+      remotePath,
+      async res => Buffer.from(await res.arrayBuffer()),
+    );
+    await writeFile(dest, bytes);
   }
   return `/audio/${RECITER_SLUG}/${filename}`;
 }

@@ -1,71 +1,86 @@
 #!/usr/bin/env bash
 #
-# Upload the recitation audio to a GitHub Release.
+# Upload the recitation audio to GitHub Releases, one release per surah.
 #
-# The full recitation is ~3 GB — too large for a git clone and larger than a
-# Vercel deployment accepts. Release assets are stored outside the repository
-# and served over GitHub's CDN, so the clone stays small.
+# The full recitation is ~3 GB across 6,236 files — too large for a git clone
+# and larger than a Vercel deployment accepts. Release assets live outside the
+# repository and are served over GitHub's CDN.
 #
-# Assets are flat: `SSSAAA.mp3` (3-digit surah + 3-digit ayah), which is
-# globally unique. lib/data/audioUrl.ts resolves a stored path to
-# NEXT_PUBLIC_AUDIO_BASE_URL + filename to match.
+# Why one release per surah: GitHub caps a release at 1000 assets
+# ("file_count limited to 1000 assets per release"), and Al-Baqarah alone has
+# 286 ayahs. Sharding by surah keeps every release well under the cap and
+# makes the shard derivable from the filename, so lib/data/audioUrl.ts needs
+# no lookup table:
+#
+#   002255.mp3  ->  release audio-002  ->  {BASE}/audio-002/002255.mp3
+#
+# The script is resumable: assets already present are skipped, so it can be
+# re-run while a fetch is still downloading, and again afterwards to sweep up.
 #
 # Usage:
-#   ./scripts/upload-audio.sh            # upload everything not already there
-#   ./scripts/upload-audio.sh --clobber  # re-upload and overwrite
+#   ./scripts/upload-audio.sh          # all surahs present on disk
+#   ./scripts/upload-audio.sh 2 3 4    # only these surahs
 #
-set -euo pipefail
+set -uo pipefail
 
 REPO="${AUDIO_REPO:-umairnawaz333/quran-recite}"
-TAG="${AUDIO_TAG:-audio-v1}"
 SRC="public/audio/abdulbasit-murattal"
 BATCH=40
-CLOBBER="${1:-}"
 
 [ -d "$SRC" ] || { echo "error: $SRC missing — run the fetch first" >&2; exit 1; }
-
 command -v gh >/dev/null || { echo "error: gh CLI not found" >&2; exit 1; }
 
-gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || {
-  echo "Creating release $TAG"
-  gh release create "$TAG" --repo "$REPO" \
-    --title "Recitation audio (AbdulBaset AbdulSamad, Murattal)" \
-    --notes "Per-ayah MP3 files named SSSAAA.mp3. Source: Quran.com API v4, copied byte-for-byte."
-}
-
-# Skip files already uploaded unless --clobber, so an interrupted run resumes
-# instead of starting over.
-existing=$(mktemp)
-gh release view "$TAG" --repo "$REPO" --json assets \
-  --jq '.assets[].name' 2>/dev/null | sort > "$existing" || true
-echo "Already uploaded: $(wc -l < "$existing" | tr -d ' ')"
-
-pending=$(mktemp)
-if [ "$CLOBBER" = "--clobber" ]; then
-  find "$SRC" -name '*.mp3' | sort > "$pending"
+# Which surahs to process: explicit arguments, or every surah with files.
+if [ "$#" -gt 0 ]; then
+  surahs=$(printf '%03d\n' "$@")
 else
-  find "$SRC" -name '*.mp3' | sort | while read -r f; do
-    grep -qxF "$(basename "$f")" "$existing" || echo "$f"
-  done > "$pending"
+  surahs=$(ls "$SRC"/*.mp3 2>/dev/null | xargs -n1 basename | cut -c1-3 | sort -u)
 fi
 
-total=$(wc -l < "$pending" | tr -d ' ')
-echo "To upload: $total"
-[ "$total" -eq 0 ] && { echo "Nothing to do."; exit 0; }
+total_uploaded=0
+total_skipped=0
+failed_surahs=""
 
-# xargs batches the uploads: one gh invocation per BATCH files rather than per
-# file, which is roughly 3x faster on a set this size.
-tr '\n' '\0' < "$pending" | xargs -0 -n "$BATCH" sh -c '
-  gh release upload "'"$TAG"'" --repo "'"$REPO"'" --clobber "$@" >/dev/null 2>&1 \
-    && echo "  uploaded $# files" \
-    || echo "  FAILED batch of $# — rerun to retry"
-' _
+for s in $surahs; do
+  files=$(ls "$SRC/${s}"*.mp3 2>/dev/null || true)
+  [ -z "$files" ] && continue
+  count=$(echo "$files" | wc -l | tr -d ' ')
+  tag="audio-${s}"
+
+  if ! gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+    gh release create "$tag" --repo "$REPO" \
+      --title "Surah ${s#00} audio — AbdulBaset AbdulSamad (Murattal)" \
+      --notes "Per-ayah MP3 files for surah ${s#00}, named SSSAAA.mp3. Source: Quran.com API v4, copied byte-for-byte." \
+      >/dev/null 2>&1 || { echo "surah $s: could not create release"; failed_surahs="$failed_surahs $s"; continue; }
+  fi
+
+  existing=$(gh release view "$tag" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null | sort)
+  pending=$(for f in $files; do
+    echo "$existing" | grep -qxF "$(basename "$f")" || echo "$f"
+  done)
+
+  if [ -z "$pending" ]; then
+    echo "surah $s: all $count already uploaded"
+    total_skipped=$((total_skipped + count))
+    continue
+  fi
+
+  n=$(echo "$pending" | wc -l | tr -d ' ')
+  echo "surah $s: uploading $n of $count"
+
+  if echo "$pending" | tr '\n' '\0' | xargs -0 -n "$BATCH" \
+       gh release upload "$tag" --repo "$REPO" --clobber >/dev/null 2>&1; then
+    total_uploaded=$((total_uploaded + n))
+  else
+    echo "surah $s: FAILED — re-run to retry"
+    failed_surahs="$failed_surahs $s"
+  fi
+done
 
 echo
-echo "Done. Verify:"
-echo "  curl -sIL https://github.com/$REPO/releases/download/$TAG/001001.mp3 | head -1"
-echo
-echo "Then point the app at it:"
-echo "  NEXT_PUBLIC_AUDIO_BASE_URL=https://github.com/$REPO/releases/download/$TAG"
+echo "uploaded: $total_uploaded   already present: $total_skipped"
+[ -n "$failed_surahs" ] && echo "failed surahs:$failed_surahs (re-run to retry)"
 
-rm -f "$existing" "$pending"
+echo
+echo "Point the app at the releases with:"
+echo "  NEXT_PUBLIC_AUDIO_BASE_URL=https://github.com/$REPO/releases/download"

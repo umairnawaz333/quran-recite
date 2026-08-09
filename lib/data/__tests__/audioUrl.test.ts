@@ -31,33 +31,41 @@ describe('resolveAudioUrl', () => {
     expect(resolve(PATH)).toBe(PATH);
   });
 
-  // Flat stores such as GitHub release assets have no directories, so the
-  // stored path's prefix is dropped and the filename alone is appended.
-  it('resolves to base URL plus filename, dropping the directory prefix', async () => {
-    const resolve = await load('https://github.com/u/r/releases/download/audio-v1');
+  // Audio is sharded one GitHub Release per surah because a release caps at
+  // 1000 assets and the recitation has 6,236 files. The shard is derived from
+  // the filename's 3-digit surah prefix.
+  it('routes to the per-surah release derived from the filename', async () => {
+    const resolve = await load('https://github.com/u/r/releases/download');
     expect(resolve(PATH)).toBe(
-      'https://github.com/u/r/releases/download/audio-v1/001001.mp3',
+      'https://github.com/u/r/releases/download/audio-001/001001.mp3',
     );
+  });
+
+  it('shards each surah to its own release tag', async () => {
+    const resolve = await load('https://example.com/d');
+    expect(resolve('/audio/abdulbasit-murattal/002255.mp3'))
+      .toBe('https://example.com/d/audio-002/002255.mp3');
+    expect(resolve('/audio/abdulbasit-murattal/114006.mp3'))
+      .toBe('https://example.com/d/audio-114/114006.mp3');
+    expect(resolve('/audio/abdulbasit-murattal/009129.mp3'))
+      .toBe('https://example.com/d/audio-009/009129.mp3');
   });
 
   it('does not double up slashes when the base URL has a trailing one', async () => {
-    const resolve = await load('https://example.com/assets/');
-    expect(resolve(PATH)).toBe('https://example.com/assets/001001.mp3');
+    const resolve = await load('https://example.com/d/');
+    expect(resolve(PATH)).toBe('https://example.com/d/audio-001/001001.mp3');
   });
 
   it('handles a bare filename with no directory', async () => {
-    const resolve = await load('https://example.com/assets');
-    expect(resolve('001001.mp3')).toBe('https://example.com/assets/001001.mp3');
+    const resolve = await load('https://example.com/d');
+    expect(resolve('003007.mp3')).toBe('https://example.com/d/audio-003/003007.mp3');
   });
 
-  it('keeps filenames globally unique across surahs', async () => {
-    const resolve = await load('https://example.com/a');
-    expect(resolve('/audio/abdulbasit-murattal/002286.mp3')).toBe(
-      'https://example.com/a/002286.mp3',
-    );
-    expect(resolve('/audio/abdulbasit-murattal/114006.mp3')).toBe(
-      'https://example.com/a/114006.mp3',
-    );
+  // Building a URL from a filename we cannot parse would be confidently wrong.
+  it('falls back to the local path for an unrecognised filename', async () => {
+    const resolve = await load('https://example.com/d');
+    expect(resolve('/audio/x/notanayah.mp3')).toBe('/audio/x/notanayah.mp3');
+    expect(resolve('/audio/x/12345.mp3')).toBe('/audio/x/12345.mp3');
   });
 
   it('leaves an already-absolute URL alone', async () => {

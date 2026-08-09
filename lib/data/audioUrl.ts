@@ -7,16 +7,25 @@
  * `/audio/abdulbasit-murattal/001001.mp3`; this function decides what that
  * path actually resolves to.
  *
- * With NEXT_PUBLIC_AUDIO_BASE_URL set, the file is fetched from that origin
- * by FILENAME ALONE — the stored directory prefix is dropped. Filenames are
- * `SSSAAA.mp3` (3-digit surah, 3-digit ayah), which is globally unique, and
- * flat stores such as GitHub release assets cannot express directories.
+ * With NEXT_PUBLIC_AUDIO_BASE_URL set, the file is fetched from a per-surah
+ * GitHub Release. GitHub caps a release at 1000 assets and the recitation has
+ * 6,236 files, so the audio is sharded one release per surah, tagged
+ * `audio-001` … `audio-114`.
+ *
+ * Filenames are `SSSAAA.mp3` — 3-digit surah, 3-digit ayah — so the shard is
+ * derivable from the filename itself and needs no lookup table:
+ *
+ *   /audio/abdulbasit-murattal/002255.mp3
+ *     -> {BASE}/audio-002/002255.mp3
  *
  * Without the variable, paths stay root-relative and are served from
  * `public/audio`, so a local checkout with fetched audio needs no config.
  */
 
 const BASE = process.env.NEXT_PUBLIC_AUDIO_BASE_URL?.trim().replace(/\/+$/, '');
+
+/** `SSSAAA.mp3` — the first three digits are the surah number. */
+const AUDIO_FILENAME = /^(\d{3})\d{3}\.mp3$/;
 
 export function resolveAudioUrl(rawUrl: string): string {
   if (!BASE) return rawUrl;
@@ -27,5 +36,10 @@ export function resolveAudioUrl(rawUrl: string): string {
   const filename = rawUrl.split('/').pop();
   if (!filename) return rawUrl;
 
-  return `${BASE}/${filename}`;
+  const match = AUDIO_FILENAME.exec(filename);
+  // An unexpected filename means the shard cannot be derived. Fall back to the
+  // local path rather than building a URL that is certainly wrong.
+  if (!match) return rawUrl;
+
+  return `${BASE}/audio-${match[1]}/${filename}`;
 }
