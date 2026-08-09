@@ -10,6 +10,936 @@
     "violations": []
   },
   {
+    "surah": 2,
+    "ayahs": 286,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 3,
+    "ayahs": 200,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 4,
+    "ayahs": 176,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 5,
+    "ayahs": 120,
+    "mergedGroups": 2,
+    "interpolatedWords": 39,
+    "uncoveredWords": 1,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 6,
+    "ayahs": 165,
+    "mergedGroups": 4,
+    "interpolatedWords": 38,
+    "uncoveredWords": 34,
+    "invalidSegments": 3,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 7,
+    "ayahs": 206,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 8,
+    "ayahs": 75,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 9,
+    "ayahs": 129,
+    "mergedGroups": 3,
+    "interpolatedWords": 6,
+    "uncoveredWords": 2,
+    "invalidSegments": 2,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 10,
+    "ayahs": 109,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 11,
+    "ayahs": 123,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 12,
+    "ayahs": 111,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 13,
+    "ayahs": 43,
+    "mergedGroups": 2,
+    "interpolatedWords": 4,
+    "uncoveredWords": 1,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 14,
+    "ayahs": 52,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 15,
+    "ayahs": 99,
+    "mergedGroups": 1,
+    "interpolatedWords": 4,
+    "uncoveredWords": 3,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 16,
+    "ayahs": 128,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 17,
+    "ayahs": 111,
+    "mergedGroups": 2,
+    "interpolatedWords": 4,
+    "uncoveredWords": 2,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 18,
+    "ayahs": 110,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 19,
+    "ayahs": 98,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 20,
+    "ayahs": 135,
+    "mergedGroups": 2,
+    "interpolatedWords": 4,
+    "uncoveredWords": 2,
+    "invalidSegments": 2,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 21,
+    "ayahs": 112,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 22,
+    "ayahs": 78,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 23,
+    "ayahs": 118,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 24,
+    "ayahs": 64,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 25,
+    "ayahs": 77,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 26,
+    "ayahs": 227,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 27,
+    "ayahs": 93,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 28,
+    "ayahs": 88,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 29,
+    "ayahs": 69,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 30,
+    "ayahs": 60,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 31,
+    "ayahs": 34,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 32,
+    "ayahs": 30,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 33,
+    "ayahs": 73,
+    "mergedGroups": 2,
+    "interpolatedWords": 12,
+    "uncoveredWords": 1,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 34,
+    "ayahs": 54,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 35,
+    "ayahs": 45,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 36,
+    "ayahs": 83,
+    "mergedGroups": 1,
+    "interpolatedWords": 3,
+    "uncoveredWords": 2,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 37,
+    "ayahs": 182,
+    "mergedGroups": 3,
+    "interpolatedWords": 10,
+    "uncoveredWords": 2,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 38,
+    "ayahs": 88,
+    "mergedGroups": 2,
+    "interpolatedWords": 8,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 39,
+    "ayahs": 75,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 40,
+    "ayahs": 85,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 41,
+    "ayahs": 54,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 42,
+    "ayahs": 53,
+    "mergedGroups": 2,
+    "interpolatedWords": 4,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 43,
+    "ayahs": 89,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 44,
+    "ayahs": 59,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 45,
+    "ayahs": 37,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 46,
+    "ayahs": 35,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 47,
+    "ayahs": 38,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 48,
+    "ayahs": 29,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 49,
+    "ayahs": 18,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 50,
+    "ayahs": 45,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 51,
+    "ayahs": 60,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 52,
+    "ayahs": 49,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 53,
+    "ayahs": 62,
+    "mergedGroups": 1,
+    "interpolatedWords": 3,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 54,
+    "ayahs": 55,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 55,
+    "ayahs": 78,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 56,
+    "ayahs": 96,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 57,
+    "ayahs": 29,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 58,
+    "ayahs": 22,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 59,
+    "ayahs": 24,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 60,
+    "ayahs": 13,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 61,
+    "ayahs": 14,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 62,
+    "ayahs": 11,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 63,
+    "ayahs": 11,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 64,
+    "ayahs": 18,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 65,
+    "ayahs": 12,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 66,
+    "ayahs": 12,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 67,
+    "ayahs": 30,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 68,
+    "ayahs": 52,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 69,
+    "ayahs": 52,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 70,
+    "ayahs": 44,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 71,
+    "ayahs": 28,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 72,
+    "ayahs": 28,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 73,
+    "ayahs": 20,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 74,
+    "ayahs": 56,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 75,
+    "ayahs": 40,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 76,
+    "ayahs": 31,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 77,
+    "ayahs": 50,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 78,
+    "ayahs": 40,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 79,
+    "ayahs": 46,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 80,
+    "ayahs": 42,
+    "mergedGroups": 1,
+    "interpolatedWords": 2,
+    "uncoveredWords": 1,
+    "invalidSegments": 1,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 81,
+    "ayahs": 29,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 82,
+    "ayahs": 19,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 83,
+    "ayahs": 36,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 84,
+    "ayahs": 25,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 85,
+    "ayahs": 22,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 86,
+    "ayahs": 17,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 87,
+    "ayahs": 19,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 88,
+    "ayahs": 26,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 89,
+    "ayahs": 30,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 90,
+    "ayahs": 20,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 91,
+    "ayahs": 15,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 92,
+    "ayahs": 21,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 93,
+    "ayahs": 11,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
+    "surah": 94,
+    "ayahs": 8,
+    "mergedGroups": 0,
+    "interpolatedWords": 0,
+    "uncoveredWords": 0,
+    "invalidSegments": 0,
+    "untimedAyahs": [],
+    "violations": []
+  },
+  {
     "surah": 95,
     "ayahs": 8,
     "mergedGroups": 0,

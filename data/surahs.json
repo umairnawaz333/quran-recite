@@ -15,7 +15,7 @@
     "nameEnglish": "The Cow",
     "ayahCount": 286,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 3,
@@ -24,7 +24,7 @@
     "nameEnglish": "Family of Imran",
     "ayahCount": 200,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 4,
@@ -33,7 +33,7 @@
     "nameEnglish": "The Women",
     "ayahCount": 176,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 5,
@@ -42,7 +42,7 @@
     "nameEnglish": "The Table Spread",
     "ayahCount": 120,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 6,
@@ -51,7 +51,7 @@
     "nameEnglish": "The Cattle",
     "ayahCount": 165,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 7,
@@ -60,7 +60,7 @@
     "nameEnglish": "The Heights",
     "ayahCount": 206,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 8,
@@ -69,7 +69,7 @@
     "nameEnglish": "The Spoils of War",
     "ayahCount": 75,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 9,
@@ -78,7 +78,7 @@
     "nameEnglish": "The Repentance",
     "ayahCount": 129,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 10,
@@ -87,7 +87,7 @@
     "nameEnglish": "Jonah",
     "ayahCount": 109,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 11,
@@ -96,7 +96,7 @@
     "nameEnglish": "Hud",
     "ayahCount": 123,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 12,
@@ -105,7 +105,7 @@
     "nameEnglish": "Joseph",
     "ayahCount": 111,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 13,
@@ -114,7 +114,7 @@
     "nameEnglish": "The Thunder",
     "ayahCount": 43,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 14,
@@ -123,7 +123,7 @@
     "nameEnglish": "Abraham",
     "ayahCount": 52,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 15,
@@ -132,7 +132,7 @@
     "nameEnglish": "The Rocky Tract",
     "ayahCount": 99,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 16,
@@ -141,7 +141,7 @@
     "nameEnglish": "The Bee",
     "ayahCount": 128,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 17,
@@ -150,7 +150,7 @@
     "nameEnglish": "The Night Journey",
     "ayahCount": 111,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 18,
@@ -159,7 +159,7 @@
     "nameEnglish": "The Cave",
     "ayahCount": 110,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 19,
@@ -168,7 +168,7 @@
     "nameEnglish": "Mary",
     "ayahCount": 98,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 20,
@@ -177,7 +177,7 @@
     "nameEnglish": "Ta-Ha",
     "ayahCount": 135,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 21,
@@ -186,7 +186,7 @@
     "nameEnglish": "The Prophets",
     "ayahCount": 112,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 22,
@@ -195,7 +195,7 @@
     "nameEnglish": "The Pilgrimage",
     "ayahCount": 78,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 23,
@@ -204,7 +204,7 @@
     "nameEnglish": "The Believers",
     "ayahCount": 118,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 24,
@@ -213,7 +213,7 @@
     "nameEnglish": "The Light",
     "ayahCount": 64,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 25,
@@ -222,7 +222,7 @@
     "nameEnglish": "The Criterion",
     "ayahCount": 77,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 26,
@@ -231,7 +231,7 @@
     "nameEnglish": "The Poets",
     "ayahCount": 227,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 27,
@@ -240,7 +240,7 @@
     "nameEnglish": "The Ant",
     "ayahCount": 93,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 28,
@@ -249,7 +249,7 @@
     "nameEnglish": "The Stories",
     "ayahCount": 88,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 29,
@@ -258,7 +258,7 @@
     "nameEnglish": "The Spider",
     "ayahCount": 69,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 30,
@@ -267,7 +267,7 @@
     "nameEnglish": "The Romans",
     "ayahCount": 60,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 31,
@@ -276,7 +276,7 @@
     "nameEnglish": "Luqman",
     "ayahCount": 34,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 32,
@@ -285,7 +285,7 @@
     "nameEnglish": "The Prostration",
     "ayahCount": 30,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 33,
@@ -294,7 +294,7 @@
     "nameEnglish": "The Combined Forces",
     "ayahCount": 73,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 34,
@@ -303,7 +303,7 @@
     "nameEnglish": "Sheba",
     "ayahCount": 54,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 35,
@@ -312,7 +312,7 @@
     "nameEnglish": "Originator",
     "ayahCount": 45,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 36,
@@ -321,7 +321,7 @@
     "nameEnglish": "Ya Sin",
     "ayahCount": 83,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 37,
@@ -330,7 +330,7 @@
     "nameEnglish": "Those who set the Ranks",
     "ayahCount": 182,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 38,
@@ -339,7 +339,7 @@
     "nameEnglish": "The Letter \"Saad\"",
     "ayahCount": 88,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 39,
@@ -348,7 +348,7 @@
     "nameEnglish": "The Troops",
     "ayahCount": 75,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 40,
@@ -357,7 +357,7 @@
     "nameEnglish": "The Forgiver",
     "ayahCount": 85,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 41,
@@ -366,7 +366,7 @@
     "nameEnglish": "Explained in Detail",
     "ayahCount": 54,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 42,
@@ -375,7 +375,7 @@
     "nameEnglish": "The Consultation",
     "ayahCount": 53,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 43,
@@ -384,7 +384,7 @@
     "nameEnglish": "The Ornaments of Gold",
     "ayahCount": 89,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 44,
@@ -393,7 +393,7 @@
     "nameEnglish": "The Smoke",
     "ayahCount": 59,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 45,
@@ -402,7 +402,7 @@
     "nameEnglish": "The Crouching",
     "ayahCount": 37,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 46,
@@ -411,7 +411,7 @@
     "nameEnglish": "The Wind-Curved Sandhills",
     "ayahCount": 35,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 47,
@@ -420,7 +420,7 @@
     "nameEnglish": "Muhammad",
     "ayahCount": 38,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 48,
@@ -429,7 +429,7 @@
     "nameEnglish": "The Victory",
     "ayahCount": 29,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 49,
@@ -438,7 +438,7 @@
     "nameEnglish": "The Rooms",
     "ayahCount": 18,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 50,
@@ -447,7 +447,7 @@
     "nameEnglish": "The Letter \"Qaf\"",
     "ayahCount": 45,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 51,
@@ -456,7 +456,7 @@
     "nameEnglish": "The Winnowing Winds",
     "ayahCount": 60,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 52,
@@ -465,7 +465,7 @@
     "nameEnglish": "The Mount",
     "ayahCount": 49,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 53,
@@ -474,7 +474,7 @@
     "nameEnglish": "The Star",
     "ayahCount": 62,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 54,
@@ -483,7 +483,7 @@
     "nameEnglish": "The Moon",
     "ayahCount": 55,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 55,
@@ -492,7 +492,7 @@
     "nameEnglish": "The Beneficent",
     "ayahCount": 78,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 56,
@@ -501,7 +501,7 @@
     "nameEnglish": "The Inevitable",
     "ayahCount": 96,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 57,
@@ -510,7 +510,7 @@
     "nameEnglish": "The Iron",
     "ayahCount": 29,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 58,
@@ -519,7 +519,7 @@
     "nameEnglish": "The Pleading Woman",
     "ayahCount": 22,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 59,
@@ -528,7 +528,7 @@
     "nameEnglish": "The Exile",
     "ayahCount": 24,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 60,
@@ -537,7 +537,7 @@
     "nameEnglish": "She that is to be examined",
     "ayahCount": 13,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 61,
@@ -546,7 +546,7 @@
     "nameEnglish": "The Ranks",
     "ayahCount": 14,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 62,
@@ -555,7 +555,7 @@
     "nameEnglish": "The Congregation, Friday",
     "ayahCount": 11,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 63,
@@ -564,7 +564,7 @@
     "nameEnglish": "The Hypocrites",
     "ayahCount": 11,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 64,
@@ -573,7 +573,7 @@
     "nameEnglish": "The Mutual Disillusion",
     "ayahCount": 18,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 65,
@@ -582,7 +582,7 @@
     "nameEnglish": "The Divorce",
     "ayahCount": 12,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 66,
@@ -591,7 +591,7 @@
     "nameEnglish": "The Prohibition",
     "ayahCount": 12,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 67,
@@ -600,7 +600,7 @@
     "nameEnglish": "The Sovereignty",
     "ayahCount": 30,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 68,
@@ -609,7 +609,7 @@
     "nameEnglish": "The Pen",
     "ayahCount": 52,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 69,
@@ -618,7 +618,7 @@
     "nameEnglish": "The Reality",
     "ayahCount": 52,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 70,
@@ -627,7 +627,7 @@
     "nameEnglish": "The Ascending Stairways",
     "ayahCount": 44,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 71,
@@ -636,7 +636,7 @@
     "nameEnglish": "Noah",
     "ayahCount": 28,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 72,
@@ -645,7 +645,7 @@
     "nameEnglish": "The Jinn",
     "ayahCount": 28,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 73,
@@ -654,7 +654,7 @@
     "nameEnglish": "The Enshrouded One",
     "ayahCount": 20,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 74,
@@ -663,7 +663,7 @@
     "nameEnglish": "The Cloaked One",
     "ayahCount": 56,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 75,
@@ -672,7 +672,7 @@
     "nameEnglish": "The Resurrection",
     "ayahCount": 40,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 76,
@@ -681,7 +681,7 @@
     "nameEnglish": "The Man",
     "ayahCount": 31,
     "revelationPlace": "madinah",
-    "available": false
+    "available": true
   },
   {
     "id": 77,
@@ -690,7 +690,7 @@
     "nameEnglish": "The Emissaries",
     "ayahCount": 50,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 78,
@@ -699,7 +699,7 @@
     "nameEnglish": "The Tidings",
     "ayahCount": 40,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 79,
@@ -708,7 +708,7 @@
     "nameEnglish": "Those who drag forth",
     "ayahCount": 46,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 80,
@@ -717,7 +717,7 @@
     "nameEnglish": "He Frowned",
     "ayahCount": 42,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 81,
@@ -726,7 +726,7 @@
     "nameEnglish": "The Overthrowing",
     "ayahCount": 29,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 82,
@@ -735,7 +735,7 @@
     "nameEnglish": "The Cleaving",
     "ayahCount": 19,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 83,
@@ -744,7 +744,7 @@
     "nameEnglish": "The Defrauding",
     "ayahCount": 36,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 84,
@@ -753,7 +753,7 @@
     "nameEnglish": "The Sundering",
     "ayahCount": 25,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 85,
@@ -762,7 +762,7 @@
     "nameEnglish": "The Mansions of the Stars",
     "ayahCount": 22,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 86,
@@ -771,7 +771,7 @@
     "nameEnglish": "The Nightcommer",
     "ayahCount": 17,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 87,
@@ -780,7 +780,7 @@
     "nameEnglish": "The Most High",
     "ayahCount": 19,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 88,
@@ -789,7 +789,7 @@
     "nameEnglish": "The Overwhelming",
     "ayahCount": 26,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 89,
@@ -798,7 +798,7 @@
     "nameEnglish": "The Dawn",
     "ayahCount": 30,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 90,
@@ -807,7 +807,7 @@
     "nameEnglish": "The City",
     "ayahCount": 20,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 91,
@@ -816,7 +816,7 @@
     "nameEnglish": "The Sun",
     "ayahCount": 15,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 92,
@@ -825,7 +825,7 @@
     "nameEnglish": "The Night",
     "ayahCount": 21,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 93,
@@ -834,7 +834,7 @@
     "nameEnglish": "The Morning Hours",
     "ayahCount": 11,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 94,
@@ -843,7 +843,7 @@
     "nameEnglish": "The Relief",
     "ayahCount": 8,
     "revelationPlace": "makkah",
-    "available": false
+    "available": true
   },
   {
     "id": 95,
