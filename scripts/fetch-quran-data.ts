@@ -18,8 +18,12 @@ const AUDIO_DIR = path.join(ROOT, 'public', 'audio', RECITER_SLUG);
 
 // --- Retry with exponential backoff -------------------------------------
 
-const MAX_ATTEMPTS = 5;
+// 8 attempts with the cap below spends roughly two minutes before giving up on
+// a file. Five attempts topped out after ~7 seconds, which was not enough to
+// ride out a CDN connect timeout during a multi-gigabyte transfer.
+const MAX_ATTEMPTS = 8;
 const BASE_DELAY_MS = 500;
+const MAX_DELAY_MS = 30_000;
 /** Transient — worth retrying. */
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
@@ -28,7 +32,20 @@ function sleep(ms: number): Promise<void> {
 }
 
 function backoffDelayMs(attempt: number): number {
-  return BASE_DELAY_MS * 2 ** (attempt - 1);
+  return Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
+}
+
+/**
+ * Raised when a request exhausts every retry. Distinct from a programming
+ * error: the caller can reasonably skip this surah and continue, because a
+ * later run will pick it up — the script skips files already on disk.
+ */
+export class NetworkExhaustedError extends Error {
+  constructor(readonly label: string, cause: unknown) {
+    super(`network failed after ${MAX_ATTEMPTS} attempts: ${label}`);
+    this.name = 'NetworkExhaustedError';
+    this.cause = cause;
+  }
 }
 
 /** Honours Retry-After as either delta-seconds or an HTTP-date. */
@@ -83,7 +100,7 @@ async function fetchWithRetry<T>(
       // is retried like any other network error.
       return await consume(res);
     } catch (err) {
-      if (attempt >= MAX_ATTEMPTS) throw err;
+      if (attempt >= MAX_ATTEMPTS) throw new NetworkExhaustedError(label, err);
       const delay = backoffDelayMs(attempt);
       console.warn(
         `  [retry] network error for ${label} (attempt ${attempt}/${MAX_ATTEMPTS}): ` +
@@ -339,6 +356,7 @@ async function loadExistingReports(): Promise<Map<number, SurahReport>> {
 
 async function main() {
   const surahs = parseSurahArg();
+  const failedSurahs: number[] = [];
   console.log(`Fetching surahs: ${surahs.join(', ')}`);
 
   await mkdir(path.join(DATA, 'text'), { recursive: true });
@@ -397,6 +415,12 @@ async function main() {
         // failing the run loudly as it should.
         reportsById.set(surah, err.report);
         console.error(`\n${err.message}`);
+      } else if (err instanceof NetworkExhaustedError) {
+        // Transient infrastructure, not a defect in this script. Skipping the
+        // surah keeps a 114-surah run going; a later run resumes it, since
+        // audio already on disk is skipped and JSON is rewritten identically.
+        failedSurahs.push(surah);
+        console.error(`\nsurah ${surah}: ${err.message} — skipping, re-run to retry`);
       } else {
         throw err;
       }
@@ -406,7 +430,12 @@ async function main() {
     await writeManifests();
   }
 
-  console.log('Done.');
+  if (failedSurahs.length > 0) {
+    console.log(`\nDone, with ${failedSurahs.length} surah(s) skipped on network failure: ${failedSurahs.join(', ')}`);
+    console.log('Re-run the same command to retry them — completed files are skipped.');
+  } else {
+    console.log('Done.');
+  }
 }
 
 main().catch(err => {
