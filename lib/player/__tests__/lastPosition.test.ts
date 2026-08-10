@@ -6,6 +6,13 @@ const KEY = 'quran.lastPosition';
 describe('lastPosition', () => {
   beforeEach(() => localStorage.clear());
 
+  it('the test environment provides working storage', () => {
+    localStorage.setItem('__probe__', 'x');
+    expect(localStorage.getItem('__probe__')).toBe('x');
+    localStorage.removeItem('__probe__');
+    expect(localStorage.getItem('__probe__')).toBeNull();
+  });
+
   it('returns null when nothing is stored', () => {
     expect(readLastPosition()).toBeNull();
   });
