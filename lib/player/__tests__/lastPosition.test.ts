@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readLastPosition, writeLastPosition, clearLastPosition } from '../lastPosition';
+import { readLastPosition, writeLastPosition, clearLastPosition, isValidPosition } from '../lastPosition';
 
 const KEY = 'quran.lastPosition';
 
@@ -79,18 +79,43 @@ describe('lastPosition', () => {
     expect(readLastPosition()).toBeNull();
   });
 
-  it('rejects NaN localMs', () => {
-    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1, localMs: NaN, updatedAt: 1 }));
+  // JSON has no representation for NaN/Infinity — JSON.stringify turns both
+  // into `null`, so a value stored via localStorage can never actually carry
+  // a NaN or Infinity field. These three exercise that real-world path: the
+  // field arrives as `null` and is rejected by the pre-existing `typeof
+  // v.x === 'number'` check, not by Number.isFinite.
+  it('rejects a stored null localMs', () => {
+    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1, localMs: null, updatedAt: 1 }));
     expect(readLastPosition()).toBeNull();
   });
 
-  it('rejects Infinity localMs', () => {
-    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1, localMs: Infinity, updatedAt: 1 }));
+  it('rejects a stored null updatedAt', () => {
+    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1, localMs: 0, updatedAt: null }));
     expect(readLastPosition()).toBeNull();
   });
 
-  it('rejects NaN updatedAt', () => {
-    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1, localMs: 0, updatedAt: NaN }));
-    expect(readLastPosition()).toBeNull();
+  // Genuine NaN/Infinity values can only be reached by calling the validator
+  // directly, since JSON.parse can never produce them. These are the actual
+  // coverage for the Number.isFinite guards.
+  describe('isValidPosition (direct — the only way to reach NaN/Infinity)', () => {
+    it('rejects NaN localMs', () => {
+      expect(isValidPosition({ surahId: 1, ayah: 1, localMs: NaN, updatedAt: 1 })).toBe(false);
+    });
+
+    it('rejects Infinity localMs', () => {
+      expect(isValidPosition({ surahId: 1, ayah: 1, localMs: Infinity, updatedAt: 1 })).toBe(false);
+    });
+
+    it('rejects NaN updatedAt', () => {
+      expect(isValidPosition({ surahId: 1, ayah: 1, localMs: 0, updatedAt: NaN })).toBe(false);
+    });
+
+    it('rejects Infinity updatedAt', () => {
+      expect(isValidPosition({ surahId: 1, ayah: 1, localMs: 0, updatedAt: Infinity })).toBe(false);
+    });
+
+    it('accepts a genuinely valid position', () => {
+      expect(isValidPosition({ surahId: 1, ayah: 1, localMs: 0, updatedAt: 1 })).toBe(true);
+    });
   });
 });

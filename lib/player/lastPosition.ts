@@ -7,7 +7,14 @@ export interface LastPosition {
   updatedAt: number;
 }
 
-function isValid(value: unknown): value is LastPosition {
+/**
+ * Exported so it can be tested directly with real `NaN`/`Infinity` values.
+ * Those values can never survive a `JSON.stringify`/`JSON.parse` round trip
+ * (JSON has no representation for them — both serialise to `null`), so the
+ * `Number.isFinite` branches below are unreachable via the localStorage-based
+ * public API. Testing them requires calling this function directly.
+ */
+export function isValidPosition(value: unknown): value is LastPosition {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   return (
@@ -27,7 +34,7 @@ export function readLastPosition(): LastPosition | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return isValid(parsed) ? parsed : null;
+    return isValidPosition(parsed) ? parsed : null;
   } catch {
     return null;
   }
