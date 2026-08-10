@@ -61,4 +61,29 @@ describe('lastPosition', () => {
     expect(() => writeLastPosition({ surahId: 1, ayah: 1, localMs: 0 })).not.toThrow();
     spy.mockRestore();
   });
+
+  it('rejects fractional ayah', () => {
+    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1.5, localMs: 0, updatedAt: 1 }));
+    expect(readLastPosition()).toBeNull();
+  });
+
+  it('rejects fractional surahId', () => {
+    localStorage.setItem(KEY, JSON.stringify({ surahId: 2.5, ayah: 1, localMs: 0, updatedAt: 1 }));
+    expect(readLastPosition()).toBeNull();
+  });
+
+  it('rejects NaN localMs', () => {
+    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1, localMs: NaN, updatedAt: 1 }));
+    expect(readLastPosition()).toBeNull();
+  });
+
+  it('rejects Infinity localMs', () => {
+    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1, localMs: Infinity, updatedAt: 1 }));
+    expect(readLastPosition()).toBeNull();
+  });
+
+  it('rejects NaN updatedAt', () => {
+    localStorage.setItem(KEY, JSON.stringify({ surahId: 1, ayah: 1, localMs: 0, updatedAt: NaN }));
+    expect(readLastPosition()).toBeNull();
+  });
 });

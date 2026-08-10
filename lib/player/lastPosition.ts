@@ -11,10 +11,10 @@ function isValid(value: unknown): value is LastPosition {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
   return (
-    typeof v.surahId === 'number' && v.surahId >= 1 && v.surahId <= 114 &&
-    typeof v.ayah === 'number' && v.ayah >= 1 &&
-    typeof v.localMs === 'number' && v.localMs >= 0 &&
-    typeof v.updatedAt === 'number'
+    typeof v.surahId === 'number' && Number.isInteger(v.surahId) && v.surahId >= 1 && v.surahId <= 114 &&
+    typeof v.ayah === 'number' && Number.isInteger(v.ayah) && v.ayah >= 1 &&
+    typeof v.localMs === 'number' && Number.isFinite(v.localMs) && v.localMs >= 0 &&
+    typeof v.updatedAt === 'number' && Number.isFinite(v.updatedAt)
   );
 }
 
