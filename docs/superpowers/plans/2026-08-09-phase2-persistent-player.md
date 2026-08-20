@@ -491,7 +491,37 @@ git commit -m "feat: fetch and memoise surah timings at runtime"
 
 ---
 
-## Task 4: LRU eviction selection
+> **DROPPED — Tasks 4, 5, 6 and 10 are not being built.**
+>
+> Offline downloads require a service worker to read the audio, and a service
+> worker can only read a cross-origin response when that origin sends CORS
+> headers. Measured against the real endpoints:
+>
+> | Origin | CORS | Content-Type |
+> |---|---|---|
+> | `github.com/.../releases/download/...` | none, and 302s away | — |
+> | `release-assets.githubusercontent.com` (the redirect target) | none | `application/octet-stream` |
+> | `verses.quran.com` | `*` | `audio/mpeg` |
+>
+> A Vercel rewrite was tested as a workaround on a throwaway deployment: Vercel
+> passes GitHub's 302 straight through rather than following it, so the browser
+> still lands cross-origin and receives an opaque response — `status: 0`,
+> unreadable body, indistinguishable from a failure. No rewrite configuration
+> fixes that.
+>
+> The options were to move audio to Quran.com's CDN (giving up runtime
+> independence), proxy every byte through a Vercel Function (consuming the
+> bandwidth allowance), or drop offline support. The project owner chose to drop
+> it and keep the audio on GitHub Releases.
+>
+> Tasks 4 and 5 had already been implemented and reviewed; they were reverted in
+> the same commit as this note, because with no service worker `selectEvictions`
+> had no consumer and tested dead code is still dead code.
+>
+> Phase 2 therefore delivers the persistent player (Task 7), the player bar
+> (Task 8), the wiring (Task 9), end-to-end tests (Task 11) and docs (Task 12).
+
+## Task 4: LRU eviction selection — DROPPED
 
 The correctness-critical half of the runtime cache, kept pure so it needs no browser.
 
@@ -616,7 +646,7 @@ git commit -m "feat: add pure LRU eviction selection for the runtime audio cache
 
 ---
 
-## Task 5: The service worker
+## Task 5: The service worker — DROPPED
 
 **Files:**
 - Create: `lib/offline/sw.ts` (worker source, TypeScript)
@@ -975,7 +1005,7 @@ Do NOT commit `public/sw.js` — it is generated and gitignored.
 
 ---
 
-## Task 6: Download manager
+## Task 6: Download manager — DROPPED
 
 **Files:**
 - Create: `lib/offline/downloadManager.ts`
@@ -2019,7 +2049,7 @@ git commit -m "feat: play through navigation via the layout-level provider"
 
 ---
 
-## Task 10: Downloads screen
+## Task 10: Downloads screen — DROPPED
 
 **Files:**
 - Create: `app/downloads/page.tsx`, `components/offline/SurahDownloadRow.tsx`

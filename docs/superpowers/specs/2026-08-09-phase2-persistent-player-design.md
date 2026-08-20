@@ -109,7 +109,19 @@ request.
 
 ---
 
-## 3. Offline audio
+## 3. Offline audio — NOT BUILT
+
+Dropped after implementation began. A service worker cannot read a cross-origin
+response without CORS headers, and neither `github.com` release URLs nor their
+`release-assets.githubusercontent.com` redirect target sends any. A Vercel
+rewrite was tested and passes the 302 through rather than following it, so the
+browser still receives an opaque response. Keeping audio on GitHub Releases and
+dropping offline support was chosen over moving to Quran.com's CDN or proxying
+every byte through a Vercel Function.
+
+The original design is preserved below for the record.
+
+### Original design
 
 ### Service worker
 

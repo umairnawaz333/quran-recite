@@ -15,5 +15,3 @@ CLAUDE.md
 # git clone. Fetch it locally with: npm run fetch:data -- --surahs=1-114
 public/audio
 
-# Generated from lib/offline/sw.ts by scripts/build-sw.mjs
-public/sw.js

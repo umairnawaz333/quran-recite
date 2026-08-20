@@ -10,10 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "fetch:data": "tsx scripts/fetch-quran-data.ts",
-    "fetch:fonts": "tsx scripts/fetch-fonts.ts",
-    "build:sw": "node scripts/build-sw.mjs",
-    "prebuild": "npm run build:sw",
-    "predev": "npm run build:sw"
+    "fetch:fonts": "tsx scripts/fetch-fonts.ts"
   },
   "dependencies": {
     "next": "16.3.0",
@@ -30,7 +27,6 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.0.5",
-    "esbuild": "^0.28.2",
     "jsdom": "30.0.1",
     "playwright": "^1.62.1",
     "tailwindcss": "4.3.3",
