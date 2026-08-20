@@ -13,21 +13,35 @@ scripts:
 Both fonts are SIL Open Font License and self-hosted; see
 [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
 
-**Data status:** only **Surah 1 (Al-Fatihah)** has text, timings, and audio
-committed so far. The other 113 surahs are listed in the surah picker but are
-marked unavailable until their data is fetched — see "Adding more surahs"
-below.
+**Data status:** all **114 surahs** have text and word timings committed
+(`data/surahs.json` marks every surah `available`; `public/timings/` tracks
+114 timing files) and the build emits 117 static pages. Audio is the one
+piece that is *not* committed — see "Running it" below for what that means
+for a fresh clone.
 
 ## Running it
 
 ```bash
 npm install
 npm run fetch:fonts          # downloads the two OFL fonts
-npm run fetch:data -- --surahs=1
 npm run dev
 ```
 
+Text and timings for all 114 surahs are already committed, so no `fetch:data`
+run is required to browse the app. Audio, however, is gitignored
+(`public/audio/`) and is not fetched by the steps above, so a fresh clone has
+no audio at all until you do one of:
+
+- `npm run fetch:data -- --surahs=1-114` to download audio locally into
+  `public/audio/` (see "Adding more surahs" below; the full set is ~3.35 GB), or
+- set `NEXT_PUBLIC_AUDIO_BASE_URL` to point at the audio's GitHub Releases
+  host (see "How it works" below) so audio is fetched from there instead.
+
 ## Adding more surahs
+
+Text and timings for all 114 surahs are already committed — this section only
+matters if you want **audio** on disk locally instead of via
+`NEXT_PUBLIC_AUDIO_BASE_URL`:
 
 ```bash
 npm run fetch:data -- --surahs=1,2,3    # a comma-separated list
@@ -41,11 +55,14 @@ already on disk are skipped rather than re-downloaded, and `data/surahs.json`
 the end of the run — so an interrupted multi-surah fetch can simply be re-run
 and it picks up where it left off.
 
-Be aware that the full audio set for all 114 surahs is roughly **3.35 GB**.
-That is why only surah 1's audio is committed to this repository today, and
-how the remaining surahs' audio should be stored (committed to the repo,
-external object storage, on-demand fetch, etc.) is still an open decision, not
-one this codebase has made yet.
+Be aware that the full audio set for all 114 surahs is roughly **3.35 GB** —
+that is why audio is not committed to this repository. `.gitignore` excludes
+`public/audio/`, and `git ls-files public/audio` returns nothing: this is not
+a decision still to be made, it has already been made. Audio lives in
+per-surah GitHub Releases instead (115 shards uploaded via
+`scripts/upload-audio.sh`), resolved at runtime by `lib/data/audioUrl.ts`
+through `NEXT_PUBLIC_AUDIO_BASE_URL`. Fetching it locally with the commands
+above is an alternative to that, useful for offline development.
 
 ## Tests
 
@@ -109,15 +126,17 @@ staying unhighlighted while another surah plays, the loading-state ordering
 - Highlighting bypasses React's render cycle entirely: `lib/reader/wordRegistry.ts`
   toggles a class directly on two DOM nodes (the previously active word and
   the newly active one) per change, at frame rate. The word tree itself does
-  re-render on the 250ms progress-bar tick because that state lives in
-  `SurahClient`, but `QuranReader` is wrapped in `React.memo` with
+  re-render on the 250ms progress-bar tick because that state (`currentMs`)
+  lives in `PlayerProvider`, but `QuranReader` is wrapped in `React.memo` with
   referentially-stable props, so React bails out before reconciling
   `AyahBlock`/`QuranWord` — the tree is not walked 4×/sec.
 - All Quran text, timings, and audio are fetched once at build time by
-  `scripts/fetch-quran-data.ts` and committed. By default audio is served
-  from the committed `public/audio/` files, not hotlinked from `quran.com`;
-  see "No offline support" below for the GitHub-Releases-backed alternative
-  used when `NEXT_PUBLIC_AUDIO_BASE_URL` is configured.
+  `scripts/fetch-quran-data.ts`. Text and timings are committed; audio is not
+  (`public/audio/` is gitignored). Audio is served either from a local
+  `public/audio/` fetched with `fetch:data`, or — resolved by
+  `lib/data/audioUrl.ts` — from a per-surah GitHub Release when
+  `NEXT_PUBLIC_AUDIO_BASE_URL` is configured; see "No offline support" below
+  for why that indirection exists.
 
 ### No offline support
 

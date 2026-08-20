@@ -8,7 +8,7 @@ import { PlayIcon, PauseIcon, PrevIcon, NextIcon, SpinnerIcon } from '@/componen
 const BUTTON =
   'grid place-items-center rounded-full transition ' +
   'outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 ' +
-  'active:scale-95';
+  'active:scale-95 disabled:opacity-40 disabled:pointer-events-none';
 
 /**
  * The player, visible on every page. It is also the resume affordance: when
@@ -44,7 +44,13 @@ export function PlayerBar() {
           </Link>
 
           <div className="flex items-center gap-3">
-            <button type="button" aria-label="Previous ayah" onClick={p.prev}
+            {/*
+              Disabled until a live playlist exists: right after a resume
+              restore, `surahId` is set from storage but nothing has been
+              built yet, so these would otherwise look live while doing
+              nothing at all.
+            */}
+            <button type="button" aria-label="Previous ayah" onClick={p.prev} disabled={!p.hasPlaylist}
               className={`${BUTTON} size-10 text-neutral-600 hover:bg-neutral-100`}>
               <PrevIcon className="size-5" />
             </button>
@@ -60,7 +66,7 @@ export function PlayerBar() {
                 : p.isPlaying ? <PauseIcon className="size-6" /> : <PlayIcon className="size-6" />}
             </button>
 
-            <button type="button" aria-label="Next ayah" onClick={p.next}
+            <button type="button" aria-label="Next ayah" onClick={p.next} disabled={!p.hasPlaylist}
               className={`${BUTTON} size-10 text-neutral-600 hover:bg-neutral-100`}>
               <NextIcon className="size-5" />
             </button>

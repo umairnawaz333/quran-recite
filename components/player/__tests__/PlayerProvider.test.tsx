@@ -3,7 +3,9 @@ import { render, screen, act, waitFor } from '@testing-library/react';
 import { PlayerProvider } from '../PlayerProvider';
 import { usePlayer } from '../usePlayer';
 import { primeTimings, resetTimingsCache } from '@/lib/player/timingsLoader';
+import { writeLastPosition } from '@/lib/player/lastPosition';
 import { WordRegistry } from '@/lib/reader/wordRegistry';
+import { AyahPlaylist } from '@/lib/audio/playlist';
 import type { SurahTimings } from '@/lib/data/types';
 
 const timings = (surah: number): SurahTimings => ({
@@ -74,6 +76,90 @@ describe('PlayerProvider', () => {
       expect(raw).toBeTruthy();
       expect(JSON.parse(raw!).surahId).toBe(2);
     });
+  });
+
+  // The AyahPlaylist's own `isPlaying` flips true as soon as `play()` is
+  // called, independent of the `loading`/`playing` DOM events that clear
+  // `isLoading` — so pressing play then immediately pressing stop again on a
+  // slow connection used to leave `isLoading` stuck true forever, with the
+  // spinner spinning over silent, paused audio.
+  it('pausing while still loading clears both the loading and playing state', async () => {
+    primeTimings(2, timings(2));
+    setup();
+    await act(async () => { screen.getByText('play2').click(); });
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('true'));
+    await waitFor(() => expect(screen.getByTestId('playing').textContent).toBe('true'));
+
+    await act(async () => { screen.getByText('toggle').click(); });
+
+    expect(screen.getByTestId('loading').textContent).toBe('false');
+    expect(screen.getByTestId('playing').textContent).toBe('false');
+  });
+});
+
+describe('resume restore without a playlist', () => {
+  // The restore effect sets `surahId`/`ayah` from storage on mount without
+  // ever constructing a playlist. This block covers every control that used
+  // to look live but silently do nothing in that state.
+
+  function WordProbe() {
+    const p = usePlayer();
+    return (
+      <div>
+        <span data-testid="surah">{p.surahId ?? 'none'}</span>
+        <span data-testid="ayah">{p.ayah}</span>
+        <span data-testid="hasPlaylist">{String(p.hasPlaylist)}</span>
+        <span data-testid="playing">{String(p.isPlaying)}</span>
+        <button onClick={() => p.playWord('2:1:2')}>clickWord</button>
+        <button onClick={p.next}>next</button>
+        <button onClick={p.prev}>prev</button>
+      </div>
+    );
+  }
+
+  it('clicking a word after a restore (no playlist) starts playback at that word', async () => {
+    writeLastPosition({ surahId: 2, ayah: 1, localMs: 0 });
+    primeTimings(2, timings(2));
+    const seekSpy = vi.spyOn(AyahPlaylist.prototype, 'seekToAyah');
+
+    try {
+      render(<PlayerProvider><WordProbe /></PlayerProvider>);
+
+      // Restore effect has run: surahId is set from storage, but nothing was
+      // ever built — this is exactly the state that left word clicks dead.
+      await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('2'));
+      expect(screen.getByTestId('hasPlaylist').textContent).toBe('false');
+
+      await act(async () => { screen.getByText('clickWord').click(); });
+
+      await waitFor(() => expect(screen.getByTestId('hasPlaylist').textContent).toBe('true'));
+      await waitFor(() => expect(screen.getByTestId('playing').textContent).toBe('true'));
+
+      // Word `2:1:2` starts at 980ms — it must land there, not just at the
+      // ayah's start (0ms), which is what "starts playback at that word"
+      // means as opposed to merely starting the surah.
+      expect(seekSpy).toHaveBeenCalledWith(0, 980);
+    } finally {
+      seekSpy.mockRestore();
+    }
+  });
+
+  it('prev/next are safe no-ops when no playlist exists yet', async () => {
+    writeLastPosition({ surahId: 2, ayah: 1, localMs: 0 });
+
+    render(<PlayerProvider><WordProbe /></PlayerProvider>);
+    await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('2'));
+    expect(screen.getByTestId('hasPlaylist').textContent).toBe('false');
+
+    expect(() => {
+      act(() => { screen.getByText('next').click(); });
+      act(() => { screen.getByText('prev').click(); });
+    }).not.toThrow();
+
+    // Nothing to advance through means the restored position must not
+    // silently change.
+    expect(screen.getByTestId('ayah').textContent).toBe('1');
+    expect(screen.getByTestId('hasPlaylist').textContent).toBe('false');
   });
 });
 

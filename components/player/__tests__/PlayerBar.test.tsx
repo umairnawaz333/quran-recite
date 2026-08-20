@@ -6,6 +6,7 @@ import { PlayerContext, type PlayerContextValue } from '../usePlayer';
 const value = (over: Partial<PlayerContextValue> = {}): PlayerContextValue => ({
   surahId: null, surahName: null, ayah: 1, ayahIndex: 0, totalAyahs: 0,
   isPlaying: false, isLoading: false, currentMs: 0, totalMs: 0, volume: 1, error: null,
+  hasPlaylist: false,
   playSurah: vi.fn(), playWord: vi.fn(), toggle: vi.fn(), next: vi.fn(), prev: vi.fn(),
   seek: vi.fn(), setVolume: vi.fn(), primeTimings: vi.fn(), attachRegistry: vi.fn(() => () => {}),
   ...over,
@@ -46,5 +47,20 @@ describe('PlayerBar', () => {
   it('links to the playing surah', () => {
     renderBar({ surahId: 36, surahName: 'Ya-Sin' });
     expect(screen.getByRole('link', { name: /Ya-Sin/ })).toHaveAttribute('href', '/surah/36');
+  });
+
+  // The restore-from-storage path sets `surahId` without ever building a
+  // playlist, which used to leave prev/next looking live while doing
+  // nothing on click. Disabled is the correct signal in that state.
+  it('disables prev/next when no playlist exists yet (e.g. right after a resume restore)', () => {
+    renderBar({ surahId: 2, surahName: 'Al-Baqarah', hasPlaylist: false });
+    expect(screen.getByRole('button', { name: /previous ayah/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /next ayah/i })).toBeDisabled();
+  });
+
+  it('enables prev/next once a playlist exists', () => {
+    renderBar({ surahId: 2, surahName: 'Al-Baqarah', hasPlaylist: true });
+    expect(screen.getByRole('button', { name: /previous ayah/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /next ayah/i })).toBeEnabled();
   });
 });

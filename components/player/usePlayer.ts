@@ -16,6 +16,13 @@ export interface PlayerState {
   totalMs: number;
   volume: number;
   error: string | null;
+  /**
+   * Whether a live `AyahPlaylist` currently exists. `surahId` alone is not
+   * enough to tell: the resume-restore effect sets `surahId` from storage
+   * without ever constructing a playlist, so controls that operate on the
+   * live playlist (prev/next) should gate on this, not on `surahId`.
+   */
+  hasPlaylist: boolean;
 }
 
 export interface PlayerActions {

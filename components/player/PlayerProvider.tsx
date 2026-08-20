@@ -16,7 +16,7 @@ const NAMES = new Map(getSurahList().map(s => [s.id, s.nameSimple]));
 const INITIAL: PlayerState = {
   surahId: null, surahName: null, ayah: 1, ayahIndex: 0, totalAyahs: 0,
   isPlaying: false, isLoading: false, currentMs: 0, totalMs: 0,
-  volume: 1, error: null,
+  volume: 1, error: null, hasPlaylist: false,
 };
 
 /**
@@ -140,6 +140,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       totalAyahs: timings.ayahs.length,
       totalMs: timeline.totalMs,
       error: null,
+      hasPlaylist: true,
       // Held true until the audio element actually produces sound, so the UI
       // never claims to be playing while the file is still downloading.
       isLoading: autoplay,
@@ -157,32 +158,72 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (saved) void playSurah(saved.surahId, { ayah: saved.ayah, localMs: saved.localMs });
       return;
     }
-    if (playlist.isPlaying) playlist.pause();
+    // Pausing stops the transport outright, so any in-flight "loading" state
+    // must be cleared here too — otherwise pressing play then immediately
+    // stop on a slow connection leaves the spinner running forever over
+    // silent, paused audio (the `loading` event that would normally clear it
+    // has nothing left to fire, since playback was aborted first).
+    if (playlist.isPlaying) { playlist.pause(); patch({ isLoading: false }); }
     else { patch({ isLoading: true }); playlist.play(); }
   }, [patch, playSurah]);
 
   const playWord = useCallback((wordId: string) => {
-    const playlist = playlistRef.current;
+    // Word ids have the form `surah:ayah:position`.
+    const [surahStr, ayahStr] = wordId.split(':');
+    const surahId = Number(surahStr);
+    const ayah = Number(ayahStr);
+
+    // Gate on whether a live playlist for *this* surah actually exists,
+    // rather than on `surahId` (what the caller believes is playing): the
+    // resume-restore effect sets `surahId` from storage without ever
+    // constructing a playlist, which is exactly the state that made word
+    // clicks silently do nothing. Checking the playlist/engine refs here
+    // covers that case — and any other path that can leave the playlist
+    // unbuilt — for every caller of `playWord`, not just the one that
+    // happens to route through here today.
+    if (!playlistRef.current || playingSurahRef.current !== surahId) {
+      // No playlist yet (or it belongs to a different surah): fall back to
+      // starting this surah, then seek to the exact word once its timings
+      // have loaded.
+      void playSurah(surahId, { ayah }).then(() => {
+        const timings = timingsRef.current;
+        if (!timings || playingSurahRef.current !== surahId) return;
+        const index = timings.ayahs.findIndex(a => a.ayah === ayah);
+        if (index === -1) return;
+        const word = timings.ayahs[index].words.find(w => w.id === wordId);
+        if (!word) return;
+        engineRef.current?.setWords(timings.ayahs[index].words);
+        playlistRef.current?.seekToAyah(index, word.startMs);
+      });
+      return;
+    }
+
     const timings = timingsRef.current;
-    if (!playlist || !timings) return;
-    const [, ayahStr] = wordId.split(':');
-    const index = timings.ayahs.findIndex(a => a.ayah === Number(ayahStr));
+    if (!timings) return;
+    const index = timings.ayahs.findIndex(a => a.ayah === ayah);
     if (index === -1) return;
     const word = timings.ayahs[index].words.find(w => w.id === wordId);
     engineRef.current?.setWords(timings.ayahs[index].words);
-    playlist.seekToAyah(index, word?.startMs ?? 0);
+    playlistRef.current.seekToAyah(index, word?.startMs ?? 0);
     patch({ isLoading: true });
-    playlist.play();
-  }, [patch]);
+    playlistRef.current.play();
+  }, [patch, playSurah]);
 
   const attachRegistry = useCallback((surahId: number, registry: WordRegistry) => {
     attachedRef.current = { surahId, registry };
     // Reattaching mid-playback should highlight the current word immediately
-    // rather than waiting for the next word boundary.
+    // rather than waiting for the next word boundary. `paint` is a stable,
+    // dependency-free callback and the engine dedupes listeners in a `Set`,
+    // so re-adding it on every attach is harmless today — but the unsubscribe
+    // is still captured and released on detach so that stays true even if
+    // `paint` ever gains a dependency (and therefore a new identity per
+    // render), which would otherwise grow the listener set forever.
+    let unsubscribe: (() => void) | null = null;
     if (surahId === playingSurahRef.current) {
-      engineRef.current?.onChange(paint);
+      unsubscribe = engineRef.current?.onChange(paint) ?? null;
     }
     return () => {
+      unsubscribe?.();
       if (attachedRef.current?.registry === registry) attachedRef.current = null;
     };
   }, [paint]);
