@@ -15,8 +15,11 @@ Every external dataset used by this project, with its licence and how it is used
 - **Source:** Quran.com API v4, `/recitations/2/by_chapter/{n}?fields=segments`
 - **Format:** `[startWordIndex, endWordIndexExclusive, startMs, endMs]`
 - **Use:** normalized at build time into one timing per word, committed to
-  `data/timings/abdulbasit-murattal/`
-- **Runtime dependency:** none
+  `public/timings/abdulbasit-murattal/` (moved out of `data/` because the
+  client fetches these files at runtime — the persistent player must be able
+  to advance through, and highlight, a surah whose page is not currently
+  mounted, which a build-time-only `data/` file cannot serve)
+- **Runtime dependency:** fetched by the browser from `/timings/<reciter>/<surah>.json`
 
 ## Audio
 

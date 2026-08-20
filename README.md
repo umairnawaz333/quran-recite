@@ -50,22 +50,58 @@ one this codebase has made yet.
 ## Tests
 
 ```bash
-npm test
+npm test          # 149 unit tests (vitest)
+npm run test:e2e  # 4 Playwright tests, driving a real browser
 ```
 
-The most important tests cover `lib/normalize/`, which converts Quran.com's
+The most important unit tests cover `lib/normalize/`, which converts Quran.com's
 range-segments (one segment can span several words, or a word can have no
 segment at all) into exactly one timing per word. Its fixtures are real API
 responses, including two awkward real cases: `1:4`, where a single segment
 covers all three words of the ayah, and `2:23`, where one word in the ayah has
 no segment at all and must be absorbed into a neighbouring segment's span.
 
+The unit suite exercises `PlayerProvider` directly, calling its actions and
+asserting on its state — it never renders a surah page. That is exactly why it
+cannot catch a page-level wiring bug: an earlier version of this code once
+dropped the `WordRegistry` attach call from the surah page, so no word ever
+highlighted during real playback, and every unit test still passed. The four
+`e2e/player.spec.ts` tests exist for that class of bug: they drive an actual
+browser against a real dev server and assert on `.word--active` in the DOM,
+covering playback surviving client-side navigation, a second surah page
+staying unhighlighted while another surah plays, the loading-state ordering
+(see below), and the saved position being offered after a reload.
+
 ## How it works
 
-- All Quran text, timings, and audio are fetched once at build time by
-  `scripts/fetch-quran-data.ts` and committed. The running app contacts no
-  third party at runtime — audio is served from `public/audio/`, not
-  hotlinked.
+- Playback is owned by `PlayerProvider` (`components/player/PlayerProvider.tsx`),
+  mounted once in the root layout (`app/layout.tsx`). The App Router keeps the
+  layout mounted across client-side navigation, so recitation continues
+  uninterrupted while the user browses to other pages — there is no per-page
+  `<audio>` element.
+- A player bar (`components/player/PlayerBar.tsx`) is rendered on every page
+  from that same root layout. It doubles as the resume affordance: if nothing
+  is currently playing but a position was saved from a previous visit, the bar
+  offers that position instead of showing nothing — which is why there is no
+  separate "continue where you left off" card anywhere else in the UI. The
+  last position is persisted to `localStorage` by `lib/player/lastPosition.ts`.
+- Word timings live under `public/timings/`, not `data/timings/`, so that the
+  client can `fetch()` them at runtime (see `lib/player/timingsLoader.ts`).
+  This is required because the provider must be able to advance through — and
+  highlight — a surah whose page is not currently mounted, e.g. while the user
+  is looking at the home page and a different surah keeps playing underneath.
+- Each surah page owns its own `WordRegistry` (`lib/reader/wordRegistry.ts`)
+  and hands it to the provider with `attachRegistry(surahId, registry)`
+  (`app/surah/[id]/SurahClient.tsx`). The provider paints highlights into that
+  registry only while that page's surah is the one actually playing, so a
+  second, unrelated surah page mounted at the same time is never touched.
+- The player bar holds a loading state (spinner, `aria-label="Loading"`) from
+  the moment `playSurah` is called until the audio element actually starts
+  producing sound, rather than flipping to "Pause" the instant playback is
+  requested. This fixed a real, measured defect from Phase 1: 717–1431 ms
+  where the control claimed to be playing while the file was still being
+  fetched and nothing was audible or highlighted, which read as broken
+  highlighting rather than a loading state.
 - `lib/sync/engine.ts` is pure TypeScript with no React imports. It reads
   audio position on `requestAnimationFrame` (rather than the coarser
   `timeupdate` event) and resolves the active word by binary search over its
@@ -77,6 +113,28 @@ no segment at all and must be absorbed into a neighbouring segment's span.
   `SurahClient`, but `QuranReader` is wrapped in `React.memo` with
   referentially-stable props, so React bails out before reconciling
   `AyahBlock`/`QuranWord` — the tree is not walked 4×/sec.
+- All Quran text, timings, and audio are fetched once at build time by
+  `scripts/fetch-quran-data.ts` and committed. By default audio is served
+  from the committed `public/audio/` files, not hotlinked from `quran.com`;
+  see "No offline support" below for the GitHub-Releases-backed alternative
+  used when `NEXT_PUBLIC_AUDIO_BASE_URL` is configured.
+
+### No offline support
+
+There is no service worker and no offline download feature. This was
+considered and dropped: a service worker can only read a cross-origin
+response if that origin sends CORS headers. When `NEXT_PUBLIC_AUDIO_BASE_URL`
+is configured, `lib/data/audioUrl.ts` resolves audio to a per-surah GitHub
+Release (sharded one release per surah because a release caps at 1000
+assets and the recitation has 6,236 files) — and neither the
+`github.com/.../releases/download/...` URL nor the
+`release-assets.githubusercontent.com` URL it redirects to sends any CORS
+headers. A Vercel rewrite was tried as a workaround; it passes the redirect
+straight through rather than following it, so the browser still receives an
+opaque response (`status: 0`, unreadable body), indistinguishable from a
+network failure. Making offline support work would mean either moving the
+audio to a CORS-enabled CDN or proxying every audio byte through a Vercel
+Function — both out of scope here, so offline support was dropped instead.
 
 See [`docs/superpowers/specs/`](docs/superpowers/specs/) for the full design
 and [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for the source and licence
