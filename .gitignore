@@ -15,3 +15,7 @@ CLAUDE.md
 # git clone. Fetch it locally with: npm run fetch:data -- --surahs=1-114
 public/audio
 
+
+# Playwright artifacts from `npm run test:e2e`
+test-results/
+playwright-report/
