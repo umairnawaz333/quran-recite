@@ -37,6 +37,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const timingsRef = useRef<SurahTimings | null>(null);
   const attachedRef = useRef<{ surahId: number; registry: WordRegistry } | null>(null);
   const playingSurahRef = useRef<number | null>(null);
+  /**
+   * Monotonically increasing token identifying the most recent `playSurah`
+   * call. `loadTimings` for an uncached surah can take arbitrarily long, and
+   * nothing otherwise stops a slow call from resolving after a later call
+   * has already become the live playlist — it would tear that down and
+   * replace it with the stale surah. Every call captures its own token and
+   * checks it is still current before mutating anything.
+   */
+  const requestRef = useRef(0);
 
   const patch = useCallback((next: Partial<PlayerState>) => {
     setState(prev => ({ ...prev, ...next }));
@@ -64,14 +73,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     opts: { ayah?: number; localMs?: number; autoplay?: boolean } = {},
   ) => {
     const { ayah, localMs = 0, autoplay = true } = opts;
+    const token = ++requestRef.current;
 
     let timings: SurahTimings;
     try {
       timings = await loadTimings(surahId);
     } catch {
+      // A newer playSurah call has already superseded this one — its
+      // failure belongs to a surah the user has already navigated away
+      // from, so it must not surface as an error for whatever is live now.
+      if (token !== requestRef.current) return;
       patch({ error: 'Could not load this surah. Please try again.' });
       return;
     }
+
+    // Bail before any state mutation or teardown: a faster later call may
+    // already be the live playlist, and this stale one must not touch it.
+    if (token !== requestRef.current) return;
 
     teardown();
 
@@ -199,11 +217,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Progress ticks at a human rate; the highlight runs at frame rate.
+  // Skipped entirely while paused, so a loaded-but-idle surah does not
+  // rebuild the context value (and re-render every consumer) every 250 ms
+  // for no visible change — the whole point of memoising the word tree in
+  // Phase 1.
   useEffect(() => {
     const id = window.setInterval(() => {
       const playlist = playlistRef.current;
       const timeline = timelineRef.current;
-      if (!playlist || !timeline) return;
+      if (!playlist || !timeline || !playlist.isPlaying) return;
       patch({ currentMs: timeline.localToGlobal(playlist.currentAyahIndex, playlist.localTimeMs()) });
     }, 250);
     return () => window.clearInterval(id);

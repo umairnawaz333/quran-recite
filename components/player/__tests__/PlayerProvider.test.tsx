@@ -130,3 +130,61 @@ describe('registry attachment', () => {
     expect(screen.getByTestId('surah').textContent).toBe('2');
   });
 });
+
+describe('request superseding', () => {
+  function DualProbe() {
+    const p = usePlayer();
+    return (
+      <div>
+        <span data-testid="surah">{p.surahId ?? 'none'}</span>
+        <span data-testid="error">{p.error ?? 'none'}</span>
+        <button onClick={() => { void p.playSurah(3); }}>playA</button>
+        <button onClick={() => { void p.playSurah(2); }}>playB</button>
+      </div>
+    );
+  }
+
+  // A slow, uncached load (surah 3) must not clobber a faster later request
+  // (surah 2) that already became the live playlist by the time the slow
+  // one resolves — otherwise the user ends up hearing whatever they
+  // navigated away from. Surah 2 is primed (instant); surah 3 is left
+  // uncached so `loadTimings` falls through to `fetch`, which this test
+  // holds open deliberately until after surah 2 has already taken over.
+  it('ignores a slow load that resolves after a faster later request', async () => {
+    primeTimings(2, timings(2));
+
+    let resolveA!: (value: Response) => void;
+    const pending = new Promise<Response>(resolve => { resolveA = resolve; });
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((input: unknown) => {
+      const url = typeof input === 'string' ? input : String(input);
+      if (url.includes('/timings/abdulbasit-murattal/3.json')) return pending;
+      return Promise.reject(new Error(`unexpected fetch in test: ${url}`));
+    });
+
+    try {
+      render(<PlayerProvider><DualProbe /></PlayerProvider>);
+
+      // Start A's slow load, then immediately request B — B is cached and
+      // wins the race by resolving first.
+      await act(async () => { screen.getByText('playA').click(); });
+      await act(async () => { screen.getByText('playB').click(); });
+      await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('2'));
+
+      // A's fetch now resolves, long after B has become the live playlist.
+      await act(async () => {
+        resolveA(new Response(JSON.stringify(timings(3)), { status: 200 }));
+        // Flush the rest of loadTimings' promise chain (res.json(), cache
+        // set, and playSurah's own post-await guard check).
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+
+      // The provider must still report surah 2 — A's stale resolution must
+      // be a complete no-op, including not surfacing as an error.
+      expect(fetchSpy).toHaveBeenCalled();
+      expect(screen.getByTestId('surah').textContent).toBe('2');
+      expect(screen.getByTestId('error').textContent).toBe('none');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+});
