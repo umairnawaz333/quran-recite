@@ -7,8 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run --exclude e2e/**",
-    "test:watch": "vitest --exclude e2e/**",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "playwright test",
     "fetch:data": "tsx scripts/fetch-quran-data.ts",
     "fetch:fonts": "tsx scripts/fetch-fonts.ts"

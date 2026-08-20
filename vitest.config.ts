@@ -13,7 +13,7 @@ export default defineConfig({
     },
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
-    exclude: ['node_modules/**', '.next/**', 'out/**'],
+    exclude: ['node_modules/**', '.next/**', 'out/**', 'e2e/**'],
   },
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, '.') },
