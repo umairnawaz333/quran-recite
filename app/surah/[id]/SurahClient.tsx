@@ -22,6 +22,20 @@ interface Props {
 export function SurahClient({ meta, text, timings }: Props) {
   const registry = useMemo(() => new WordRegistry(), []);
   const player = usePlayer();
+  // Every hook below that needs a player *action* destructures it here and
+  // depends on that specific reference, never on `player` itself. `player`
+  // is the provider's context value, rebuilt on every state tick (every
+  // 250ms while playing, plus every ayah change) — closing over the whole
+  // object in a dependency array re-runs the hook on that same cadence.
+  // For an effect whose cleanup tears something down (the registry attach
+  // below) that silently breaks the feature; for a callback passed into
+  // `React.memo`-wrapped `QuranReader` it silently defeats that memo instead,
+  // forcing the whole word tree (6,116 words for Al-Baqarah) to reconcile
+  // several times a second during playback. The actions themselves
+  // (`playWord`, `playSurah`, `attachRegistry`, `primeTimings`) are each
+  // defined in the provider with stable dependencies, so destructuring them
+  // once up front and depending on those is both correct and cheap.
+  const { primeTimings, attachRegistry, playWord, playSurah } = player;
   const [script, setScript] = useState<Script>('tajweed');
 
   const isThisSurahPlaying = player.surahId === meta.id;
@@ -39,34 +53,26 @@ export function SurahClient({ meta, text, timings }: Props) {
   }, []);
 
   // Hand our timings to the provider so pressing play costs no extra fetch.
-  // Depend on the action itself (stable across renders), not the whole
-  // `player` object, which is a fresh reference on every state tick — keying
-  // off it would re-run this (harmlessly, but pointlessly) many times a second.
-  const { primeTimings, attachRegistry } = player;
   useEffect(() => {
     primeTimings(meta.id, timings);
   }, [primeTimings, meta.id, timings]);
 
   // Register our DOM word map. The provider paints into it only while this
-  // surah is the one playing. Must depend on the stable `attachRegistry`
-  // action rather than `player`: the context value is rebuilt on every
-  // playback tick, and keying this effect off it would detach and
-  // `registry.clear()` the word map on every tick, permanently erasing the
-  // DOM node map after the first re-run and leaving nothing to highlight.
+  // surah is the one playing.
   useEffect(() => {
     const detach = attachRegistry(meta.id, registry);
     return () => { detach(); registry.clear(); };
   }, [attachRegistry, meta.id, registry]);
 
   const handleWordClick = useCallback((wordId: string) => {
-    if (isThisSurahPlaying) { player.playWord(wordId); resume(); return; }
+    if (isThisSurahPlaying) { playWord(wordId); resume(); return; }
     const [, ayahStr] = wordId.split(':');
-    void player.playSurah(meta.id, { ayah: Number(ayahStr) }).then(resume);
-  }, [player, meta.id, isThisSurahPlaying, resume]);
+    void playSurah(meta.id, { ayah: Number(ayahStr) }).then(resume);
+  }, [playWord, playSurah, meta.id, isThisSurahPlaying, resume]);
 
   const handleAyahPlay = useCallback((ayah: number) => {
-    void player.playSurah(meta.id, { ayah }).then(resume);
-  }, [player, meta.id, resume]);
+    void playSurah(meta.id, { ayah }).then(resume);
+  }, [playSurah, meta.id, resume]);
 
   return (
     <main className="min-h-screen bg-white">
