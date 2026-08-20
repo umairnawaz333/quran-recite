@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { PlayerProvider } from '@/components/player/PlayerProvider';
+import { PlayerBar } from '@/components/player/PlayerBar';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -12,7 +14,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <OfflineBanner />
-        {children}
+        {/* The provider lives here so audio survives client-side navigation. */}
+        <PlayerProvider>
+          {children}
+          <PlayerBar />
+        </PlayerProvider>
       </body>
     </html>
   );

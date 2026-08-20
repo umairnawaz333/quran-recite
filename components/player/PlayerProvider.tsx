@@ -6,7 +6,7 @@ import { SyncEngine } from '@/lib/sync/engine';
 import { Timeline } from '@/lib/sync/timeline';
 import { loadTimings, primeTimings as primeTimingsCache } from '@/lib/player/timingsLoader';
 import { readLastPosition, writeLastPosition } from '@/lib/player/lastPosition';
-import { getSurahList } from '@/lib/data/loaders';
+import { getSurahList } from '@/lib/data/surahIndex';
 import { PlayerContext, type PlayerState } from './usePlayer';
 import type { SurahTimings } from '@/lib/data/types';
 import type { WordRegistry } from '@/lib/reader/wordRegistry';

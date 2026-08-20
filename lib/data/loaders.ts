@@ -1,20 +1,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import surahs from '@/data/surahs.json';
-import type { SurahMeta, SurahText, SurahTimings } from './types';
+import type { SurahText, SurahTimings } from './types';
 
-export function getSurahList(): SurahMeta[] {
-  return surahs as SurahMeta[];
-}
-
-export function getSurahMeta(id: number): SurahMeta | undefined {
-  return getSurahList().find(s => s.id === id);
-}
-
-/** Available surah ids, used to generate static routes. */
-export function getAvailableSurahIds(): number[] {
-  return getSurahList().filter(s => s.available).map(s => s.id);
-}
+export { getSurahList, getSurahMeta, getAvailableSurahIds } from './surahIndex';
 
 /**
  * Read from disk rather than imported.
