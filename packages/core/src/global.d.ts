@@ -13,6 +13,9 @@
  */
 declare const process: { env: Record<string, string | undefined> };
 
+// `init` is typed `unknown` rather than a real RequestInit shape because no
+// caller in this package passes one — keep this shim only as wide as the
+// code actually uses.
 declare function fetch(
   input: string,
   init?: unknown,

@@ -22,6 +22,14 @@
  * `public/audio`, so a local checkout with fetched audio needs no config.
  */
 
+// Assumes `NEXT_PUBLIC_AUDIO_BASE_URL` is substituted at build time by the
+// bundler (Next.js/webpack today; Metro, for React Native, would need the
+// same substitution). A host that neither substitutes it nor provides a
+// `process` global throws a ReferenceError here at module load rather than
+// falling back to root-relative paths. Giving this a platform-neutral
+// configuration seam (env var vs. some other mechanism) is sub-project B's
+// job, not this task's — recorded here so the next reader finds it in the
+// comment rather than in a crash.
 const BASE = process.env.NEXT_PUBLIC_AUDIO_BASE_URL?.trim().replace(/\/+$/, '');
 
 /** `SSSAAA.mp3` — the first three digits are the surah number. */

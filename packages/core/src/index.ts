@@ -2,9 +2,12 @@
  * Public surface of @quran/core.
  *
  * Everything here is platform-free: no React, no Next, no node built-ins, no
- * DOM. That constraint is what lets a React Native app consume this package
- * unchanged, and it is enforced by __tests__/platform-free.test.ts rather than
- * by convention.
+ * DOM — enforced by __tests__/platform-free.test.ts rather than by convention.
+ * That is necessary, but not sufficient, for a React Native app to consume
+ * this package unchanged: `data/audioUrl.ts` still assumes a bundler
+ * substitutes `process.env.NEXT_PUBLIC_AUDIO_BASE_URL` at build time (see its
+ * comment) rather than working with no such seam at all. Closing that gap is
+ * sub-project B's job.
  */
 export { normalizeAyah } from './normalize/segments';
 export { countBaseLetters, countRecitationWeight, stripPrivateUse } from './normalize/arabic';
