@@ -1,11 +1,9 @@
 import { mkdir, writeFile, readFile, access } from 'node:fs/promises';
 import path from 'node:path';
-import { normalizeAyah } from '../lib/normalize/segments';
-import { stripPrivateUse } from '../lib/normalize/arabic';
-import type { RawSegment, WordTiming } from '../lib/normalize/types';
+import { normalizeAyah, stripPrivateUse } from '@quran/core';
 import type {
-  AyahTiming, SurahMeta, SurahText, SurahTimings, SurahWord,
-} from '../lib/data/types';
+  RawSegment, WordTiming, AyahTiming, SurahMeta, SurahText, SurahTimings, SurahWord,
+} from '@quran/core';
 
 const API = 'https://api.quran.com/api/v4';
 const RECITATION_ID = 2;                    // AbdulBaset AbdulSamad, Murattal

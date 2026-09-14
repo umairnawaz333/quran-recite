@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { loadTimings, primeTimings, resetTimingsCache } from '../timingsLoader';
-import type { SurahTimings } from '@/lib/data/types';
+import { loadTimings, primeTimings, resetTimingsCache } from '../src/player/timingsLoader';
+import type { SurahTimings } from '../src/data/types';
 
 const fake = (surah: number): SurahTimings => ({
   surah, reciterId: 'abdulbasit-murattal', surahDurationMs: 1000,

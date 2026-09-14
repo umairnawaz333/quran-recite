@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AyahPlaylist } from '@/lib/audio/playlist';
-import { SyncEngine } from '@/lib/sync/engine';
-import { Timeline } from '@/lib/sync/timeline';
-import { loadTimings, primeTimings as primeTimingsCache } from '@/lib/player/timingsLoader';
+import {
+  SyncEngine, Timeline, loadTimings, primeTimings as primeTimingsCache,
+} from '@quran/core';
 import { readLastPosition, writeLastPosition } from '@/lib/player/lastPosition';
 import { getSurahList } from '@/lib/data/surahIndex';
 import { PlayerContext, type PlayerState } from './usePlayer';
-import type { SurahTimings } from '@/lib/data/types';
+import type { SurahTimings } from '@quran/core';
 import type { WordRegistry } from '@/lib/reader/wordRegistry';
 
 const NAMES = new Map(getSurahList().map(s => [s.id, s.nameSimple]));

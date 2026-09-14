@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AyahPlaylist } from '../playlist';
-import type { AyahTiming } from '@/lib/data/types';
+import type { AyahTiming } from '@quran/core';
 
 const ayahs: AyahTiming[] = [
   { ayah: 1, audioUrl: '/audio/x/1.mp3', startOffsetMs: 0, durationMs: 4000, words: [] },

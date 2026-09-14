@@ -10,7 +10,7 @@ async function load(base?: string) {
   vi.resetModules();
   if (base === undefined) delete process.env.NEXT_PUBLIC_AUDIO_BASE_URL;
   else process.env.NEXT_PUBLIC_AUDIO_BASE_URL = base;
-  return (await import('../audioUrl')).resolveAudioUrl;
+  return (await import('../src/data/audioUrl')).resolveAudioUrl;
 }
 
 describe('resolveAudioUrl', () => {

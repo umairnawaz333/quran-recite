@@ -3,7 +3,7 @@
 import { memo } from 'react';
 import { AyahBlock } from './AyahBlock';
 import type { Script } from './QuranWord';
-import type { SurahText } from '@/lib/data/types';
+import type { SurahText } from '@quran/core';
 import type { WordRegistry } from '@/lib/reader/wordRegistry';
 
 interface Props {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { countBaseLetters, stripPrivateUse, countRecitationWeight } from '../arabic';
+import { countBaseLetters, stripPrivateUse, countRecitationWeight } from '../src/normalize/arabic';
 
 describe('countBaseLetters', () => {
   it('counts plain letters', () => {

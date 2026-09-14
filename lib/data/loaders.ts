@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import type { SurahText, SurahTimings } from './types';
+import type { SurahText, SurahTimings } from '@quran/core';
 
 export { getSurahList, getSurahMeta, getAvailableSurahIds } from './surahIndex';
 

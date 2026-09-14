@@ -1,4 +1,4 @@
-import type { AyahTiming } from '@/lib/data/types';
+import type { AyahTiming } from '../data/types';
 
 export interface TimelinePosition {
   ayahIndex: number;

@@ -9,7 +9,7 @@ import type { Script } from '@/components/QuranWord';
 import { WordRegistry } from '@/lib/reader/wordRegistry';
 import { useAutoScroll } from '@/lib/reader/useAutoScroll';
 import { usePlayer } from '@/components/player/usePlayer';
-import type { SurahMeta, SurahText, SurahTimings } from '@/lib/data/types';
+import type { SurahMeta, SurahText, SurahTimings } from '@quran/core';
 
 const SCRIPT_KEY = 'quran.script';
 

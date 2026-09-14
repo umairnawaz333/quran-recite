@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Timeline } from '../timeline';
-import type { AyahTiming } from '@/lib/data/types';
+import { Timeline } from '../src/sync/timeline';
+import type { AyahTiming } from '../src/data/types';
 
 const ayah = (n: number, startOffsetMs: number, durationMs: number): AyahTiming => ({
   ayah: n, audioUrl: `/audio/x/${n}.mp3`, startOffsetMs, durationMs, words: [],

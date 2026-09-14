@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { useCallback, useMemo, useState } from 'react';
-import type { SurahText } from '@/lib/data/types';
+import type { SurahText } from '@quran/core';
 
 const ayahBlockRenders = vi.fn();
 

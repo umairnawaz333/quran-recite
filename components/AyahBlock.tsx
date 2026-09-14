@@ -2,7 +2,7 @@
 
 import { QuranWord, type Script } from './QuranWord';
 import { PlayIcon } from './PlayerIcons';
-import type { SurahWord } from '@/lib/data/types';
+import type { SurahWord } from '@quran/core';
 import type { WordRegistry } from '@/lib/reader/wordRegistry';
 
 interface Props {

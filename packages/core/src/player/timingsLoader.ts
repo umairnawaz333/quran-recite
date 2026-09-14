@@ -1,4 +1,4 @@
-import type { SurahTimings } from '@/lib/data/types';
+import type { SurahTimings } from '../data/types';
 
 const RECITER = 'abdulbasit-murattal';
 

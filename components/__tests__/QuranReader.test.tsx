@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuranReader } from '../QuranReader';
 import { WordRegistry } from '@/lib/reader/wordRegistry';
-import type { SurahText } from '@/lib/data/types';
+import type { SurahText } from '@quran/core';
 
 const text: SurahText = {
   surah: 1,

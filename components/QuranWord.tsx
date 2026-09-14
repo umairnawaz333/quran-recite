@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, type KeyboardEvent } from 'react';
-import type { SurahWord } from '@/lib/data/types';
+import type { SurahWord } from '@quran/core';
 import type { WordRegistry } from '@/lib/reader/wordRegistry';
 
 export type Script = 'tajweed' | 'indopak';

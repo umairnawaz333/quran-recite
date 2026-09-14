@@ -16,6 +16,9 @@ export default defineConfig({
     exclude: ['node_modules/**', '.next/**', 'out/**', 'e2e/**'],
   },
   resolve: {
-    alias: { '@': path.resolve(import.meta.dirname, '.') },
+    alias: {
+      '@': path.resolve(import.meta.dirname, '.'),
+      '@quran/core': path.resolve(import.meta.dirname, 'packages/core/src/index.ts'),
+    },
   },
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
-import type { SurahMeta, SurahText, SurahTimings } from '@/lib/data/types';
+import type { SurahMeta, SurahText, SurahTimings } from '@quran/core';
 
 vi.mock('next/link', () => ({
   default: ({ children, href }: React.PropsWithChildren<{ href: string }>) => (
@@ -29,7 +29,7 @@ vi.mock('@/components/AyahBlock', async () => {
 const { SurahClient } = await import('../SurahClient');
 const { PlayerProvider } = await import('@/components/player/PlayerProvider');
 const { usePlayer } = await import('@/components/player/usePlayer');
-const { resetTimingsCache } = await import('@/lib/player/timingsLoader');
+const { resetTimingsCache } = await import('@quran/core');
 
 const meta: SurahMeta = {
   id: 1, nameArabic: 'الفاتحة', nameSimple: 'Al-Fatihah', nameEnglish: 'The Opener',

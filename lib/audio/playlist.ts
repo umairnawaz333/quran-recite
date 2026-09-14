@@ -1,5 +1,5 @@
-import type { AyahTiming } from '@/lib/data/types';
-import { resolveAudioUrl } from '@/lib/data/audioUrl';
+import type { AyahTiming } from '@quran/core';
+import { resolveAudioUrl } from '@quran/core';
 
 type Events = {
   ayahchange: (ayahIndex: number) => void;

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { SurahList } from '../SurahList';
-import type { SurahMeta } from '@/lib/data/types';
+import type { SurahMeta } from '@quran/core';
 
 vi.mock('next/link', () => ({
   default: ({ children, href }: any) => <a href={href}>{children}</a>,

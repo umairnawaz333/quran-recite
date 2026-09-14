@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeAyah } from '../segments';
-import type { RawSegment } from '../types';
+import { normalizeAyah } from '../src/normalize/segments';
+import type { RawSegment } from '../src/normalize/types';
 
 const words = (...texts: string[]) =>
   texts.map((text, i) => ({ position: i + 1, text }));

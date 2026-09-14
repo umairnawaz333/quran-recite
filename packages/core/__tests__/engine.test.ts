@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { findActiveWordIndex, SyncEngine } from '../engine';
-import type { WordTiming } from '@/lib/normalize/types';
+import { findActiveWordIndex, SyncEngine } from '../src/sync/engine';
+import type { WordTiming } from '../src/normalize/types';
 
 const t = (position: number, startMs: number, endMs: number): WordTiming => ({
   id: `1:1:${position}`, position, startMs, endMs, estimated: false,

@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import { PlayerProvider } from '../PlayerProvider';
 import { usePlayer } from '../usePlayer';
-import { primeTimings, resetTimingsCache } from '@/lib/player/timingsLoader';
+import { primeTimings, resetTimingsCache } from '@quran/core';
 import { writeLastPosition } from '@/lib/player/lastPosition';
 import { WordRegistry } from '@/lib/reader/wordRegistry';
 import { AyahPlaylist } from '@/lib/audio/playlist';
-import type { SurahTimings } from '@/lib/data/types';
+import type { SurahTimings } from '@quran/core';
 
 const timings = (surah: number): SurahTimings => ({
   surah, reciterId: 'abdulbasit-murattal', surahDurationMs: 4000,

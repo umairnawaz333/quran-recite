@@ -1,4 +1,4 @@
-import type { WordTiming } from '@/lib/normalize/types';
+import type { WordTiming } from '../normalize/types';
 
 export interface SurahMeta {
   id: number;

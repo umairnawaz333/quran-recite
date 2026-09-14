@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { SurahMeta } from '@/lib/data/types';
+import type { SurahMeta } from '@quran/core';
 
 export function SurahList({ surahs }: { surahs: SurahMeta[] }) {
   return (

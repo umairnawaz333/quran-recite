@@ -1,5 +1,5 @@
 import surahs from '@/data/surahs.json';
-import type { SurahMeta } from './types';
+import type { SurahMeta } from '@quran/core';
 
 /**
  * The surah index, sourced from a plain JSON import with no filesystem

@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import type { SurahTimings } from '@/lib/data/types';
+import type { SurahTimings } from '@quran/core';
 import type { WordRegistry } from '@/lib/reader/wordRegistry';
 
 export interface PlayerState {
