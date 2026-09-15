@@ -17,6 +17,8 @@
  */
 export { normalizeAyah } from './normalize/segments';
 export { countBaseLetters, countRecitationWeight, stripPrivateUse } from './normalize/arabic';
+export { parseTajweed } from './normalize/tajweed';
+export type { TajweedRun } from './normalize/tajweed';
 export type {
   RawSegment, NormalizeWord, WordTiming, NormalizeInput, NormalizeResult,
 } from './normalize/types';
