@@ -499,8 +499,25 @@ git commit -m "refactor: move the Next.js app into apps/web"
 The build now lives two directories down. Vercel and the workflow both assume the repository root.
 
 **Files:**
-- Modify: `.github/workflows/deploy.yml`, `apps/web/.vercelignore`
+- Modify: `.github/workflows/deploy.yml`, `.vercelignore`
 - Change: the Vercel project's `rootDirectory` setting
+
+> **Correction (final whole-branch review):** Step 3 originally read "Update
+> the workflow to run the Vercel steps in apps/web" and added
+> `working-directory: apps/web` to four steps, on the assumption that the
+> Vercel CLI must run from the same directory as the `rootDirectory` set in
+> Step 1. That assumption was wrong and the two are mutually exclusive: the
+> installed CLI resolves the project's root directory as
+> `join(cwd, rootDirectory)`, so `cwd = apps/web` plus `rootDirectory =
+> apps/web` makes it look for `apps/web/apps/web` and fail. Separately, a
+> non-prebuilt `vercel deploy` uploads the working directory tree, and that
+> tree must contain the whole workspace — root `package.json`,
+> `package-lock.json`, `packages/core` — for `"@quran/core": "*"` to resolve
+> during the cloud install; run from `apps/web` and none of that uploads.
+> The committed workflow therefore failed both with and without
+> `rootDirectory` set. Step 2, Step 3 and Step 4 below are corrected to
+> reflect what actually shipped: the Vercel CLI steps run from the
+> repository root, and `.vercelignore` stays at the repository root too.
 
 **Interfaces:**
 - Consumes: the `apps/web` layout from Task 3
@@ -525,9 +542,17 @@ Ask the controller for `VERCEL_TOKEN` rather than searching for it; do not print
 
 - [ ] **Step 2: Fix the ignore file's paths**
 
-`apps/web/.vercelignore` is now interpreted relative to `apps/web`, so its entries need adjusting. Replace its contents:
+`.vercelignore` stays at the repository root — the Vercel CLI runs from
+there (see Step 3), so paths inside it are interpreted relative to the
+repository root too. Update only the audio entry to name the app's real
+path, and update its comment to match:
 
-Keep the existing explanatory comment verbatim and delete only the trailing block:
+```
+apps/web/public/audio
+```
+
+Keep the trailing block exactly as committed — it is still inside the
+upload root and still needed:
 
 ```
 # Never part of a deployment.
@@ -535,43 +560,58 @@ Keep the existing explanatory comment verbatim and delete only the trailing bloc
 docs
 ```
 
-`.superpowers` and `docs` live at the repository root, which is now outside `apps/web`, so Vercel no longer sees them and the entries do nothing. `public/audio` still resolves correctly — it is `apps/web/public/audio` relative to the new root — so that line and its comment stay exactly as they are.
+- [ ] **Step 3: Run the Vercel CLI steps from the repository root**
 
-- [ ] **Step 3: Update the workflow to run the Vercel steps in apps/web**
+In `.github/workflows/deploy.yml`, none of the steps gain a
+`working-directory`. All of them — install, tests, type check, and the
+Vercel CLI steps (`Link the Vercel project`, `Pull Vercel environment`,
+`Deploy`, `Roll back a failed production deploy`) — run from the repository
+root, unchanged from before this task.
 
-In `.github/workflows/deploy.yml`, install and tests stay at the root — `npm ci` installs the whole workspace and `npm test` now runs both suites, which is what we want gating a deploy. The Vercel CLI steps must run where the project link lives.
+This is load-bearing, not an oversight: the project's `rootDirectory`
+(`apps/web`, set in Step 1) is resolved by the installed CLI as
+`join(cwd, rootDirectory)`. Running the CLI steps from `apps/web` would make
+it look for `apps/web/apps/web` and fail `validateRootDirectory`'s `lstat`.
+Independently, a non-prebuilt `vercel deploy` uploads the working directory
+tree rather than the git index, and that tree must contain the whole
+workspace — root `package.json`, `package-lock.json`, `packages/core` — for
+`"@quran/core": "*"` to resolve during the cloud install. Running from
+`apps/web` breaks both mechanisms at once. Add a comment at the `Link the
+Vercel project` step recording this, so a future reader does not "fix" it
+back into `apps/web`.
 
-Add this to **four** steps — `Link the Vercel project`, `Pull Vercel environment`, `Deploy`, and `Roll back a failed production deploy`:
-
-```yaml
-        working-directory: apps/web
-```
-
-The rollback step is easy to miss and matters most: `vercel rollback` needs the same `.vercel/project.json` the other steps use, and it only ever runs when a production deploy has already failed verification — precisely when a second failure is most costly.
-
-The verification step stays at the root but reads `.vercel/.env.production.local`, which `vercel pull` now writes inside `apps/web`. Change that one line in its script:
-
-```bash
-env_file=apps/web/.vercel/.env.production.local
-```
+The verification step already runs at the root and reads
+`.vercel/.env.production.local` — `vercel pull`, also run from the root,
+writes there. No change needed to that line.
 
 - [ ] **Step 4: Confirm the workflow file is still valid**
+
+Do not validate this with a regex count of `working-directory` occurrences
+— a prior version of this step did exactly that, reported "4
+`working-directory` entries" as the expected pass condition, and gave a
+clean bill of health to a workflow that failed both with and without
+`rootDirectory` set. A count is not a semantic check. Instead:
 
 ```bash
 node -e "
 const s=require('fs').readFileSync('.github/workflows/deploy.yml','utf8');
 console.log('steps:', (s.match(/^      - name: /gm)||[]).length);
-console.log('working-directory entries:', (s.match(/working-directory: apps\/web/g)||[]).length);
+console.log('working-directory keys:', (s.match(/^\s*working-directory:/gm)||[]).length);
 console.log('env_file line:', s.split('\n').find(l=>l.includes('env_file=')).trim());
 "
+ruby -ryaml -e "d = YAML.load_file('.github/workflows/deploy.yml'); puts 'YAML OK, steps=' + d['jobs']['deploy']['steps'].length.to_s"
 ```
 
-Expected: 12 steps, 4 `working-directory` entries, and the `env_file` line pointing inside `apps/web`.
+Expected: 12 steps, **zero** `working-directory` keys, the `env_file` line
+reading `.vercel/.env.production.local` (no `apps/web/` prefix), and the
+YAML parses. Then actually deploy to a preview target and confirm the build
+step resolves `@quran/core` — a workflow that merely parses can still fail
+at runtime.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .github/workflows/deploy.yml apps/web/.vercelignore
+git add .github/workflows/deploy.yml .vercelignore
 git commit -m "ci: build from apps/web after the monorepo move"
 ```
 

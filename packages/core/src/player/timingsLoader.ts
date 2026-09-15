@@ -21,6 +21,11 @@ export function loadTimings(surahId: number): Promise<SurahTimings> {
   const existing = inFlight.get(surahId);
   if (existing) return existing;
 
+  // This URL is root-relative, which only resolves against a document
+  // origin — it works in a browser but React Native's fetch requires an
+  // absolute URL and will reject this. A platform-neutral base is needed
+  // before this module can be used off the web; see packages/core/src/index.ts.
+  // That is sub-project B's job, not this one's.
   const request = fetch(`/timings/${RECITER}/${surahId}.json`)
     .then(res => {
       if (!res.ok) throw new Error(`timings ${res.status} for surah ${surahId}`);

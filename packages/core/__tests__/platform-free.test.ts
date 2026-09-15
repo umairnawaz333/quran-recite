@@ -27,6 +27,16 @@ import path from 'node:path';
  * reword the prose (as `global.d.ts` and `lastPosition.ts` do) rather than
  * weakening a pattern here to let it through.
  *
+ * Two dependencies this file's coverage relies on but does not itself make
+ * obvious: `BANNED_IMPORTS` only matches `node:`-prefixed specifiers, so a
+ * bare legacy import like `from 'fs'` slips past this scan entirely — it is
+ * caught only by `tsc` (`TS2307: Cannot find module 'fs'`, since core's
+ * tsconfig has no Node types). And the primary guard against undeclared DOM
+ * globals (a bare `typeof window`) is the `tsc --noEmit -p
+ * packages/core/tsconfig.json` leg of the root `typecheck` script, not this
+ * file — remove that leg and this scan alone cannot catch it, since a bare
+ * `window` with no following `.` matches none of `BANNED_GLOBALS` either.
+ *
  * Verified probes, both since removed:
  *   - `const _probe = typeof window;` in src/data/audioUrl.ts fails
  *     `npm run typecheck` with `TS2304: Cannot find name 'window'` — it does

@@ -29,8 +29,8 @@ Every external dataset used by this project, with its licence and how it is used
   recording because its word-timing segment data is materially cleaner.
 - **Source:** `verses.quran.com`, downloaded at build time by
   `apps/web/scripts/fetch-quran-data.ts`
-- **Hosting:** self-hosted from `apps/web/public/audio/abdulbasit-murattal/`, copied
-  byte-for-byte. Nothing is hotlinked; the running app never contacts
+- **Hosting:** self-hosted from `apps/web/public/audio/abdulbasit-murattal/`,
+  copied byte-for-byte. Nothing is hotlinked; the running app never contacts
   `quran.com` or any other third party.
 - **Status: freely available recitation, redistributed for non-commercial use.**
   These recordings are distributed openly through Quran.com's public API and

@@ -4,10 +4,16 @@
  * Everything here is platform-free: no React, no Next, no node built-ins, no
  * DOM — enforced by __tests__/platform-free.test.ts rather than by convention.
  * That is necessary, but not sufficient, for a React Native app to consume
- * this package unchanged: `data/audioUrl.ts` still assumes a bundler
- * substitutes `process.env.NEXT_PUBLIC_AUDIO_BASE_URL` at build time (see its
- * comment) rather than working with no such seam at all. Closing that gap is
- * sub-project B's job.
+ * this package unchanged. Two known gaps, both left for sub-project B:
+ *
+ *  - `data/audioUrl.ts` assumes a bundler substitutes
+ *    `process.env.NEXT_PUBLIC_AUDIO_BASE_URL` at build time (see its
+ *    comment); with no such seam it silently falls back to a root-relative
+ *    path rather than throwing.
+ *  - `player/timingsLoader.ts` fetches a root-relative URL, which only
+ *    resolves against a document origin; React Native's `fetch` requires an
+ *    absolute URL and rejects this outright on the first call (see its
+ *    comment).
  */
 export { normalizeAyah } from './normalize/segments';
 export { countBaseLetters, countRecitationWeight, stripPrivateUse } from './normalize/arabic';

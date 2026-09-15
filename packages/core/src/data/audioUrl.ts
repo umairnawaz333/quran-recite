@@ -24,12 +24,15 @@
 
 // Assumes `NEXT_PUBLIC_AUDIO_BASE_URL` is substituted at build time by the
 // bundler (Next.js/webpack today; Metro, for React Native, would need the
-// same substitution). A host that neither substitutes it nor provides a
-// `process` global throws a ReferenceError here at module load rather than
-// falling back to root-relative paths. Giving this a platform-neutral
-// configuration seam (env var vs. some other mechanism) is sub-project B's
-// job, not this task's — recorded here so the next reader finds it in the
-// comment rather than in a crash.
+// same substitution). React Native ships a `process` shim with an `env`
+// object, so a host that never substitutes the variable does not throw here
+// — BASE is simply `undefined`, and resolveAudioUrl silently falls back to
+// the root-relative path (e.g. `/audio/...`), which resolves to nothing
+// meaningful on a native client. That silent wrong answer is worse than a
+// crash and easy to miss. Giving this a platform-neutral configuration seam
+// (env var vs. some other mechanism) is sub-project B's job, not this
+// task's — recorded here so the next reader finds it in the comment rather
+// than in a support ticket.
 const BASE = process.env.NEXT_PUBLIC_AUDIO_BASE_URL?.trim().replace(/\/+$/, '');
 
 /** `SSSAAA.mp3` — the first three digits are the surah number. */

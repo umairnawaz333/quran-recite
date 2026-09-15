@@ -11,16 +11,23 @@
  * `packages/core/__tests__/engine.test.ts` does
  * `vi.spyOn(globalThis, 'requestAnimationFrame')`, which requires the
  * property to already exist on the object before it can be spied on — these
- * timer-backed stand-ins exist only to give it something to spy over; the
- * spy replaces the scheduling behaviour in every test that uses it.
+ * stand-ins exist only to give it something to spy over. They record the
+ * callback and deliberately never fire it: `SyncEngine.step()` calls
+ * `schedule()` unconditionally, so a stand-in that actually schedules would
+ * start an unbounded ~16ms setTimeout chain for any future test that
+ * constructs a SyncEngine without spying rAF, outliving that test.
  */
 if (typeof globalThis.requestAnimationFrame === 'undefined') {
+  let nextHandle = 1;
+  const pendingCallbacks = new Map<number, FrameRequestCallback>();
   Object.assign(globalThis, {
     requestAnimationFrame: (callback: FrameRequestCallback): number => {
-      return setTimeout(() => callback(Date.now()), 16) as unknown as number;
+      const handle = nextHandle++;
+      pendingCallbacks.set(handle, callback);
+      return handle;
     },
     cancelAnimationFrame: (handle: number): void => {
-      clearTimeout(handle);
+      pendingCallbacks.delete(handle);
     },
   });
 }

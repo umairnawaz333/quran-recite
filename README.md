@@ -190,8 +190,8 @@ There is no service worker and no offline download feature. This was
 considered and dropped: a service worker can only read a cross-origin
 response if that origin sends CORS headers. When `NEXT_PUBLIC_AUDIO_BASE_URL`
 is configured, `packages/core/src/data/audioUrl.ts` resolves audio to a
-per-surah GitHub Release (sharded one release per surah because a release caps at 1000
-assets and the recitation has 6,236 files) — and neither the
+per-surah GitHub Release (sharded one release per surah because a release
+caps at 1000 assets and the recitation has 6,236 files) — and neither the
 `github.com/.../releases/download/...` URL nor the
 `release-assets.githubusercontent.com` URL it redirects to sends any CORS
 headers. A Vercel rewrite was tried as a workaround; it passes the redirect

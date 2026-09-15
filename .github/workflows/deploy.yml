@@ -64,8 +64,17 @@ jobs:
       # VERCEL_ORG_ID / VERCEL_PROJECT_ID environment variables alone — it
       # errors with "Could not retrieve Project Settings". Writing the link
       # file it actually reads is deterministic.
+      #
+      # This step, and every other Vercel CLI step below, deliberately run
+      # from the repository root and must not gain a `working-directory:
+      # apps/web`. The project's `rootDirectory` (apps/web) is resolved by
+      # the CLI as `join(cwd, rootDirectory)` — running from apps/web would
+      # make it look for apps/web/apps/web and fail. Separately, a
+      # non-prebuilt `vercel deploy` uploads the working directory tree, and
+      # that tree must contain the whole workspace (root package.json,
+      # package-lock.json, packages/core) for `"@quran/core": "*"` to
+      # resolve during the cloud install. Running from apps/web breaks both.
       - name: Link the Vercel project
-        working-directory: apps/web
         run: |
           mkdir -p .vercel
           cat > .vercel/project.json <<JSON
@@ -78,7 +87,6 @@ jobs:
       # Pulls the project's build settings and environment from Vercel so the
       # build here matches the build Vercel would have run itself.
       - name: Pull Vercel environment
-        working-directory: apps/web
         run: |
           vercel pull --yes \
             --environment=${{ inputs.target }} \
@@ -94,7 +102,6 @@ jobs:
       # the same commit that just passed.
       - name: Deploy
         id: deploy
-        working-directory: apps/web
         run: |
           url=$(vercel deploy \
             ${{ inputs.target == 'production' && '--prod' || '' }} \
@@ -129,7 +136,7 @@ jobs:
           # the build actually baked in — checking a fixed path would fail the
           # deploy the moment the audio moves, and pass while pointing at an
           # origin the app no longer uses.
-          env_file=apps/web/.vercel/.env.production.local
+          env_file=.vercel/.env.production.local
           base=$(grep -h '^NEXT_PUBLIC_AUDIO_BASE_URL=' "$env_file" 2>/dev/null \
                  | head -1 | cut -d= -f2- | tr -d '"'"'"'')
 
@@ -155,7 +162,6 @@ jobs:
       # broken site up while someone reads the logs.
       - name: Roll back a failed production deploy
         if: failure() && inputs.target == 'production' && steps.deploy.outcome == 'success'
-        working-directory: apps/web
         run: |
           echo "::warning::Verification failed — rolling back to the previous production deployment"
           vercel rollback --yes --token=${{ secrets.VERCEL_TOKEN }}
