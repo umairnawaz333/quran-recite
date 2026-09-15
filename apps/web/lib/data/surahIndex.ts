@@ -1,4 +1,4 @@
-import surahs from '@/data/surahs.json';
+import surahs from '@quran/data/surahs.json';
 import type { SurahMeta } from '@quran/core';
 
 /**

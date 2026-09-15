@@ -1,0 +1,10 @@
+{
+  "name": "@quran/data",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Quran text and surah index as data. No code; consumed by both apps.",
+  "exports": {
+    "./surahs.json": "./surahs.json",
+    "./text/*.json": "./text/*.json"
+  }
+}

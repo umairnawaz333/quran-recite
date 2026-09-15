@@ -13,6 +13,9 @@ const UA = 'quran-word-sync-build-script';
 
 const ROOT = process.cwd();
 const DATA = path.join(ROOT, 'data');
+// Text and surahs.json moved to the shared @quran/data package; audio and
+// timings remain web-served, reciter-specific assets under apps/web.
+const QURAN_DATA = path.join(ROOT, '..', '..', 'packages', 'quran-data');
 const AUDIO_DIR = path.join(ROOT, 'public', 'audio', RECITER_SLUG);
 const TIMINGS_DIR = path.join(ROOT, 'public', 'timings', RECITER_SLUG);
 
@@ -181,7 +184,7 @@ async function fetchSurahMeta(): Promise<Omit<SurahMeta, 'available'>[]> {
 
 /** A surah is available once its text and timings files actually exist on disk. */
 async function isSurahAvailable(surah: number): Promise<boolean> {
-  const textPath = path.join(DATA, 'text', `${surah}.json`);
+  const textPath = path.join(QURAN_DATA, 'text', `${surah}.json`);
   const timingsPath = path.join(TIMINGS_DIR, `${surah}.json`);
   return (await exists(textPath)) && (await exists(timingsPath));
 }
@@ -331,7 +334,7 @@ async function buildSurah(surah: number): Promise<SurahReport> {
     ayahs: ayahTimings,
   };
 
-  await writeFile(path.join(DATA, 'text', `${surah}.json`), JSON.stringify(text));
+  await writeFile(path.join(QURAN_DATA, 'text', `${surah}.json`), JSON.stringify(text));
   await writeFile(
     path.join(TIMINGS_DIR, `${surah}.json`),
     JSON.stringify(timings),
@@ -359,7 +362,7 @@ async function main() {
   const failedSurahs: number[] = [];
   console.log(`Fetching surahs: ${surahs.join(', ')}`);
 
-  await mkdir(path.join(DATA, 'text'), { recursive: true });
+  await mkdir(path.join(QURAN_DATA, 'text'), { recursive: true });
   await mkdir(TIMINGS_DIR, { recursive: true });
   await mkdir(AUDIO_DIR, { recursive: true });
 
@@ -387,7 +390,7 @@ async function main() {
     const withAvailability: SurahMeta[] = await Promise.all(
       meta.map(async m => ({ ...m, available: await isSurahAvailable(m.id) })),
     );
-    await writeFile(path.join(DATA, 'surahs.json'), JSON.stringify(withAvailability, null, 2));
+    await writeFile(path.join(QURAN_DATA, 'surahs.json'), JSON.stringify(withAvailability, null, 2));
 
     const sortedReports = [...reportsById.values()].sort((a, b) => a.surah - b.surah);
     await writeFile(

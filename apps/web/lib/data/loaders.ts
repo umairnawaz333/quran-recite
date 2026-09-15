@@ -12,14 +12,17 @@ export { getSurahList, getSurahMeta, getAvailableSurahIds } from './surahIndex';
  * only ever called from server components during the static export, so reading
  * the file directly at build time is both correct and simplest.
  */
-function readJson<T>(...segments: string[]): T {
-  return JSON.parse(
-    readFileSync(path.join(process.cwd(), 'data', ...segments), 'utf8'),
-  ) as T;
+function textPath(id: number): string {
+  // The web builds from apps/web (Vercel's rootDirectory, and the root npm
+  // script delegates into this workspace), so cwd is deterministic. Kept
+  // cwd-relative rather than import.meta-relative because this module is
+  // compiled by Next for server components, where the emitted module format
+  // is not guaranteed to provide import.meta.dirname.
+  return path.join(process.cwd(), '..', '..', 'packages', 'quran-data', 'text', `${id}.json`);
 }
 
 export function getSurahText(id: number): SurahText {
-  return readJson<SurahText>('text', `${id}.json`);
+  return JSON.parse(readFileSync(textPath(id), 'utf8')) as SurahText;
 }
 
 export function getSurahTimings(id: number): SurahTimings {
