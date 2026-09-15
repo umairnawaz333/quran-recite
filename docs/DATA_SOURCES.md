@@ -6,7 +6,7 @@ Every external dataset used by this project, with its licence and how it is used
 
 - **Source:** Quran.com API v4 (`api.quran.com/api/v4`)
 - **Fields:** `text_uthmani_tajweed`, `text_indopak`
-- **Use:** fetched once at build time, committed to `data/text/`
+- **Use:** fetched once at build time, committed to `apps/web/data/text/`
 - **Underlying text:** Tanzil / King Fahd Complex Uthmani and IndoPak scripts
 - **Runtime dependency:** none
 
@@ -15,10 +15,11 @@ Every external dataset used by this project, with its licence and how it is used
 - **Source:** Quran.com API v4, `/recitations/2/by_chapter/{n}?fields=segments`
 - **Format:** `[startWordIndex, endWordIndexExclusive, startMs, endMs]`
 - **Use:** normalized at build time into one timing per word, committed to
-  `public/timings/abdulbasit-murattal/` (moved out of `data/` because the
-  client fetches these files at runtime — the persistent player must be able
-  to advance through, and highlight, a surah whose page is not currently
-  mounted, which a build-time-only `data/` file cannot serve)
+  `apps/web/public/timings/abdulbasit-murattal/` (moved out of
+  `apps/web/data/` because the client fetches these files at runtime — the
+  persistent player must be able to advance through, and highlight, a surah
+  whose page is not currently mounted, which a build-time-only `data/` file
+  cannot serve)
 - **Runtime dependency:** fetched by the browser from `/timings/<reciter>/<surah>.json`
 
 ## Audio
@@ -27,8 +28,8 @@ Every external dataset used by this project, with its licence and how it is used
   id 2). The Murattal recording was chosen over this reciter's Mujawwad
   recording because its word-timing segment data is materially cleaner.
 - **Source:** `verses.quran.com`, downloaded at build time by
-  `scripts/fetch-quran-data.ts`
-- **Hosting:** self-hosted from `public/audio/abdulbasit-murattal/`, copied
+  `apps/web/scripts/fetch-quran-data.ts`
+- **Hosting:** self-hosted from `apps/web/public/audio/abdulbasit-murattal/`, copied
   byte-for-byte. Nothing is hotlinked; the running app never contacts
   `quran.com` or any other third party.
 - **Status: freely available recitation, redistributed for non-commercial use.**
@@ -50,9 +51,10 @@ Every external dataset used by this project, with its licence and how it is used
 | Amiri Quran | Uthmani/tajweed rendering | SIL Open Font License 1.1 |
 | Noto Naskh Arabic | IndoPak rendering | SIL Open Font License 1.1 |
 
-Both files were downloaded from Google Fonts by `scripts/fetch-fonts.ts` and
-saved to `public/fonts/`. The licence above was verified directly, not
-assumed: each file's embedded `name` table records a License URL
+Both files were downloaded from Google Fonts by
+`apps/web/scripts/fetch-fonts.ts` and saved to `apps/web/public/fonts/`. The
+licence above was verified directly, not assumed: each file's embedded
+`name` table records a License URL
 (`nameID` 14) of `https://openfontlicense.org`, the canonical SIL Open Font
 License reference, alongside a copyright string naming the Amiri Project
 Authors and the Noto Project Authors respectively. The OFL permits embedding
