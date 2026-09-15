@@ -9,7 +9,9 @@
     "build": "npm run build --workspace @quran/web",
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "npm run test:e2e --workspace @quran/web",
-    "typecheck": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.test.json",
+    "android": "npm run android --workspace @quran/mobile",
+    "mobile:start": "npm run start --workspace @quran/mobile",
+    "typecheck": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.test.json && tsc --noEmit -p apps/mobile/tsconfig.json",
     "fetch:data": "npm run fetch:data --workspace @quran/web",
     "fetch:fonts": "npm run fetch:fonts --workspace @quran/web"
   },
