@@ -10,12 +10,23 @@ AGENTS.md
 CLAUDE.md
 .vercel
 
-# Audio is served from per-surah GitHub Releases (see scripts/upload-audio.sh
-# and NEXT_PUBLIC_AUDIO_BASE_URL). 6,236 files / 2.5 GB does not belong in a
-# git clone. Fetch it locally with: npm run fetch:data -- --surahs=1-114
-public/audio
+# Audio is served from per-surah GitHub Releases (see
+# apps/web/scripts/upload-audio.sh and NEXT_PUBLIC_AUDIO_BASE_URL). 6,236
+# files / 2.5 GB does not belong in a git clone. Fetch it locally with:
+# npm run fetch:data -- --surahs=1-114
+#
+# This pattern contains a non-trailing slash, so git anchors it to this
+# .gitignore's own directory (the repo root) rather than matching at any
+# depth — it must name the app's actual path since the web app now lives in
+# apps/web, not the repo root.
+apps/web/public/audio
 
 
 # Playwright artifacts from `npm run test:e2e`
 test-results/
 playwright-report/
+
+# Next regenerates this on every build/dev/typecheck. apps/web/tsconfig.json
+# already includes .next/types/** and .next/dev/types/**, so the committed
+# copy has no independent meaning — it only dirtied `git status` after builds.
+next-env.d.ts
