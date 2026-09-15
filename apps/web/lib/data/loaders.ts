@@ -13,11 +13,11 @@ export { getSurahList, getSurahMeta, getAvailableSurahIds } from './surahIndex';
  * the file directly at build time is both correct and simplest.
  */
 function textPath(id: number): string {
-  // The web builds from apps/web (Vercel's rootDirectory, and the root npm
-  // script delegates into this workspace), so cwd is deterministic. Kept
-  // cwd-relative rather than import.meta-relative because this module is
-  // compiled by Next for server components, where the emitted module format
-  // is not guaranteed to provide import.meta.dirname.
+  // The root `npm run build` script delegates into this workspace, so cwd is
+  // apps/web. Kept cwd-relative rather than import.meta-relative because this
+  // module is compiled by Next for server components, where the emitted
+  // module format is not guaranteed to provide import.meta.dirname. A deploy
+  // configured with a different root directory would not find the data.
   return path.join(process.cwd(), '..', '..', 'packages', 'quran-data', 'text', `${id}.json`);
 }
 
