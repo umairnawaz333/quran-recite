@@ -5,9 +5,13 @@
  * there first and mirror it here.
  *
  * `custom-alef-maksora` is deliberately absent: it is a glyph substitution,
- * not a colour, and it only ever appears as the INNER rule of a nested pair,
- * so the outer rule supplies the colour. That is why a run's rule stack is
- * ordered outermost-first.
+ * not a colour. The web renders this markup verbatim via
+ * `dangerouslySetInnerHTML`, so for a nested pair ordinary CSS cascade
+ * applies: an element's own `color` beats inheritance from an ancestor, which
+ * means the INNERMOST coloured rule is what actually renders. That happens to
+ * look like "outer wins" for three of the four real nested combinations only
+ * because their inner rule (`custom-alef-maksora`) has no colour of its own —
+ * it is not a rule about outer rules taking precedence. See `colourFor`.
  */
 export const RULE_COLOURS: Record<string, string> = {
   madda_necessary: '#9b1c1c',
@@ -31,12 +35,18 @@ export const RULE_COLOURS: Record<string, string> = {
 };
 
 /**
- * The colour for a run, given its rule stack. The outermost rule that has a
- * colour wins; a run whose only rule is presentational inherits none.
+ * The colour for a run, given its rule stack (outermost-first, as
+ * `parseTajweed` returns it).
+ *
+ * Innermost-first, because that is what CSS does: an element's own `color`
+ * beats inheritance from an ancestor, so for a nested pair where both rules
+ * are coloured the inner one is what the web actually renders. Outermost
+ * still wins whenever the inner rule is presentational and uncoloured, which
+ * is the common case (`custom-alef-maksora`).
  */
 export function colourFor(rules: string[]): string | undefined {
-  for (const rule of rules) {
-    const colour = RULE_COLOURS[rule];
+  for (let i = rules.length - 1; i >= 0; i--) {
+    const colour = RULE_COLOURS[rules[i]];
     if (colour) return colour;
   }
   return undefined;

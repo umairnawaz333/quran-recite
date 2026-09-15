@@ -14,13 +14,15 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "4.1.10"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "generate:text": "node scripts/generate-text-index.mjs"
+    "generate:text": "node scripts/generate-text-index.mjs",
+    "test": "vitest run"
   }
 }
