@@ -55,7 +55,7 @@ jobs:
 
       - name: Type check
         if: ${{ !inputs.skip_tests }}
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
@@ -65,6 +65,7 @@ jobs:
       # errors with "Could not retrieve Project Settings". Writing the link
       # file it actually reads is deterministic.
       - name: Link the Vercel project
+        working-directory: apps/web
         run: |
           mkdir -p .vercel
           cat > .vercel/project.json <<JSON
@@ -77,6 +78,7 @@ jobs:
       # Pulls the project's build settings and environment from Vercel so the
       # build here matches the build Vercel would have run itself.
       - name: Pull Vercel environment
+        working-directory: apps/web
         run: |
           vercel pull --yes \
             --environment=${{ inputs.target }} \
@@ -92,6 +94,7 @@ jobs:
       # the same commit that just passed.
       - name: Deploy
         id: deploy
+        working-directory: apps/web
         run: |
           url=$(vercel deploy \
             ${{ inputs.target == 'production' && '--prod' || '' }} \
@@ -126,7 +129,7 @@ jobs:
           # the build actually baked in — checking a fixed path would fail the
           # deploy the moment the audio moves, and pass while pointing at an
           # origin the app no longer uses.
-          env_file=.vercel/.env.production.local
+          env_file=apps/web/.vercel/.env.production.local
           base=$(grep -h '^NEXT_PUBLIC_AUDIO_BASE_URL=' "$env_file" 2>/dev/null \
                  | head -1 | cut -d= -f2- | tr -d '"'"'"'')
 
@@ -152,6 +155,7 @@ jobs:
       # broken site up while someone reads the logs.
       - name: Roll back a failed production deploy
         if: failure() && inputs.target == 'production' && steps.deploy.outcome == 'success'
+        working-directory: apps/web
         run: |
           echo "::warning::Verification failed — rolling back to the previous production deployment"
           vercel rollback --yes --token=${{ secrets.VERCEL_TOKEN }}

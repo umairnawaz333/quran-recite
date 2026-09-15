@@ -7,7 +7,3 @@
 # Remove this line to serve audio from the deployment again (only viable for a
 # small subset of surahs).
 public/audio
-
-# Never part of a deployment.
-.superpowers
-docs
