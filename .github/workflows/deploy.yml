@@ -60,6 +60,29 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
+      # The app lives in apps/web, so the Vercel project's rootDirectory must
+      # say so — it is what tells the cloud build where to install and build.
+      # That setting lives in the project, not the repo, so nothing in a diff
+      # reveals it and a wrong value fails only at deploy time. Read it and
+      # refuse up front rather than discovering it from a broken deployment.
+      - name: Check the Vercel project's root directory
+        run: |
+          expected=apps/web
+          actual=$(curl -sf \
+            -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("rootDirectory") or "")')
+
+          echo "rootDirectory: '${actual}' (expected '${expected}')"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::The Vercel project's rootDirectory is '${actual}', not '${expected}'."
+            echo "::error::Set it in Project Settings -> Build and Deployment -> Root Directory,"
+            echo "::error::or with: curl -X PATCH -H \"Authorization: Bearer \$VERCEL_TOKEN\" \\"
+            echo "::error::  -H 'Content-Type: application/json' -d '{\"rootDirectory\":\"apps/web\"}' \\"
+            echo "::error::  \"https://api.vercel.com/v9/projects/\$VERCEL_PROJECT_ID?teamId=\$VERCEL_ORG_ID\""
+            exit 1
+          fi
+
       # The CLI does not reliably pick up the project link from the
       # VERCEL_ORG_ID / VERCEL_PROJECT_ID environment variables alone — it
       # errors with "Could not retrieve Project Settings". Writing the link
@@ -156,6 +179,53 @@ jobs:
           font=$(curl -s -o /dev/null -w '%{http_code}' "$url/fonts/amiri-quran.woff2")
           echo "font: $font"
           [ "$font" = "200" ] || { echo "::error::Font returned $font"; exit 1; }
+
+          # resolveAudioUrl runs in the browser at play time, so
+          # NEXT_PUBLIC_AUDIO_BASE_URL has to be inlined into a client chunk —
+          # being present during the prerender is not enough. That inlining is
+          # newly load-bearing now that resolveAudioUrl lives in @quran/core
+          # and reaches the bundle through transpilePackages. Without this
+          # check a deploy where it silently failed to inline would still pass
+          # every assertion above, and audio would be broken for every user.
+          if [ -n "$base" ]; then
+            # Match the whole configured base, not just its host, and match it
+            # literally. Matching the host alone does not discriminate: a
+            # bundled dependency's licence URL already puts "github.com" in a
+            # chunk, so that check passed on a build where the variable was
+            # never set — it would have green-lit exactly the broken deploy it
+            # exists to catch. Verified locally against both builds.
+            needle="${base%/}"
+            # Match only path-safe characters, not [^"]*: the chunk paths also
+            # appear inside Next's flight payload where quoting differs, and a
+            # greedy negated-quote class runs past the filename and yields a
+            # mangled match that silently misses the chunk we need.
+            chunks=$(curl -s "$url/" \
+              | grep -o '/_next/static/chunks/[A-Za-z0-9._-]*\.js' | sort -u)
+
+            if [ -z "$chunks" ]; then
+              echo "::error::Found no client chunks on the home page"
+              exit 1
+            fi
+
+            # Read line by line rather than iterating an unquoted expansion,
+            # which depends on word-splitting the shell may not do.
+            found=no
+            while IFS= read -r chunk; do
+              [ -n "$chunk" ] || continue
+              if curl -s "$url$chunk" | grep -Fq "$needle"; then
+                echo "audio base inlined in: $chunk"
+                found=yes
+                break
+              fi
+            done <<CHUNKS
+          $chunks
+          CHUNKS
+
+            [ "$found" = "yes" ] || {
+              echo "::error::'$needle' appears in no client chunk — the audio base URL did not inline, so audio playback would fail in the browser"
+              exit 1
+            }
+          fi
 
       # If a production deploy went out but failed verification, put the
       # previous working deployment back immediately rather than leaving a
