@@ -1,21 +1,19 @@
+import { useState } from 'react';
+import { SafeAreaView, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
-import { countBaseLetters } from '@quran/core';
+import { SurahListScreen } from './src/screens/SurahListScreen';
 
 export default function App() {
-  // Proves @quran/core resolves and runs under Metro, which is the whole
-  // point of this task. Replaced by the surah list in the next task.
-  const letters = countBaseLetters('بِسْمِ ٱللَّهِ');
+  const [surahId, setSurahId] = useState<number | null>(null);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>@quran/core reachable — {letters} base letters</Text>
+    <SafeAreaView style={styles.root}>
+      {surahId === null
+        ? <SurahListScreen onSelect={setSurahId} />
+        : null /* ReaderScreen arrives in Task 6 */}
       <StatusBar style="auto" />
-    </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  text: { fontSize: 16 },
-});
+const styles = StyleSheet.create({ root: { flex: 1, backgroundColor: '#fff' } });
