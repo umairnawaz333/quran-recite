@@ -55,10 +55,11 @@
  * colour for any element that does.
  */
 rule.madda_necessary    { color: #9b1c1c; }
-rule.madda_obligatory   { color: #b45309; }
+rule.madda_obligatory_mottasel { color: #b45309; }
+rule.madda_obligatory_monfasel { color: #b45309; }
 rule.madda_permissible  { color: #b45309; }
 rule.madda_normal       { color: #1d4ed8; }
-rule.qalqalah           { color: #a30006; }
+rule.qalaqah            { color: #a30006; }
 rule.ikhafa             { color: #6b21a8; }
 rule.ikhafa_shafawi     { color: #6b21a8; }
 rule.idgham_ghunnah     { color: #0f6b00; }
