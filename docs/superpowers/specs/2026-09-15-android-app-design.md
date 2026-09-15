@@ -48,20 +48,20 @@ below is chosen so adding one is a download, not a migration.
 
 ## 3. Two stages
 
-One plan, built in two stages, because one unknown sits underneath everything
-else (§7).
+One plan, built in two stages, because the audio foundation has to hold before
+anything is built on it (§7).
 
 **Stage 1 — prove the loop.** Surah list, reader, streaming playback, word
 highlighting, both scripts. Audio streams from GitHub Releases. No offline, no
 settings. Done when a word highlights in time with the recitation on the
-emulator.
+emulator, and playback crosses several ayah boundaries without an audible gap.
 
 **Stage 2 — build on it.** Offline downloads, settings, theme, version and
 credit.
 
-If Stage 1's position-sync approach fails, it fails before a download manager
-has been built on top of it. That ordering is the only reason to have stages
-at all; the scope is identical either way.
+If gapless ayah sequencing turns out to need rework, it surfaces before a
+2.5 GB download manager has been built on top of it. That ordering is the only
+reason to have stages at all; the scope is identical either way.
 
 ---
 
@@ -80,9 +80,11 @@ has the Android SDK, Java 17, Android Studio and `eas-cli`, so no cloud build
 is needed to iterate. EAS Build remains how a distributable artifact gets
 produced later; it is not needed for development and is not part of this spec.
 
-**Expo Go cannot be used.** Background audio needs a native module, which
-means a development build. This is a consequence of §6's audio decision, not a
-preference.
+**Expo Go cannot be used.** Background audio is enabled by a config plugin that
+changes the Android manifest and declares a foreground service, which Expo Go's
+prebuilt binary cannot carry. A development build is therefore required — which
+the machine can produce locally (§4 above), so this costs iteration speed
+nothing.
 
 **Metro must see the workspace.** `apps/mobile/metro.config.js` extends
 `expo/metro-config` with the repository root in `watchFolders` and the root
@@ -125,47 +127,69 @@ audio (§9), so an offline surah needs no network for either.
 
 ## 6. Audio
 
-**`react-native-track-player`.** Background playback, lock-screen and
-notification controls, and a native queue. For a recitation app this is not a
-nice-to-have: people listen with the screen locked. It is a native module, so
-it requires the development build named in §4.
+**`expo-audio`.** MIT-licensed, first-party to Expo, and a New Architecture
+native module. It provides Android background playback and lock-screen /
+notification controls through its config plugin.
 
-Its native queue may make the web app's double-buffered `AyahPlaylist`
-unnecessary rather than something to reimplement — one ayah per track, queued,
-with the library handling gapless advance. Whether that holds is for the plan
-to determine against the real library; the spec does not assume it either way.
+`react-native-track-player` was the original choice and was rejected on
+evidence:
+
+- **V5 is commercially licensed** — "Personal and educational use remains
+  free; commercial use requires a paid license." This project's roadmap
+  includes ads and in-app purchases, which is commercial use. A paid licence
+  for the audio layer is not a cost worth taking on when a free first-party
+  module does the job.
+- **V4 is Apache-2.0 but old-architecture.** It publishes no `codegenConfig`,
+  so it is not a TurboModule, and Expo SDK 57 cannot be expected to run it.
+  V5 is the version with New Architecture support, and V5 is the licensed one.
+
+What is given up is V4/V5's native queue. Ayah-to-ayah sequencing is therefore
+this app's job — see §7 — which is the same position the web app is in, and
+its design is already proven.
+
+**Configuration.** Background playback is enabled through the config plugin
+(`enableBackgroundPlayback`), and the audio mode is set with
+`shouldPlayInBackground`. One Android-specific detail is load-bearing and easy
+to miss: **lock-screen controls must be activated explicitly, or Android stops
+the audio after roughly three minutes in the background.** That is an OS
+limitation, not a library bug, and it means the now-playing metadata call is
+required for correctness, not just polish.
 
 Exact package versions are pinned during implementation, after reading the
 installed documentation. This spec names libraries, not versions.
 
 ---
 
-## 7. The real risk: position at frame rate
+## 7. Ayah sequencing, and why position is no longer a risk
 
 `SyncEngine.attach(getTimeMs, words)` calls `getTimeMs()` on every animation
-frame. That is the whole reason word highlighting is accurate — the web app
-deliberately rejected the `timeupdate` event as too coarse at roughly 4 Hz.
+frame. That is why the web app's highlighting is accurate — it deliberately
+rejected the `timeupdate` event as too coarse at roughly 4 Hz.
 
-`react-native-track-player` reports position through an **asynchronous** call
-on a periodic interval, by default around 250 ms. Passed straight into
-`SyncEngine`, that reproduces exactly the defect the web app avoided.
+**`expo-audio` exposes `currentTime` as a synchronously-readable property**, so
+`getTimeMs` is `() => player.currentTime * 1000` and the engine is fed exactly
+as it is on the web. No sampling, no extrapolation, no drift correction. An
+earlier draft of this spec treated frame-rate position as the project's main
+unknown; that was a consequence of the rejected library reporting position
+asynchronously on a ~250 ms interval, and it does not apply here.
 
-**The approach:** sample the track player's reported position periodically, and
-between samples extrapolate using wall-clock time while playback is running.
-`getTimeMs()` then returns `lastSample + (now - lastSampleAt)` while playing,
-and the last sample verbatim while paused. Each new sample corrects accumulated
-drift.
+What remains is **sequencing**. The recitation is one file per ayah (6,236
+files, `SSSAAA.mp3`), so something must advance from one ayah to the next
+without an audible gap. Without a native queue, this app does it the way the
+web app does: two player instances, with the next ayah preloaded while the
+current one plays, swapping on completion. `playbackStatusUpdate` reports
+`didJustFinish`, which is the trigger.
 
-This is the one component with genuine unknowns — how far it drifts, how it
-behaves across an ayah boundary, and whether a seek invalidates the
-extrapolation before the next sample lands. It must be built and proven on the
-emulator first, and it must be unit-testable independently of the audio
-library: the extrapolator takes samples in and produces a time, so it can be
-tested with injected samples and a fake clock, with no device involved.
+The web's `AyahPlaylist` is the reference design and it is worth reading before
+reimplementing, because its complexity is all hard-won: it handles `play()`
+rejections at every call site, distinguishes a retryable `AbortError` from a
+terminal failure, and guards against a stale rejection from a superseded ayah
+resetting live state. A first implementation that ignores those cases will
+appear to work and then fail intermittently, which is precisely the history the
+web version has.
 
-If extrapolation proves unworkable, the fallback is to raise the library's
-update interval and accept coarser highlighting — a visible quality loss, and a
-decision to bring back to the user rather than make silently.
+Sequencing is the piece with genuine unknowns here, so Stage 1 is not done
+until playback crosses several ayah boundaries cleanly on the emulator.
 
 ---
 
@@ -324,11 +348,12 @@ audio source resolver for both the downloaded and not-downloaded cases; the
 URL seam for web-default and explicit-base configuration. The existing suite
 must keep passing — the seams are additive, and web behaviour is unchanged.
 
-**Unit, in `apps/mobile`:** the position extrapolator, driven by injected
-samples and a fake clock, covering playing, paused, a seek arriving before the
-next sample, and drift correction when a sample disagrees with the
-extrapolation. This is the risk from §7 and it is the one piece that must be
-tested without a device.
+**Unit, in `apps/mobile`:** the ayah sequencer, driven by a fake player, so the
+cases the web app learned the hard way are covered without a device — a
+`play()` rejection that is retryable versus terminal, a stale completion from a
+superseded ayah arriving after the user skipped, and advancing past the final
+ayah. This is the risk from §7 and it is the piece that must not be verified
+only by listening to it.
 
 **Manual, on the emulator:** playback, highlighting accuracy, background and
 lock-screen controls, download with progress, cancellation mid-download,
@@ -347,8 +372,9 @@ testing in this project, and that is a known gap rather than an oversight.
 
 | Risk | Mitigation |
 |---|---|
-| Position sampling too coarse for word sync | §7 — extrapolate against wall-clock, prove it on the emulator in Stage 1, before anything is built on it |
-| `track-player`'s queue does not advance gaplessly between ayahs | Determined against the real library in Stage 1; the web's double-buffering is the known-working fallback design |
+| Gapless ayah-to-ayah sequencing | §7 — mirror the web's proven double-buffered design rather than reinventing it, unit-test the failure cases, and prove it across several boundaries on the emulator in Stage 1 |
+| An audio library that is free today becoming paid, or dropping Android support | `expo-audio` is MIT and first-party to the framework this app is built on, which is the cheapest available insurance; the audio layer is reached only through the sequencer, so replacing it is one module |
+| Android stopping background audio after ~3 minutes | Lock-screen controls activated explicitly with now-playing metadata (§6) — required for correctness, and a manual test case on the emulator |
 | 6,116 words in one surah | Virtualised list plus per-word subscription (§8), so a highlight change touches two components |
 | A 222 MB download interrupted mid-way | Resumable downloads, and state derived from the filesystem so a partial download can never present as complete |
 | "Download all" surprising the user with 2.5 GB | Size shown from the build-time manifest, behind an explicit confirmation |
