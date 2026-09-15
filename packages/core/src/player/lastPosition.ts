@@ -9,8 +9,8 @@ export interface LastPosition {
  * Exported so it can be tested directly with real `NaN`/`Infinity` values.
  * Those values can never survive a `JSON.stringify`/`JSON.parse` round trip
  * (JSON has no representation for them — both serialise to `null`), so the
- * `Number.isFinite` branches below are unreachable via the localStorage-based
- * public API. Testing them requires calling this function directly.
+ * `Number.isFinite` branches below are unreachable via the persisted-storage-
+ * backed public API. Testing them requires calling this function directly.
  */
 export function isValidPosition(value: unknown): value is LastPosition {
   if (typeof value !== 'object' || value === null) return false;

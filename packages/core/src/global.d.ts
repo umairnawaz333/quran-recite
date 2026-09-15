@@ -2,7 +2,7 @@
  * Ambient globals this package's runtime code relies on.
  *
  * This package's tsconfig deliberately omits the "dom" lib so that a stray
- * reference to a DOM/browser global (document, window, localStorage, ...)
+ * reference to a DOM/browser global (document, window, browser storage, ...)
  * fails to compile — see __tests__/platform-free.test.ts. `process.env`,
  * `fetch`, and `requestAnimationFrame`/`cancelAnimationFrame` are not DOM
  * globals in that sense: they are provided by every platform this package
