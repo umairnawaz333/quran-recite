@@ -62,8 +62,17 @@ export function loadTimings(surahId: number): Promise<SurahTimings> {
   return request;
 }
 
-/** Test-only: drops all memoised state. */
+/**
+ * Test-only: drops all memoised state *and* configuration — the cache, any
+ * in-flight requests, the configured base URL, and the configured store.
+ * Configuration has to go too: `configureTimings`'s `store` can only be set,
+ * never unset (`if (opts.store !== undefined)`), so without this a store
+ * configured in one test would otherwise leak into every test that runs
+ * after it.
+ */
 export function resetTimingsCache(): void {
   cache.clear();
   inFlight.clear();
+  baseUrl = '';
+  store = undefined;
 }

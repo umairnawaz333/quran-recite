@@ -7,19 +7,22 @@
  * `/audio/abdulbasit-murattal/001001.mp3`; this function decides what that
  * path actually resolves to.
  *
- * With NEXT_PUBLIC_AUDIO_BASE_URL set, the file is fetched from a per-surah
- * GitHub Release. GitHub caps a release at 1000 assets and the recitation has
- * 6,236 files, so the audio is sharded one release per surah, tagged
- * `audio-001` … `audio-114`.
+ * With a base configured via `configureAudioBase`, the file is fetched from a
+ * per-surah GitHub Release. GitHub caps a release at 1000 assets and the
+ * recitation has 6,236 files, so the audio is sharded one release per surah,
+ * tagged `audio-001` … `audio-114`.
  *
  * Filenames are `SSSAAA.mp3` — 3-digit surah, 3-digit ayah — so the shard is
  * derivable from the filename itself and needs no lookup table:
  *
  *   /audio/abdulbasit-murattal/002255.mp3
- *     -> {BASE}/audio-002/002255.mp3
+ *     -> {base}/audio-002/002255.mp3
  *
- * Without the variable, paths stay root-relative and are served from
+ * With no base configured, paths stay root-relative and are served from
  * `public/audio`, so a local checkout with fetched audio needs no config.
+ * Each host decides what to configure and how — the web passes in
+ * `NEXT_PUBLIC_AUDIO_BASE_URL` from `PlayerProvider.tsx`; this package has no
+ * opinion on environment variables or build-time substitution.
  */
 
 /**

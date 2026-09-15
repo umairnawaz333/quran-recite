@@ -12,7 +12,7 @@ const fake = (surah: number): SurahTimings => ({
 
 describe('timingsLoader', () => {
   beforeEach(() => { resetTimingsCache(); });
-  afterEach(() => { vi.restoreAllMocks(); });
+  afterEach(() => { vi.restoreAllMocks(); resetTimingsCache(); });
 
   it('fetches a surah and returns its timings', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => fake(2) });
@@ -61,23 +61,19 @@ describe('timingsLoader', () => {
     await expect(loadTimings(9)).resolves.toMatchObject({ surah: 9 });
   });
 
-  // Store reads/writes are keyed to surah ids this describe block does not
-  // otherwise use, and the store returns null for anything else, so it stays
-  // harmless to the other cases even though `configureTimings` has no way to
-  // un-set it once configured.
   it('consults a configured store before the network and short-circuits the fetch', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
     const store: TimingsStore = {
-      read: vi.fn(async surahId => (surahId === 20 ? fake(20) : null)),
+      read: vi.fn(async () => fake(6)),
       write: vi.fn(async () => {}),
     };
     configureTimings({ store });
 
-    const got = await loadTimings(20);
-    expect(got.surah).toBe(20);
-    expect(store.read).toHaveBeenCalledWith(20);
+    const got = await loadTimings(6);
+    expect(got.surah).toBe(6);
+    expect(store.read).toHaveBeenCalledWith(6);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -86,12 +82,12 @@ describe('timingsLoader', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const store: TimingsStore = {
-      read: vi.fn(async surahId => (surahId === 20 ? fake(20) : null)),
+      read: vi.fn(async () => null),
       write: vi.fn(async () => {}),
     };
     configureTimings({ store });
 
-    await expect(loadTimings(21)).rejects.toThrow();
+    await expect(loadTimings(7)).rejects.toThrow();
     expect(store.write).not.toHaveBeenCalled();
   });
 });
