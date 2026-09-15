@@ -1028,17 +1028,43 @@ export const RULE_COLOURS: Record<string, string> = {
 };
 
 /**
- * The colour for a run, given its rule stack. The outermost rule that has a
- * colour wins; a run whose only rule is presentational inherits none.
+ * The colour for a run, given its rule stack, innermost-first.
+ *
+ * Innermost-first because that is what CSS does, and the web is the source of
+ * truth: it injects the nested markup verbatim, so an element's own `color`
+ * beats inheritance from an ancestor. For `madda_obligatory_monfasel > slnt`
+ * (29 words, e.g. 2:278:10) both rules are coloured and the web renders the
+ * inner grey, not the outer orange. Outermost still wins whenever the inner
+ * rule is presentational and uncoloured — `custom-alef-maksora`, which is the
+ * other three nested combinations and the common case.
+ *
+ * An earlier draft of this plan iterated outermost-first and was wrong for
+ * exactly those 29 words. Spot-checking a `custom-alef-maksora` word cannot
+ * catch it, because outer-first and inner-first agree there.
  */
 export function colourFor(rules: string[]): string | undefined {
-  for (const rule of rules) {
-    const colour = RULE_COLOURS[rule];
+  for (let i = rules.length - 1; i >= 0; i--) {
+    const colour = RULE_COLOURS[rules[i]];
     if (colour) return colour;
   }
   return undefined;
 }
 ```
+
+Then pin the precedence with a unit test, because the palette guard in Step 1b
+checks selector *presence* only and cannot catch a precedence error. Add
+`apps/mobile/__tests__/tajweedColours.test.ts` asserting `colourFor` against
+all four real nested combinations:
+
+| stack | expected |
+|---|---|
+| `['madda_normal', 'custom-alef-maksora']` | `#1d4ed8` — inner uncoloured, outer wins |
+| `['madda_obligatory_mottasel', 'custom-alef-maksora']` | `#b45309` |
+| `['madda_permissible', 'custom-alef-maksora']` | `#b45309` |
+| `['madda_obligatory_monfasel', 'slnt']` | `#6b7280` — inner wins |
+
+plus a single-rule case and an empty stack returning `undefined`. Verify it can
+fail by restoring the outermost-first loop and watching the last row break.
 
 - [ ] **Step 2: Render one word's runs**
 
