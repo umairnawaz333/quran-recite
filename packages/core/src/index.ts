@@ -17,8 +17,7 @@ export type {
 
 export { Timeline } from './sync/timeline';
 export type { TimelinePosition } from './sync/timeline';
-export { SyncEngine, findActiveWordIndex } from './sync/engine';
-export type { ActiveWordListener, Unsubscribe } from './sync/engine';
+export { findActiveWordIndex } from './sync/engine';
 
 export { resolveAudioUrl } from './data/audioUrl';
 export type {

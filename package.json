@@ -1,40 +1,19 @@
 {
-  "name": "quran-word-sync",
+  "name": "quran-recite",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "fetch:data": "tsx scripts/fetch-quran-data.ts",
-    "fetch:fonts": "tsx scripts/fetch-fonts.ts"
-  },
-  "dependencies": {
-    "next": "16.3.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "dev": "npm run dev --workspace @quran/web",
+    "build": "npm run build --workspace @quran/web",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace @quran/web",
+    "typecheck": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.json",
+    "fetch:data": "npm run fetch:data --workspace @quran/web",
+    "fetch:fonts": "npm run fetch:fonts --workspace @quran/web"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "@tailwindcss/postcss": "4.3.3",
-    "@testing-library/dom": "10.4.1",
-    "@testing-library/jest-dom": "7.0.0",
-    "@testing-library/react": "16.3.2",
-    "@testing-library/user-event": "14.6.3",
-    "@types/node": "26.2.0",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
-    "@vitejs/plugin-react": "6.0.5",
-    "jsdom": "30.0.1",
-    "playwright": "^1.62.1",
-    "tailwindcss": "4.3.3",
-    "tsx": "4.23.11",
-    "typescript": "5.9.3",
-    "vitest": "4.1.10"
+    "typescript": "5.9.3"
   }
 }

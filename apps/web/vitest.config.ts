@@ -18,7 +18,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, '.'),
-      '@quran/core': path.resolve(import.meta.dirname, 'packages/core/src/index.ts'),
+      '@quran/core': path.resolve(import.meta.dirname, '../../packages/core/src/index.ts'),
     },
   },
 });

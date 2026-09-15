@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AyahPlaylist } from '@/lib/audio/playlist';
-import {
-  SyncEngine, Timeline, loadTimings, primeTimings as primeTimingsCache,
-} from '@quran/core';
+import { Timeline, loadTimings, primeTimings as primeTimingsCache } from '@quran/core';
+import { SyncEngine } from '@/lib/sync/engine';
 import { readLastPosition, writeLastPosition } from '@/lib/player/lastPosition';
 import { getSurahList } from '@/lib/data/surahIndex';
 import { PlayerContext, type PlayerState } from './usePlayer';
