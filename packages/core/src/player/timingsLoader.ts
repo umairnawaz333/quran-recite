@@ -5,6 +5,24 @@ const RECITER = 'abdulbasit-murattal';
 const cache = new Map<number, SurahTimings>();
 const inFlight = new Map<number, Promise<SurahTimings>>();
 
+export interface TimingsStore {
+  read(surahId: number): Promise<SurahTimings | null>;
+  write(surahId: number, timings: SurahTimings): Promise<void>;
+}
+
+let baseUrl = '';
+let store: TimingsStore | undefined;
+
+/**
+ * Supplies the base every timings request is resolved against, plus an
+ * optional persistent store consulted before the network. Left unconfigured,
+ * the web keeps its historical root-relative request.
+ */
+export function configureTimings(opts: { baseUrl?: string; store?: TimingsStore }): void {
+  if (opts.baseUrl !== undefined) baseUrl = opts.baseUrl.replace(/\/+$/, '');
+  if (opts.store !== undefined) store = opts.store;
+}
+
 /**
  * A surah page already has its timings from the server render. Handing them
  * over avoids a redundant fetch when the user presses play on that page.
@@ -21,16 +39,16 @@ export function loadTimings(surahId: number): Promise<SurahTimings> {
   const existing = inFlight.get(surahId);
   if (existing) return existing;
 
-  // This URL is root-relative, which only resolves against a document
-  // origin — it works in a browser but React Native's fetch requires an
-  // absolute URL and will reject this. A platform-neutral base is needed
-  // before this module can be used off the web; see packages/core/src/index.ts.
-  // That is sub-project B's job, not this one's.
-  const request = fetch(`/timings/${RECITER}/${surahId}.json`)
-    .then(res => {
-      if (!res.ok) throw new Error(`timings ${res.status} for surah ${surahId}`);
-      return res.json() as Promise<SurahTimings>;
-    })
+  const request = (async () => {
+    const stored = await store?.read(surahId);
+    if (stored) return stored;
+
+    const res = await fetch(`${baseUrl}/timings/${RECITER}/${surahId}.json`);
+    if (!res.ok) throw new Error(`timings ${res.status} for surah ${surahId}`);
+    const timings = (await res.json()) as SurahTimings;
+    await store?.write(surahId, timings);
+    return timings;
+  })()
     .then(timings => {
       cache.set(surahId, timings);
       return timings;

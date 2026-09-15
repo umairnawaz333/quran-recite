@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AyahPlaylist } from '@/lib/audio/playlist';
 import {
-  SyncEngine, Timeline, loadTimings, primeTimings as primeTimingsCache,
+  SyncEngine, Timeline, loadTimings, primeTimings as primeTimingsCache, configureAudioBase,
 } from '@quran/core';
 import { readLastPosition, writeLastPosition } from '@/lib/player/lastPosition';
 import { getSurahList } from '@/lib/data/surahIndex';
 import { PlayerContext, type PlayerState } from './usePlayer';
 import type { SurahTimings } from '@quran/core';
 import type { WordRegistry } from '@/lib/reader/wordRegistry';
+
+// Supplied here rather than read inside @quran/core: the package is
+// platform-free and must not know about Next's build-time env substitution.
+configureAudioBase(process.env.NEXT_PUBLIC_AUDIO_BASE_URL);
 
 const NAMES = new Map(getSurahList().map(s => [s.id, s.nameSimple]));
 

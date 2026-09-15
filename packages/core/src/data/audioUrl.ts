@@ -22,24 +22,28 @@
  * `public/audio`, so a local checkout with fetched audio needs no config.
  */
 
-// Assumes `NEXT_PUBLIC_AUDIO_BASE_URL` is substituted at build time by the
-// bundler (Next.js/webpack today; Metro, for React Native, would need the
-// same substitution). React Native ships a `process` shim with an `env`
-// object, so a host that never substitutes the variable does not throw here
-// — BASE is simply `undefined`, and resolveAudioUrl silently falls back to
-// the root-relative path (e.g. `/audio/...`), which resolves to nothing
-// meaningful on a native client. That silent wrong answer is worse than a
-// crash and easy to miss. Giving this a platform-neutral configuration seam
-// (env var vs. some other mechanism) is sub-project B's job, not this
-// task's — recorded here so the next reader finds it in the comment rather
-// than in a support ticket.
-const BASE = process.env.NEXT_PUBLIC_AUDIO_BASE_URL?.trim().replace(/\/+$/, '');
+/**
+ * The base every audio path is resolved against, supplied by the host rather
+ * than read from the environment.
+ *
+ * This used to be a module-scope `process.env.NEXT_PUBLIC_AUDIO_BASE_URL`
+ * read, which is why sub-project A could not use this file off the web: React
+ * Native ships a `process` shim, so the variable was simply `undefined` and
+ * every path silently fell back to a root-relative one that means nothing on
+ * a native client. Reading it at call time also removes the `vi.resetModules()`
+ * the tests needed to vary it.
+ */
+let base: string | undefined;
+
+export function configureAudioBase(value: string | undefined): void {
+  base = value?.trim().replace(/\/+$/, '') || undefined;
+}
 
 /** `SSSAAA.mp3` — the first three digits are the surah number. */
 const AUDIO_FILENAME = /^(\d{3})\d{3}\.mp3$/;
 
 export function resolveAudioUrl(rawUrl: string): string {
-  if (!BASE) return rawUrl;
+  if (!base) return rawUrl;
 
   // Already absolute — leave it alone rather than double-prefixing.
   if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
@@ -52,5 +56,5 @@ export function resolveAudioUrl(rawUrl: string): string {
   // local path rather than building a URL that is certainly wrong.
   if (!match) return rawUrl;
 
-  return `${BASE}/audio-${match[1]}/${filename}`;
+  return `${base}/audio-${match[1]}/${filename}`;
 }

@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { loadTimings, primeTimings, resetTimingsCache } from '../src/player/timingsLoader';
+import {
+  loadTimings, primeTimings, resetTimingsCache, configureTimings,
+} from '../src/player/timingsLoader';
+import type { TimingsStore } from '../src/player/timingsLoader';
 import type { SurahTimings } from '../src/data/types';
 
 const fake = (surah: number): SurahTimings => ({
@@ -56,5 +59,39 @@ describe('timingsLoader', () => {
 
     await expect(loadTimings(9)).rejects.toThrow();
     await expect(loadTimings(9)).resolves.toMatchObject({ surah: 9 });
+  });
+
+  // Store reads/writes are keyed to surah ids this describe block does not
+  // otherwise use, and the store returns null for anything else, so it stays
+  // harmless to the other cases even though `configureTimings` has no way to
+  // un-set it once configured.
+  it('consults a configured store before the network and short-circuits the fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const store: TimingsStore = {
+      read: vi.fn(async surahId => (surahId === 20 ? fake(20) : null)),
+      write: vi.fn(async () => {}),
+    };
+    configureTimings({ store });
+
+    const got = await loadTimings(20);
+    expect(got.surah).toBe(20);
+    expect(store.read).toHaveBeenCalledWith(20);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not write a failed fetch to the store', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const store: TimingsStore = {
+      read: vi.fn(async surahId => (surahId === 20 ? fake(20) : null)),
+      write: vi.fn(async () => {}),
+    };
+    configureTimings({ store });
+
+    await expect(loadTimings(21)).rejects.toThrow();
+    expect(store.write).not.toHaveBeenCalled();
   });
 });
