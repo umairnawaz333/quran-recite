@@ -604,8 +604,24 @@ adb wait-for-device
 cd apps/mobile && npx expo run:android
 ```
 
-The first build compiles native code and takes several minutes. Expected: the
-app installs and shows "@quran/core reachable — 10 base letters".
+The first build compiles native code and installs the Android NDK (~2 GB,
+one time only), so budget 20-40 minutes for it; every later build is fast.
+
+**`expo run:android` does not exit.** It builds, installs, then stays attached
+serving Metro. Do not wait for it to terminate — verify the app on the device
+instead (below) and leave it running.
+
+Expected: the app installs and shows "@quran/core reachable — 7 base letters".
+(بسم is 3 base letters and ٱلله is 4; verify with
+`npx tsx -e "import {countBaseLetters} from './packages/core/src/index'; console.log(countBaseLetters('بِسْمِ ٱللَّهِ'))"`.)
+
+**Verify from the device, not from the build log:**
+
+```bash
+adb shell pm list packages | grep quran          # expect com.quran.mobile
+adb exec-out screencap -p > /tmp/screen.png      # then read the image
+adb logcat -d -t 400 | grep -iE "ReactNative|AndroidRuntime" | grep -iE "error|exception|fatal"
+```
 
 If Metro cannot resolve `@quran/core`, the cause is Step 3, not the app code.
 Report the actual error rather than guessing at fixes.
