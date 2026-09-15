@@ -10,6 +10,31 @@ import path from 'node:path';
  *
  * Reading source as text is deliberate: importing the modules would not reveal
  * a type-only import, and the point is to catch the reference at all.
+ *
+ * Division of labour with `npm run typecheck` (`packages/core/tsconfig.json`
+ * has no `dom` lib): tsc is the PRIMARY guard against undeclared DOM globals —
+ * a bare reference like `typeof window` fails to compile there
+ * (`TS2304: Cannot find name 'window'`) before this file ever runs. This scan
+ * is the SECOND layer: it catches what tsc happily accepts — banned imports
+ * (`react`, `react-dom`, `next`, `node:`) and DOM-typed property access, e.g.
+ * `window.location`, which fails the assertion below even though `window`
+ * alone would already have failed to compile.
+ *
+ * Because this scan reads raw source text, it does not distinguish code from
+ * comments or string literals — a doc comment that spells out "localStorage"
+ * to explain this very boundary trips it exactly like real usage would. That
+ * is deliberate (see above), so when prose needs to name a banned identifier,
+ * reword the prose (as `global.d.ts` and `lastPosition.ts` do) rather than
+ * weakening a pattern here to let it through.
+ *
+ * Verified probes, both since removed:
+ *   - `const _probe = typeof window;` in src/data/audioUrl.ts fails
+ *     `npm run typecheck` with `TS2304: Cannot find name 'window'` — it does
+ *     NOT fail this file's DOM-global test (no `.` after `window`).
+ *   - `const _probe = window.location;` in the same file fails this file's
+ *     DOM-global test (`data/audioUrl.ts matches /\bwindow\./`) — and also
+ *     fails at runtime under Vitest's `node` environment, since Node has no
+ *     `window` either.
  */
 const SRC = path.resolve(import.meta.dirname, '../src');
 

@@ -11,5 +11,5 @@
     "isolatedModules": true,
     "types": ["vitest/globals"]
   },
-  "include": ["src/**/*.ts", "__tests__/**/*.ts"]
+  "include": ["src/**/*.ts"]
 }
