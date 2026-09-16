@@ -83,8 +83,11 @@ describe('AyahSequencer', () => {
     await seq.seekToAyah(2);      // user jumps ahead
     p.finish();                    // the stale ayah 0 completion lands late
 
-    // It must not advance to 1 — the live position is 2.
-    expect(changes.at(-1)).toBe(2);
+    // The full sequence, not just its last element: with the generation guard
+    // removed the stale completion advances to 1 and the next change comes back
+    // to 2, giving [0, 2, 1, 2] — which has the same last element as the correct
+    // [0, 2]. Pinning only `at(-1)` therefore passes either way.
+    expect(changes).toEqual([0, 2]);
   });
 
   it('emits ended and does not advance past the final ayah', async () => {
