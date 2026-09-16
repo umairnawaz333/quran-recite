@@ -8,12 +8,18 @@ import { PauseIcon, PlayIcon, Spinner } from '../components/PlayerIcons';
  * the surah list and the reader. Mirrors the web's `PlayerBar`.
  */
 export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => void }) {
-  const { surahId, surahName, ayah, isPlaying, isLoading, toggle } = usePlayer();
+  const { surahId, surahName, ayah, isPlaying, isLoading, pendingSurahId, toggle } = usePlayer();
 
   // Nothing has ever played — show no chrome at all.
   if (surahId === null) return null;
 
-  const toggleLabel = isLoading ? 'Loading' : isPlaying ? 'Pause' : 'Play';
+  // `isLoading` is attributed via `pendingSurahId`: while a *different*
+  // surah is loading in the background, `surahId`/`ayah` here still
+  // correctly name the surah that's actually live, and that surah is not
+  // loading — so the bar must not show its spinner (or disable its own
+  // toggle) for a fetch that belongs to some other, not-yet-live surah.
+  const isLoadingForThis = isLoading && pendingSurahId === surahId;
+  const toggleLabel = isLoadingForThis ? 'Loading' : isPlaying ? 'Pause' : 'Play';
 
   return (
     <View style={styles.root}>
@@ -30,11 +36,11 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
       <Pressable
         style={styles.toggle}
         onPress={toggle}
-        disabled={isLoading}
+        disabled={isLoadingForThis}
         accessibilityRole="button"
         accessibilityLabel={toggleLabel}
       >
-        {isLoading
+        {isLoadingForThis
           ? <Spinner size={20} color="#fff" />
           : isPlaying ? <PauseIcon size={20} color="#fff" /> : <PlayIcon size={20} color="#fff" />}
       </Pressable>

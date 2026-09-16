@@ -96,7 +96,7 @@ export class AyahSequencer {
   /**
    * The `PlayerHandle` currently driving playback (holding the active
    * ayah), or `undefined` before anything has loaded. Exposed only so code
-   * outside this class — lock-screen wiring in `usePlayback` — can reach
+   * outside this class — lock-screen wiring in `PlayerProvider` — can reach
    * the platform player behind whichever slot is active right now: since
    * playback alternates between two player instances for gapless
    * transitions, "the" player is only ever meaningful as of this moment.

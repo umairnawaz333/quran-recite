@@ -42,7 +42,7 @@ export function createExpoPlayer(): PlayerHandle {
       return player.playing;
     },
 
-    // Exposes the raw expo-audio `AudioPlayer` so `usePlayback` can hand it
+    // Exposes the raw expo-audio `AudioPlayer` so `PlayerProvider` can hand it
     // to `nowPlaying.ts`'s `setNowPlaying` for lock-screen activation.
     // `PlayerHandle` types this as `unknown` on purpose (see types.ts); this
     // is the one place in the app that knows it's actually an `AudioPlayer`.

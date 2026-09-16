@@ -61,9 +61,17 @@ export function ReaderScreen({
   // not as whatever surah is playing somewhere else (e.g. via the bar).
   const isCurrent = player.surahId === surahId;
   const isPlaying = isCurrent && player.isPlaying;
-  const isLoading = isCurrent && player.isLoading;
   const ayah = isCurrent ? player.ayah : 1;
-  const error = isCurrent ? player.error : null;
+
+  // `isLoading`/`error` are attributed via `pendingSurahId`, not `surahId`:
+  // while a *different* surah is still live, loading or failing to load
+  // this one leaves `surahId` correctly naming that other surah, so gating
+  // on `isCurrent` here would show this screen as idle throughout its own
+  // fetch, and would show its failure on whichever screen happens to be
+  // `isCurrent` instead of on this one. See PlayerProvider's `PlayerState`.
+  const isPending = player.pendingSurahId === surahId;
+  const isLoading = isPending && player.isLoading;
+  const error = isPending ? player.error : null;
 
   const toggleLabel = isLoading ? 'Loading' : isPlaying ? 'Pause' : 'Play';
 

@@ -29,6 +29,24 @@ export interface PlayerState {
   isPlaying: boolean;
   isLoading: boolean;
   error: string | null;
+  /**
+   * Which surah `isLoading`/`error` are currently *about*. `surahId` names
+   * the surah that is actually live (loaded, playing or paused) — it does
+   * not move until a load finishes — so while a load is in flight for a
+   * surah other than the live one, `surahId` still (correctly) names the
+   * old, still-playing surah and `pendingSurahId` names the new one.
+   *
+   * Without this, an `isLoading`/`error` set for a surah that isn't live
+   * yet has nowhere correct to attach: attaching it to `surahId` would
+   * either misrepresent the surah that's actually still playing (an error
+   * loading B rendered as if it were an error on A, which is still fine),
+   * or — once a screen keys off `surahId === screen's surahId` — surface on
+   * the wrong screen entirely. Consumers should treat `isLoading`/`error`
+   * as being about `pendingSurahId` whenever it is set, and about `surahId`
+   * otherwise (e.g. a mid-playback failure on the surah that's already
+   * live, which has nothing "pending").
+   */
+  pendingSurahId: number | null;
 }
 
 export interface PlayerActions {
@@ -61,6 +79,7 @@ export function usePlayer(): PlayerContextValue {
 
 const INITIAL: PlayerState = {
   surahId: null, surahName: null, ayah: 1, isPlaying: false, isLoading: false, error: null,
+  pendingSurahId: null,
 };
 
 /**
@@ -124,7 +143,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (playingSurahRef.current === surahId && sequencerRef.current && timingsRef.current) {
       const sequencer = sequencerRef.current;
       const timings = timingsRef.current;
-      patch({ error: null });
+      patch({ error: null, pendingSurahId: null });
       if (ayah !== undefined) {
         const index = timings.ayahs.findIndex(a => a.ayah === ayah);
         if (index !== -1) await sequencer.seekToAyah(index);
@@ -134,15 +153,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Give instant feedback for the common case — nothing else is playing
-    // yet, so there is no "live" surah whose state this would misrepresent.
-    // When a *different* surah is genuinely still playing, its state is left
-    // alone here on purpose: it stays accurate (and audible) for the whole
-    // `loadTimings` round trip, and only flips over to the new surah in the
-    // single, atomic patch below once that surah is actually ready — exactly
-    // when the switch really happens. Patching eagerly in that case would
-    // have the bar claim the new surah is "loading" while the old one is
-    // still the thing actually making sound.
+    // Give instant feedback either way, but attribute it correctly.
+    //
+    // Nothing else is playing yet: there is no "live" surah whose state this
+    // would misrepresent, so this surah becomes the live one immediately
+    // (optimistically) and `pendingSurahId` mirrors `surahId`.
+    //
+    // A *different* surah is genuinely still playing: its `surahId`/
+    // `surahName`/`ayah`/`isPlaying` are left alone here on purpose — they
+    // stay accurate (and audible) for the whole `loadTimings` round trip,
+    // and only flip over to the new surah in the single, atomic patch below
+    // once that surah is actually ready. But `isLoading`/`error` are still
+    // patched (unconditionally), attributed to the new surah via
+    // `pendingSurahId` rather than to `surahId` — so the *new* surah's own
+    // screen can show a loading state via `pendingSurahId`, while the bar
+    // and the *old* surah's screen (which key their own loading/error
+    // display off `pendingSurahId === <their surah>`) correctly see this
+    // isLoading as not about them and keep showing the old surah as live.
     if (playingSurahRef.current === null) {
       patch({
         surahId,
@@ -151,7 +178,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         isPlaying: false,
         isLoading: true,
         error: null,
+        pendingSurahId: surahId,
       });
+    } else {
+      patch({ isLoading: true, error: null, pendingSurahId: surahId });
     }
 
     // `shouldPlayInBackground` keeps the audio session alive once the app
@@ -177,7 +207,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // to a surah the user has already moved past, so it must not surface
       // as an error for whatever is live now.
       if (token !== requestRef.current) return;
-      patch({ error: 'Could not load this surah. Please try again.', isLoading: false });
+      // Attributed to `surahId` (the surah that failed to load) via
+      // `pendingSurahId`, not folded into `surahId`/`surahName` — those
+      // still correctly name whatever surah is actually live (or stay
+      // `null` if nothing was), so this error can never render on a screen
+      // showing a *different*, perfectly-fine-and-still-playing surah.
+      patch({
+        error: 'Could not load this surah. Please try again.',
+        isLoading: false,
+        pendingSurahId: surahId,
+      });
       return;
     }
     // Bail before any state mutation or teardown: a faster later call may
@@ -220,7 +259,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     });
     sequencer.on('state', playing => patch({ isPlaying: playing }));
-    sequencer.on('error', message => patch({ error: message, isPlaying: false, isLoading: false }));
+    sequencer.on('error', message => patch({
+      error: message, isPlaying: false, isLoading: false, pendingSurahId: surahId,
+    }));
     sequencer.on('ended', () => {
       paint(null);
       patch({ isPlaying: false });
@@ -247,6 +288,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         isPlaying: false,
         error: 'Could not load this recitation. Please try again.',
         isLoading: false,
+        pendingSurahId: surahId,
       });
       return;
     }
@@ -255,24 +297,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // The one atomic switch-over: everything above ran off local variables
     // and refs, not state, so this is the only point where the *visible*
     // surah actually changes — the old one (if any) was audibly playing
-    // right up until this patch lands.
+    // right up until this patch lands. Nothing is pending any more: either
+    // this succeeded (and is now simply the live surah) or a later call
+    // already claimed `pendingSurahId` for itself.
     patch({
       surahId,
       surahName: meta?.nameSimple ?? null,
       ayah: timings.ayahs[startIndex]?.ayah ?? 1,
       isLoading: false,
       error: null,
+      pendingSurahId: null,
     });
 
     await sequencer.play();
   }, [patch, paint, teardown]);
 
+  // Mirrors `state.isPlaying` so `toggle` can read it without depending on
+  // `state` (and picking up a fresh identity on every state tick). Plain
+  // assignment on every render — no subscription, no cleanup — so this
+  // cannot repeat the every-tick-effect trap the rest of this file is
+  // written to avoid; it just keeps a ref in sync with the render it read.
+  const isPlayingRef = useRef(false);
+  isPlayingRef.current = state.isPlaying;
+
   const toggle = useCallback(() => {
     const sequencer = sequencerRef.current;
     if (!sequencer) return;
-    if (state.isPlaying) sequencer.pause();
+    if (isPlayingRef.current) sequencer.pause();
     else void sequencer.play();
-  }, [state.isPlaying]);
+  }, []);
 
   const next = useCallback(() => sequencerRef.current?.next() ?? Promise.resolve(), []);
   const prev = useCallback(() => sequencerRef.current?.prev() ?? Promise.resolve(), []);
@@ -287,7 +340,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  useEffect(() => teardown, [teardown]);
+  // Unmount only (this provider is mounted once, for the app's lifetime) —
+  // `teardown()` itself stays purely ref-based on purpose: it is also called
+  // from inside `play()`'s own rebuild, mid-flight, where a newly-set
+  // `pendingSurahId` for the surah being built must survive untouched until
+  // the atomic switch-over patch resolves it. Clearing `pendingSurahId` here
+  // instead, in the one-time unmount cleanup, satisfies the same "nothing is
+  // left pending forever" property without that risk — even though nothing
+  // is left to observe it once the provider is gone.
+  useEffect(() => () => {
+    teardown();
+    setState(prev => ({ ...prev, pendingSurahId: null }));
+  }, [teardown]);
 
   // The context value is rebuilt on every state tick (every ayah change,
   // every isPlaying/isLoading flip). Consumers must destructure the actions
