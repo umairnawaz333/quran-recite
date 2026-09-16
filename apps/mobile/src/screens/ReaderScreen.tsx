@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { SurahText } from '@quran/core';
 import { textLoaders } from '../data/textIndex.generated';
-import { TajweedText } from '../reader/TajweedText';
+import { TajweedLine } from '../reader/TajweedLine';
 import { useIsActiveWord } from '../reader/activeWordStore';
 import { SCRIPT_FONTS } from '../reader/fonts';
 import { usePlayback } from '../player/usePlayback';
@@ -10,12 +10,19 @@ import { getSurahMeta } from '../data/surahs';
 
 export type Script = 'tajweed' | 'indopak';
 
+// Shared by both scripts' arabic text so the tajweed (native-view, Android;
+// RN <Text>, iOS) and IndoPak (RN <Text> on both) renderings stay the same
+// size — only their word-joining mechanism differs.
+const ARABIC_FONT_SIZE = 26;
+const ARABIC_LINE_HEIGHT = 52;
+const ARABIC_COLOR = '#000000';
+
 /**
  * A single IndoPak word. Pulled out to its own component (rather than
  * rendered inline in `ReaderScreen`'s `.map`) so `useIsActiveWord` is called
  * once per word component instance, not a variable number of times inside
  * `ReaderScreen` itself — the latter would violate the rules of hooks.
- * Tajweed words get the same treatment inside `TajweedText`.
+ * Tajweed words get the equivalent treatment inside `TajweedLine`.
  */
 function IndopakWord({ wordId, text }: { wordId: string; text: string }) {
   const isActive = useIsActiveWord(wordId);
@@ -67,17 +74,26 @@ export function ReaderScreen({
         windowSize={5}
         renderItem={({ item }) => (
           <View style={styles.ayah}>
-            <Text style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script] }]}>
-              {item.words.map((w, i) => (
-                <Text key={w.id}>
-                  {script === 'tajweed'
-                    ? <TajweedText wordId={w.id} markup={w.tajweed} />
-                    : <IndopakWord wordId={w.id} text={w.indopak} />}
-                  {i < item.words.length - 1 ? <Text> </Text> : null}
-                </Text>
-              ))}
-              <Text style={styles.ayahNumber}>  ﴿{item.ayah}﴾</Text>
-            </Text>
+            {script === 'tajweed' ? (
+              <TajweedLine
+                words={item.words}
+                ayahNumber={item.ayah}
+                fontFamily={SCRIPT_FONTS[script]}
+                fontSize={ARABIC_FONT_SIZE}
+                lineHeight={ARABIC_LINE_HEIGHT}
+                color={ARABIC_COLOR}
+              />
+            ) : (
+              <Text style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script] }]}>
+                {item.words.map((w, i) => (
+                  <Text key={w.id}>
+                    <IndopakWord wordId={w.id} text={w.indopak} />
+                    {i < item.words.length - 1 ? <Text> </Text> : null}
+                  </Text>
+                ))}
+                <Text style={styles.ayahNumber}>  ﴿{item.ayah}﴾</Text>
+              </Text>
+            )}
 
             <View style={styles.ayahFooter}>
               <Pressable
@@ -116,7 +132,7 @@ const styles = StyleSheet.create({
   toggle: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#eee' },
   toggleText: { fontSize: 13, fontWeight: '500', color: '#333' },
   ayah: { paddingHorizontal: 16, paddingVertical: 10 },
-  arabic: { fontSize: 26, lineHeight: 52, textAlign: 'right', writingDirection: 'rtl' },
+  arabic: { fontSize: ARABIC_FONT_SIZE, lineHeight: ARABIC_LINE_HEIGHT, textAlign: 'right', writingDirection: 'rtl' },
   ayahNumber: { fontSize: 16, color: '#999' },
   ayahFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
   ayahPlay: { fontSize: 13, color: '#888' },

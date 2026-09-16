@@ -39,3 +39,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Local Expo modules (modules/*) are source and are committed, but each
+# one's own android/ subproject still gets a Gradle build/ output dir the
+# same as the app's own /android above — never that part of it.
+modules/*/android/build/
+modules/*/android/.gradle/

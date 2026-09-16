@@ -42,3 +42,16 @@ export function useIsActiveWord(wordId: string): boolean {
     () => activeWordStore.isActive(wordId),
   );
 }
+
+/**
+ * The raw active word id, for a consumer that renders a whole ayah as one
+ * unit (Android's `TajweedLine`, which is one native view per ayah rather
+ * than one RN component per word) and so cannot narrow to a single word's
+ * boolean the way `useIsActiveWord` does. This re-renders every subscribed
+ * ayah on every change rather than just the (at most) two affected words —
+ * acceptable here because the list is virtualised to a handful of mounted
+ * ayahs at a time, not the thousands a per-word subscription is sized for.
+ */
+export function useActiveWordId(): string | null {
+  return useSyncExternalStore(activeWordStore.subscribe, activeWordStore.getSnapshot);
+}

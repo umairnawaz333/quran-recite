@@ -1,0 +1,238 @@
+package expo.modules.tajweedtext
+
+import android.content.Context
+import android.graphics.Color
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
+import android.util.Log
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.View.MeasureSpec
+import androidx.appcompat.widget.AppCompatTextView
+import androidx.core.widget.TextViewCompat
+import com.facebook.react.common.assets.ReactFontManager
+import expo.modules.kotlin.AppContext
+import expo.modules.kotlin.views.ExpoView
+import kotlin.math.roundToInt
+
+private const val TAG = "TajweedTextView"
+
+// The bundled asset fallback for Risk 1 (font resolution) — see
+// `resolveTypeface` below. Shipped inside this module's own
+// android/src/main/assets/fonts/, so it is always present in the APK
+// regardless of what expo-font has or hasn't registered yet.
+private const val FALLBACK_FONT_ASSET = "fonts/amiri-quran.ttf"
+
+/**
+ * The Android equivalent of iOS's single `NSAttributedString` pass.
+ *
+ * RN's own `<Text>` renders tajweed colour by nesting one `<Text>` per
+ * coloured run. On Android that fragments cursive Arabic at every colour
+ * boundary, because RN sets a `MetricAffectingSpan` (`ReactAbsoluteSizeSpan`
+ * for size, `CustomStyleSpan` for `fontFamily`) on every fragment, and a
+ * `MetricAffectingSpan` boundary is a shaping-run boundary — regardless of
+ * nesting depth. `ReactForegroundColorSpan` (colour) is a non-metric
+ * `CharacterStyle` and was never the problem.
+ *
+ * This view sidesteps RN's per-fragment spans entirely: one
+ * `AppCompatTextView`, one typeface, one text size, set ONCE below — never
+ * per range — with tajweed colour and the playback highlight applied as
+ * `ForegroundColorSpan`/`BackgroundColorSpan` over character ranges of ONE
+ * `SpannableString`. Both are non-metric `CharacterStyle`s, so Android shapes
+ * the whole string as a single run, exactly like `NSAttributedString` does.
+ *
+ * LOAD-BEARING CONSTRAINT, do not undo this later: only `ForegroundColorSpan`
+ * and `BackgroundColorSpan` may ever be applied per-range here. Any per-range
+ * `AbsoluteSizeSpan`/`CustomStyleSpan`-style span (size, font, weight, letter
+ * spacing) is a `MetricAffectingSpan` and reintroduces the exact shaping-run
+ * boundary this class exists to remove.
+ */
+class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
+
+  private val textView = AppCompatTextView(context).apply {
+    // Arabic-only content — force RTL rather than leaving bidi ordering and
+    // cursive joining to a per-device Unicode heuristic. `gravity = START`
+    // combined with an RTL `layoutDirection` puts text at the right edge,
+    // matching `ReaderScreen`'s `textAlign: 'right'` for the RN `<Text>`
+    // path on iOS.
+    textDirection = View.TEXT_DIRECTION_RTL
+    layoutDirection = View.LAYOUT_DIRECTION_RTL
+    gravity = Gravity.START or Gravity.TOP
+  }
+
+  var text: String = ""
+  var ranges: List<ColorRange> = emptyList()
+  var highlight: HighlightRange? = null
+  var fontFamily: String = ""
+  var fontSize: Float = 17f
+  /** In dp, same unit as `fontSize` — converted to px below. */
+  var lineHeightDp: Float = 0f
+  var textColor: String = "#000000"
+
+  init {
+    addView(textView)
+  }
+
+  /**
+   * Rebuilds the `SpannableString` from the current props and re-measures.
+   * Called once per prop-update batch (see `OnViewDidUpdateProps` in
+   * `TajweedTextModule.kt`), not once per individual prop, so a single JS
+   * update never rebuilds/re-measures more than once.
+   */
+  fun render() {
+    textView.typeface = resolveTypeface(fontFamily)
+    // COMPLEX_UNIT_SP, not DP: this is what lets the view honour the
+    // system/accessibility font-size setting, unlike a canvas-drawn
+    // approach (see the task brief's reason for rejecting Skia).
+    textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSize)
+    textView.setTextColor(parseColorOr(textColor, Color.BLACK))
+    if (lineHeightDp > 0f) {
+      // `lineHeight` arrives in dp (the same unit RN's own `style.lineHeight`
+      // uses) — TextViewCompat wants raw px, so convert explicitly rather
+      // than passing the dp value straight through.
+      val lineHeightPx = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP,
+        lineHeightDp,
+        resources.displayMetrics,
+      )
+      TextViewCompat.setLineHeight(textView, lineHeightPx.roundToInt())
+    }
+
+    val spannable = SpannableString(text)
+    val length = spannable.length
+    for (range in ranges) {
+      val start = range.start.coerceIn(0, length)
+      val end = range.end.coerceIn(start, length)
+      if (start == end) continue
+      spannable.setSpan(
+        ForegroundColorSpan(parseColorOr(range.color, Color.BLACK)),
+        start,
+        end,
+        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+      )
+    }
+    highlight?.let { h ->
+      val start = h.start.coerceIn(0, length)
+      val end = h.end.coerceIn(start, length)
+      if (start != end) {
+        spannable.setSpan(
+          BackgroundColorSpan(HIGHLIGHT_COLOR),
+          start,
+          end,
+          Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+      }
+    }
+    textView.text = spannable
+
+    // Text just changed, but Yoga's box for this node did not (it has no
+    // idea "text" is even a layout-affecting prop) — so Fabric will not call
+    // measure()/layout() on its own here. Re-measure against our own current
+    // width right away rather than waiting for a call that may not come; see
+    // `onMeasure` for the case where a width isn't known yet.
+    reportMeasuredSizeForWidth(width)
+  }
+
+  /**
+   * Risk 2 (measurement). A custom Fabric host view reports no intrinsic
+   * size on its own — Yoga has no measure function for it, so with no
+   * explicit height it lays the row out at height 0 (collapsed). This is
+   * Expo's shadow-node/measure path for self-sizing views (the same one
+   * used by Expo's own auto-sizing Compose/SwiftUI hosts): measure the real
+   * `AppCompatTextView` content for the width Yoga gave us, ignoring the
+   * height it guessed, then push the real height back into the Fabric
+   * shadow tree via `shadowNodeProxy.setViewSize`, which schedules a
+   * synchronous ("Immediate") state update Yoga picks up for the next
+   * layout pass.
+   */
+  override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    val widthPx = MeasureSpec.getSize(widthMeasureSpec)
+    val heightPx = measureContentHeight(widthPx)
+    setMeasuredDimension(widthPx, heightPx)
+    reportSize(widthPx, heightPx)
+  }
+
+  override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+    textView.layout(0, 0, r - l, b - t)
+  }
+
+  private fun reportMeasuredSizeForWidth(widthPx: Int) {
+    if (widthPx <= 0) {
+      // Not laid out yet — nothing to measure against. `onMeasure` will run
+      // this same computation once Fabric gives this node a real width.
+      return
+    }
+    reportSize(widthPx, measureContentHeight(widthPx))
+  }
+
+  private fun measureContentHeight(widthPx: Int): Int {
+    textView.measure(
+      MeasureSpec.makeMeasureSpec(widthPx, MeasureSpec.EXACTLY),
+      MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+    )
+    return textView.measuredHeight
+  }
+
+  private fun reportSize(widthPx: Int, heightPx: Int) {
+    val density = resources.displayMetrics.density
+    shadowNodeProxy.setViewSize(widthPx / density.toDouble(), heightPx / density.toDouble())
+  }
+
+  /**
+   * Risk 1 (font resolution). `expo-font`'s `useFonts` registers each loaded
+   * font with RN's own `ReactFontManager` under the exact family name it was
+   * given — the same manager RN's `<Text>` already resolves fonts through
+   * elsewhere in this app — so that is tried first. Only if that comes back
+   * as a plain, unregistered system font (i.e. the family was never
+   * registered, or registration hadn't finished) do we load the bundled
+   * asset directly. See the task report for how the two were told apart at
+   * runtime — `Typeface.equals` alone is not enough, since Android's default
+   * system font is also what an unresolved family name silently returns.
+   */
+  private fun resolveTypeface(fontFamily: String): Typeface {
+    val registered = try {
+      ReactFontManager.getInstance().getTypeface(fontFamily, Typeface.NORMAL, context.assets)
+    } catch (e: Exception) {
+      null
+    }
+    val isFallback = registered == null || isSystemDefault(registered)
+    if (!isFallback) {
+      Log.i(TAG, "resolveTypeface($fontFamily): ReactFontManager match, typeface=$registered")
+      return registered!!
+    }
+    Log.w(
+      TAG,
+      "resolveTypeface($fontFamily): ReactFontManager returned no real match " +
+        "(got $registered) — loading $FALLBACK_FONT_ASSET from this module's assets instead",
+    )
+    return Typeface.createFromAsset(context.assets, FALLBACK_FONT_ASSET)
+  }
+
+  /**
+   * `Typeface.create(unknownFamilyName, style)` — the path `ReactFontManager`
+   * falls through to for a family it never registered — returns the
+   * system default typeface rather than null or throwing. A reference check
+   * against `Typeface.DEFAULT`/`Typeface.DEFAULT_BOLD` is how that silent
+   * fallback is told apart from a genuinely resolved custom font.
+   */
+  private fun isSystemDefault(typeface: Typeface): Boolean =
+    typeface == Typeface.DEFAULT || typeface == Typeface.DEFAULT_BOLD
+
+  private fun parseColorOr(value: String, fallback: Int): Int =
+    try {
+      Color.parseColor(value)
+    } catch (e: IllegalArgumentException) {
+      fallback
+    }
+
+  companion object {
+    // Matches the web's `.word--active` tint and `ReaderScreen.tsx`'s
+    // `styles.highlight` — a background tint only, never a text-colour
+    // change, so tajweed colours stay visible underneath it.
+    private val HIGHLIGHT_COLOR = Color.parseColor("#fde68a")
+  }
+}

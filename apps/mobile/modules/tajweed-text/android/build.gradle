@@ -1,0 +1,27 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.tajweedtext'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.tajweedtext"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // For AppCompatTextView — the base of the native span view.
+  implementation 'androidx.appcompat:appcompat:1.7.0'
+  // For ReactFontManager (Risk 1's font-resolution lookup) and PixelUtil-style
+  // dp conversion. No version pin: the app's React Native Gradle plugin
+  // substitutes this to match the RN version the app is built against.
+  implementation 'com.facebook.react:react-android'
+}
