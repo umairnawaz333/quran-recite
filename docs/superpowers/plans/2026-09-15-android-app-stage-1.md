@@ -1892,6 +1892,173 @@ git commit -m "feat(mobile): responsive reader for foldables and tablets"
 
 ---
 
+## Task 14: At most one player may sound
+
+Found by the user on a physical device: tapping several ayah play buttons stacks
+overlapping recitations.
+
+**Files:**
+- Modify: `apps/mobile/src/audio/AyahSequencer.ts`
+- Modify: `apps/mobile/__tests__/AyahSequencer.test.ts`
+
+### The defect
+
+The sequencer alternates **two** players so ayah transitions are gapless, but it
+never enforces the invariant that only one of them produces sound:
+
+- `seekToAyah` loads into `this.activeSlot` without pausing anything first, so a
+  player in the other slot that is still sounding keeps sounding.
+- `pause()` pauses only `this.players[this.activeSlot]`, leaving the other slot
+  untouched.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `apps/mobile/__tests__/AyahSequencer.test.ts`. The fake player already
+tracks `playing`, so assert on both slots:
+
+```ts
+it('silences the previous player when seeking to another ayah', async () => {
+  const players = [fakePlayer(), fakePlayer()];
+  let i = 0;
+  const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+  await seq.seekToAyah(0);
+  await seq.play();
+  // Advance so the OTHER slot becomes the sounding one.
+  players.forEach(p => p.finish());
+  await seq.seekToAyah(2);
+
+  // Exactly one player may be producing sound.
+  expect(players.filter(p => p.playing)).toHaveLength(1);
+});
+
+it('pause() silences both players, not just the active slot', async () => {
+  const players = [fakePlayer(), fakePlayer()];
+  let i = 0;
+  const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+  await seq.seekToAyah(0);
+  await seq.play();
+  players.forEach(p => p.finish());
+  seq.pause();
+
+  expect(players.some(p => p.playing)).toBe(false);
+});
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `npm test --workspace @quran/mobile`
+Expected: both fail — two players sounding after the seek, and one still
+sounding after `pause()`.
+
+- [ ] **Step 3: Enforce the invariant**
+
+In `seekToAyah`, pause **both** players before loading, and in `pause()`, pause
+both. Add a comment saying why: the two-slot design exists for gapless
+transitions, so "the active slot" is not the same as "the slot making noise",
+and only pausing one is how overlapping audio got shipped.
+
+Do not change the generation-token logic, the preload, or `handleFinished`'s
+advance — those are covered by existing tests and are not implicated.
+
+- [ ] **Step 4: Verify and commit**
+
+Both new tests pass; the existing suite is unchanged. Then mutate the fix away
+and confirm each new test fails.
+
+```bash
+git add apps/mobile
+git commit -m "fix(mobile): never let two players sound at once"
+```
+
+---
+
+## Task 15: Global persistent player, matching the web
+
+The user asked for this explicitly: "audio run global same like web". Today
+`usePlayback` is called inside `ReaderScreen`, so navigating back to the surah
+list unmounts the sequencer, the sync engine and the controls together — audio
+stops and the bar disappears.
+
+The web solved the same problem in Phase 2 by hoisting `PlayerProvider` into the
+root layout so it survives navigation, and rendering a `PlayerBar` on every
+page. **Read `apps/web/components/player/PlayerProvider.tsx` and
+`apps/web/components/player/PlayerBar.tsx` before starting** — their structure
+is the reference, and their comments record defects already paid for once.
+
+**Files:**
+- Create: `apps/mobile/src/player/PlayerProvider.tsx`, `apps/mobile/src/player/PlayerBar.tsx`
+- Modify: `apps/mobile/App.tsx`, `apps/mobile/src/screens/ReaderScreen.tsx`, `apps/mobile/src/screens/SurahListScreen.tsx`
+
+**Interfaces:**
+- Produces: `<PlayerProvider>`, `usePlayer(): PlayerState & PlayerActions`, `<PlayerBar />`
+- `PlayerState`: `{ surahId: number | null; surahName: string | null; ayah: number; isPlaying: boolean; isLoading: boolean; error: string | null }`
+- `PlayerActions`: `{ play(surahId: number, ayah?: number): Promise<void>; toggle(): void; next(): Promise<void>; prev(): Promise<void> }`
+
+- [ ] **Step 1: Hoist ownership out of the reader**
+
+Move everything `usePlayback` owns — the sequencer, the `SyncEngine`, the
+timings cache and the active-word store wiring — into `PlayerProvider`, mounted
+**once** in `App.tsx` above the screen switch so it is never unmounted by
+navigation. `play(surahId, ayah?)` must build a playlist for a surah that is not
+the one on screen, because that is the whole point.
+
+Two things the web learned that apply directly:
+
+- **The provider's context value is rebuilt on every state tick.** On the web
+  that is every 250 ms while playing. Any effect or memo that depends on the
+  whole player object re-runs at that cadence — which silently broke the web's
+  word highlighting once, because a cleanup ran constantly and cleared the
+  registry. Destructure the specific *actions* you need and depend on those;
+  they must be stable.
+- **Paint into the active word store only while the surah on screen is the one
+  playing.** Otherwise opening a different surah while one plays highlights the
+  wrong text.
+
+- [ ] **Step 2: A bar on every screen**
+
+Create `PlayerBar`, rendered from `App.tsx` beneath the current screen so it
+shows on the list and in the reader. It renders **nothing** when `surahId` is
+`null` — nothing has played yet, so there is no chrome to show. It shows the
+surah name, the ayah, and play/pause. Tapping the surah name navigates to that
+surah.
+
+Keep the accessibility labels the web uses: `Play`, `Pause`, `Loading`, with
+`isLoading` taking priority over `isPlaying`.
+
+- [ ] **Step 3: The reader consumes, it no longer owns**
+
+`ReaderScreen` switches from `usePlayback(surahId)` to `usePlayer()`, and its
+per-ayah buttons call `play(surahId, ayah)`. Delete `usePlayback` once nothing
+imports it — leaving a second, unused playback owner is how two sequencers end
+up alive at once.
+
+- [ ] **Step 4: Verify on the device**
+
+The checks that matter, all of which the web has e2e tests for:
+
+- Start a surah, go back to the list: **audio keeps playing and the bar is
+  visible** with the right surah name.
+- Tap another surah from the list while the first plays: the new surah's page
+  shows **no highlight** until you play it, and the first keeps playing.
+- Tap the bar's surah name: it navigates back to the playing surah and the
+  highlight is tracking.
+- Play, background the app, return: still playing, bar intact.
+
+Capture screenshots and read them; report what you saw for each.
+
+- [ ] **Step 5: Verify and commit**
+
+Root `npm test`, `npm run typecheck` exit 0.
+
+```bash
+git add apps/mobile
+git commit -m "feat(mobile): global persistent player with a bar on every screen"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage (Stage 1 scope only).**
