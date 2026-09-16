@@ -118,6 +118,16 @@ export class AyahSequencer {
     const slot = this.activeSlot;
     this.index = clamped;
 
+    // The two-slot design exists only for gapless transitions between
+    // adjacent ayahs; it does not mean "the active slot" and "the slot
+    // making noise" are the same thing. `handleFinished` swaps `activeSlot`
+    // on every advance, so by the time a seek lands, the *other* slot may be
+    // the one still sounding from before the swap. Pause both before loading
+    // — loading into `slot` alone would leave that leftover sound playing
+    // underneath the newly-seeked ayah. This is exactly the bug the user hit:
+    // tapping several ayah play buttons stacked overlapping recitations.
+    this.players.forEach(p => p?.pause());
+
     const player = await this.loadInto(slot, clamped);
 
     // A newer seekToAyah/next/prev may have already landed while this one's
@@ -147,7 +157,11 @@ export class AyahSequencer {
 
   pause(): void {
     this.playing = false;
-    this.players[this.activeSlot]?.pause();
+    // Pause both slots, not just the active one — see the comment in
+    // seekToAyah: "the active slot" is not the same as "the slot making
+    // noise" once a boundary crossing has swapped `activeSlot` out from
+    // under a still-sounding player.
+    this.players.forEach(p => p?.pause());
     this.emit('state', false);
   }
 

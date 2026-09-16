@@ -172,6 +172,34 @@ describe('AyahSequencer', () => {
     expect(errors).toHaveLength(0);
   });
 
+  it('silences the previous player when seeking to another ayah', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    // Advance so the OTHER slot becomes the sounding one.
+    players.forEach(p => p.finish());
+    await seq.seekToAyah(2);
+
+    // Exactly one player may be producing sound.
+    expect(players.filter(p => p.playing)).toHaveLength(1);
+  });
+
+  it('pause() silences both players, not just the active slot', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    players.forEach(p => p.finish());
+    seq.pause();
+
+    expect(players.some(p => p.playing)).toBe(false);
+  });
+
   it('reports not-playing when play() rejection is deferred past a macrotask boundary', async () => {
     // An immediately-rejecting mock (as in the terminal-failure test above)
     // can't tell "awaited" apart from "called but not awaited"; attemptPlay's
