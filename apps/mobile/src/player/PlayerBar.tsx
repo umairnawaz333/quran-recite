@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { usePlayer } from './PlayerProvider';
+import { PauseIcon, PlayIcon, Spinner } from '../components/PlayerIcons';
 
 /**
  * The player, visible on every screen — rendered once from `App.tsx`,
@@ -33,7 +34,9 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
         accessibilityRole="button"
         accessibilityLabel={toggleLabel}
       >
-        <Text style={styles.toggleText}>{toggleLabel}</Text>
+        {isLoading
+          ? <Spinner size={20} color="#fff" />
+          : isPlaying ? <PauseIcon size={20} color="#fff" /> : <PlayIcon size={20} color="#fff" />}
       </Pressable>
     </View>
   );
@@ -53,6 +56,8 @@ const styles = StyleSheet.create({
   info: { flex: 1, marginRight: 12 },
   name: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
   ayah: { fontSize: 12, color: '#777', marginTop: 2, fontVariant: ['tabular-nums'] },
-  toggle: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1a1a1a' },
-  toggleText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  toggle: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#1a1a1a',
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

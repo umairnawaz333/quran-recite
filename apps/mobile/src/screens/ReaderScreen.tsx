@@ -7,6 +7,7 @@ import { useIsActiveWord } from '../reader/activeWordStore';
 import { SCRIPT_FONTS } from '../reader/fonts';
 import { usePlayer } from '../player/PlayerProvider';
 import { getSurahMeta } from '../data/surahs';
+import { PauseIcon, PlayIcon, Spinner } from '../components/PlayerIcons';
 
 export type Script = 'tajweed' | 'indopak';
 
@@ -126,8 +127,10 @@ export function ReaderScreen({
                 onPress={() => void play(surahId, item.ayah)}
                 accessibilityRole="button"
                 accessibilityLabel={`Play ayah ${item.ayah}`}
+                style={styles.ayahPlayButton}
               >
-                <Text style={styles.ayahPlay}>▶ {surahId}:{item.ayah}</Text>
+                <PlayIcon size={12} color="#888" />
+                <Text style={styles.ayahPlay}>{surahId}:{item.ayah}</Text>
               </Pressable>
             </View>
           </View>
@@ -143,7 +146,9 @@ export function ReaderScreen({
           accessibilityRole="button"
           accessibilityLabel={toggleLabel}
         >
-          <Text style={styles.playButtonText}>{toggleLabel}</Text>
+          {isLoading
+            ? <Spinner size={20} color="#fff" />
+            : isPlaying ? <PauseIcon size={20} color="#fff" /> : <PlayIcon size={20} color="#fff" />}
         </Pressable>
       </View>
     </View>
@@ -161,7 +166,8 @@ const styles = StyleSheet.create({
   arabic: { fontSize: ARABIC_FONT_SIZE, lineHeight: ARABIC_LINE_HEIGHT, textAlign: 'right', writingDirection: 'rtl' },
   ayahNumber: { fontSize: 16, color: '#999' },
   ayahFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
-  ayahPlay: { fontSize: 13, color: '#888' },
+  ayahPlayButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ayahPlay: { fontSize: 13, color: '#888', fontVariant: ['tabular-nums'] },
   // Matches the web's `.word--active` tint (#fde68a) — a background colour
   // only, never a text-colour change, so tajweed colours stay visible.
   highlight: { backgroundColor: '#fde68a' },
@@ -172,6 +178,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#ddd',
   },
   ayahIndicator: { fontSize: 14, color: '#555', fontVariant: ['tabular-nums'] },
-  playButton: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24, backgroundColor: '#1a1a1a' },
-  playButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  playButton: {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: '#1a1a1a',
+    alignItems: 'center', justifyContent: 'center',
+  },
 });
