@@ -6,7 +6,7 @@ Every external dataset used by this project, with its licence and how it is used
 
 - **Source:** Quran.com API v4 (`api.quran.com/api/v4`)
 - **Fields:** `text_uthmani_tajweed`, `text_indopak`
-- **Use:** fetched once at build time, committed to `apps/web/data/text/`
+- **Use:** fetched once at build time, committed to `packages/quran-data/text/`
 - **Underlying text:** Tanzil / King Fahd Complex Uthmani and IndoPak scripts
 - **Runtime dependency:** none
 

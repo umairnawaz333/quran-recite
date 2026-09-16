@@ -14,10 +14,16 @@ Both fonts are SIL Open Font License and self-hosted; see
 [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
 
 **Data status:** all **114 surahs** have text and word timings committed
-(`apps/web/data/surahs.json` marks every surah `available`;
+(`packages/quran-data/surahs.json` marks every surah `available`;
 `apps/web/public/timings/` tracks 114 timing files) and the build emits 117
 static pages. Audio is the one piece that is *not* committed — see "Running
 it" below for what that means for a fresh clone.
+
+There are two apps here: `apps/web`, the shipped Next.js site, and
+`apps/mobile`, an Expo/React Native Android app (see
+[`apps/mobile/README.md`](apps/mobile/README.md) for how to build and run
+it). Both consume the same domain logic and Quran text through
+`packages/core` and `packages/quran-data`.
 
 ## Workspace layout
 
@@ -27,13 +33,23 @@ This is an npm-workspaces monorepo, not a single Next.js package:
   timing normalizer (`normalize/`), the rAF sync engine and timeline
   (`sync/`), shared data types, audio URL resolution (`data/audioUrl.ts`),
   the timings loader (`player/timingsLoader.ts`), and the saved-position
-  validator (`player/lastPosition.ts`'s `isValidPosition`). It imports
+  validator (`player/lastPosition.ts`'s `isValidPosition`), plus the tajweed
+  markup parser (`normalize/tajweed.ts`'s `parseTajweed`) and the audio
+  source resolver (`data/audioSource.ts`'s `resolveAyahSource`). It imports
   nothing from React, Next, node built-ins, or the DOM — enforced by
   `packages/core/__tests__/platform-free.test.ts` rather than left to
-  convention — so a future React Native app can consume it unchanged. It has
-  zero runtime dependencies and ships TypeScript source rather than compiled
-  output, so there is no build step for it; `apps/web` consumes it directly
-  through Next's `transpilePackages`.
+  convention — which is exactly what let `apps/mobile` (a real React Native
+  app, not a hypothetical one) consume it unchanged. It has zero runtime
+  dependencies and ships TypeScript source rather than compiled output, so
+  there is no build step for it; each app consumes it directly from source —
+  `apps/web` through Next's `transpilePackages`, `apps/mobile` through a
+  Metro `watchFolders` config.
+- **`packages/quran-data`** (`@quran/data`) — the Quran text and surah index
+  as data, with no code: `surahs.json` and `text/*.json` (114 files, one per
+  surah). Consumed by both apps — `apps/web`'s `lib/data/surahIndex.ts` and
+  `lib/data/loaders.ts`, and `apps/mobile`'s `src/data/surahs.ts` and its
+  generated `textIndex.generated.ts`. This used to live under
+  `apps/web/data/`; it moved here once a second app needed the same text.
 - **`apps/web`** (`@quran/web`) — the Next.js app itself: `app/`,
   `components/`, `lib/`, `scripts/`, `public/`, `data/`, and `e2e/`. Six
   files stay here rather than in core because each is platform-coupled and
@@ -42,17 +58,26 @@ This is an npm-workspaces monorepo, not a single Next.js package:
   JSON import), `lib/player/lastPosition.ts` (`localStorage` read/write),
   `lib/audio/playlist.ts` (`HTMLAudioElement`), `lib/reader/useAutoScroll.ts`
   (`document`/`window`), and `lib/reader/wordRegistry.ts` (`classList`).
+- **`apps/mobile`** (`@quran/mobile`) — the Expo/React Native Android app:
+  `App.tsx`, `src/` (screens, reader, player, audio), and `modules/`
+  (`modules/tajweed-text`, a local native Expo module — see
+  [`apps/mobile/README.md`](apps/mobile/README.md) for why it exists and why
+  it must not be replaced with plain `<Text>` nesting). See that README for
+  prerequisites, how to build and run it, and why `android/` and `ios/` are
+  not committed.
 
 Run everything from the repository root:
 
 ```bash
-npm run dev         # starts the Next.js dev server (apps/web)
-npm test            # runs both workspaces' unit tests
-npm run build       # production build (apps/web)
-npm run test:e2e    # Playwright, against a real dev server
-npm run typecheck   # tsc --noEmit across both workspaces
-npm run fetch:data  # downloads Quran text/timings/audio (apps/web)
-npm run fetch:fonts # downloads the two OFL fonts (apps/web)
+npm run dev          # starts the Next.js dev server (apps/web)
+npm test             # runs every workspace's unit tests (core, mobile, web)
+npm run build        # production build (apps/web)
+npm run test:e2e     # Playwright, against a real dev server (apps/web)
+npm run typecheck    # tsc --noEmit across core, mobile, and web
+npm run android      # first-build/rebuild the Android app (apps/mobile)
+npm run mobile:start # start Metro for JS-only reloads (apps/mobile)
+npm run fetch:data   # downloads Quran text/timings/audio (apps/web)
+npm run fetch:fonts  # downloads the two OFL fonts (apps/web and apps/mobile)
 ```
 
 ## Running it
@@ -88,8 +113,8 @@ npm run fetch:data                      # no --surahs: defaults to surah 1
 
 `apps/web/scripts/fetch-quran-data.ts` is incremental and resumable: audio
 files already on disk are skipped rather than re-downloaded, and
-`apps/web/data/surahs.json` / `apps/web/data/validation-report.json` are
-rewritten after every surah, not just at the end of the run — so an
+`packages/quran-data/surahs.json` / `apps/web/data/validation-report.json`
+are rewritten after every surah, not just at the end of the run — so an
 interrupted multi-surah fetch can simply be re-run and it picks up where it
 left off.
 
@@ -106,8 +131,8 @@ useful for offline development.
 ## Tests
 
 ```bash
-npm test          # 158 unit tests (vitest): 76 in packages/core, 82 in apps/web
-npm run test:e2e  # 4 Playwright tests, driving a real browser
+npm test          # 203 unit tests (vitest): 90 in packages/core, 30 in apps/mobile, 83 in apps/web
+npm run test:e2e  # 4 Playwright tests, driving a real browser (apps/web only)
 ```
 
 The most important unit tests cover `packages/core/src/normalize/`, which
