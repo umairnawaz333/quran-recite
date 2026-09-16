@@ -42,6 +42,14 @@ export function createExpoPlayer(): PlayerHandle {
       return player.playing;
     },
 
+    // Exposes the raw expo-audio `AudioPlayer` so `usePlayback` can hand it
+    // to `nowPlaying.ts`'s `setNowPlaying` for lock-screen activation.
+    // `PlayerHandle` types this as `unknown` on purpose (see types.ts); this
+    // is the one place in the app that knows it's actually an `AudioPlayer`.
+    get nativePlayer() {
+      return player;
+    },
+
     load(uri: string): Promise<void> {
       return new Promise<void>((resolve, reject) => {
         // Subscribed before `replace()` is called, so a status emitted as a

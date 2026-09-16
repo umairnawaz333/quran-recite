@@ -93,6 +93,20 @@ export class AyahSequencer {
     return this.players[this.activeSlot]?.currentTimeMs ?? 0;
   }
 
+  /**
+   * The `PlayerHandle` currently driving playback (holding the active
+   * ayah), or `undefined` before anything has loaded. Exposed only so code
+   * outside this class — lock-screen wiring in `usePlayback` — can reach
+   * the platform player behind whichever slot is active right now: since
+   * playback alternates between two player instances for gapless
+   * transitions, "the" player is only ever meaningful as of this moment.
+   * Nothing inside this class needs this getter; it reads `players[this
+   * .activeSlot]` directly everywhere else instead.
+   */
+  get activePlayer(): PlayerHandle | undefined {
+    return this.players[this.activeSlot];
+  }
+
   on<K extends keyof Events>(event: K, cb: Events[K]): void {
     this.listeners[event].add(cb as never);
   }
