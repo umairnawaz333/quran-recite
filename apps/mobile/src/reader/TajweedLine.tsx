@@ -1,5 +1,11 @@
 import { useMemo } from 'react';
 import { Platform, StyleSheet, Text } from 'react-native';
+// Deliberately a relative import, not a package-name one: `create-expo-
+// module --local` gives a local module (apps/mobile/modules/*) no
+// package.json and creates no node_modules entry for it — CNG's autolinking
+// discovers it natively by scanning for expo-module.config.json, but on the
+// JS side it is only ever reachable by relative path. This matches the
+// import the scaffolding CLI itself printed when the module was created.
 import { TajweedTextView } from '../../modules/tajweed-text/src';
 import { useActiveWordId } from './activeWordStore';
 import { buildTajweedLine, type TajweedLineWord } from './buildTajweedLine';

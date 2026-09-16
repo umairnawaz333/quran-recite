@@ -44,12 +44,15 @@ export function useIsActiveWord(wordId: string): boolean {
 }
 
 /**
- * The raw active word id, for a consumer that renders a whole ayah as one
- * unit (Android's `TajweedLine`, which is one native view per ayah rather
- * than one RN component per word) and so cannot narrow to a single word's
- * boolean the way `useIsActiveWord` does. This re-renders every subscribed
- * ayah on every change rather than just the (at most) two affected words —
- * acceptable here because the list is virtualised to a handful of mounted
+ * The raw active word id, for `TajweedLine` — one component per ayah rather
+ * than one per word, so it cannot narrow to a single word's boolean the way
+ * `useIsActiveWord` does. This is called once per `TajweedLine` regardless
+ * of platform: Android needs the id to compute the native view's single
+ * `highlight` range, and iOS's inline per-word `<Text>` rendering reads the
+ * same id to decide each word's highlight style. So both platforms pay the
+ * coarser cost this hook implies — every mounted ayah re-renders on every
+ * active-word change, not just the (at most two) affected words — which is
+ * fine on both because the list is virtualised to a handful of mounted
  * ayahs at a time, not the thousands a per-word subscription is sized for.
  */
 export function useActiveWordId(): string | null {

@@ -1,5 +1,7 @@
 import { parseTajweed } from '@quran/core';
 import { colourFor } from './tajweedColours';
+// Relative, not by package name — see the same import in TajweedLine.tsx for
+// why: this local Expo module has no package.json to resolve by name.
 import type { ColorRange, HighlightRange } from '../../modules/tajweed-text/src';
 
 /** Matches the web's `.word--active` tint and `ReaderScreen.tsx`'s
