@@ -50,7 +50,7 @@ export function usePlayback(surahId: number) {
 
     const engine = new SyncEngine();
     engineRef.current = engine;
-    engine.onChange(wordId => activeWordStore.set(wordId));
+    const unsubscribeEngine = engine.onChange(wordId => activeWordStore.set(wordId));
 
     (async () => {
       let timings: SurahTimings;
@@ -97,6 +97,7 @@ export function usePlayback(surahId: number) {
 
     return () => {
       cancelled = true;
+      unsubscribeEngine();
       engine.detach();
       sequencerRef.current?.release();
       sequencerRef.current = null;
