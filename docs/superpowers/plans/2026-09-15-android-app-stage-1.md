@@ -1673,6 +1673,225 @@ git commit -m "docs: describe the Android app and the shared data package"
 
 ---
 
+## Task 11: Bundled Quran fonts, on Android and iOS
+
+Added after user testing: the reader renders in whatever Arabic face the OS
+ships rather than the typefaces the web uses, so tajweed looks wrong. The plan
+never mentioned fonts — the spec said "both scripts with full tajweed
+colouring" and that was read as the colours alone.
+
+**Files:**
+- Modify: `apps/web/scripts/fetch-fonts.ts` (also emit TTF for mobile)
+- Create: `apps/mobile/assets/fonts/amiri-quran.ttf`, `apps/mobile/assets/fonts/noto-naskh-arabic.ttf`
+- Create: `apps/mobile/src/reader/fonts.ts`
+- Modify: `apps/mobile/App.tsx`, `apps/mobile/src/screens/ReaderScreen.tsx`, `apps/mobile/package.json`
+- Modify: `docs/DATA_SOURCES.md`
+
+**Interfaces:**
+- Produces: `SCRIPT_FONTS: Record<Script, string>`, `FONT_ASSETS: Record<string, number>`, `useQuranFonts(): boolean`
+
+### Why bundled rather than fetched
+
+Fonts are bundled as app assets, so the same `.ttf` works identically on iOS and
+Android — neither OS needs to "support" them. They must **never** be fetched at
+runtime: this app is built for offline use, and a font loaded over the network
+is a blank screen on a plane.
+
+- [ ] **Step 1: Fetch the TTF variants**
+
+`fetch-fonts.ts` currently requests woff2 on purpose, with a comment noting
+Google Fonts only serves woff2 to a browser-like user agent. An older UA yields
+TTF. Verified URLs:
+
+```
+Amiri Quran        https://fonts.gstatic.com/s/amiriquran/v19/_Xmo-Hk0rD6DbUL4_vH8Zq5t.ttf
+Noto Naskh Arabic  https://fonts.gstatic.com/s/notonaskharabic/v44/RrQ5bpV-9Dd1b1OAGA6M9PkyDuVBePeKNaxcsss0Y7bwvc5krA.ttf
+```
+
+Extend the script to write woff2 to `apps/web/public/fonts/` (unchanged) **and**
+TTF to `apps/mobile/assets/fonts/`. Do not hardcode those hashed URLs — resolve
+them from the CSS endpoint with an old UA, the way the existing code resolves
+woff2, so a font revision does not silently 404. Commit both TTFs.
+
+Both families are SIL Open Font License; record the TTF addition in
+`docs/DATA_SOURCES.md` beside the existing woff2 entry.
+
+- [ ] **Step 2: Install expo-font**
+
+```bash
+cd apps/mobile && npx expo install expo-font
+```
+
+- [ ] **Step 3: A font registry, not two hardcoded families**
+
+Create `apps/mobile/src/reader/fonts.ts`. A registry is the point: adding a
+future font must be one asset plus one entry, without touching the reader.
+
+```ts
+import { useFonts } from 'expo-font';
+import type { Script } from '../screens/ReaderScreen';
+
+/**
+ * Quran typefaces, bundled as app assets so the same files render identically
+ * on iOS and Android. Never fetched at runtime — the app is meant to work
+ * offline, and a network-loaded font is a blank page on a plane.
+ *
+ * Keyed by script so adding a face later is one asset and one entry here.
+ */
+export const FONT_ASSETS = {
+  'AmiriQuran': require('../../assets/fonts/amiri-quran.ttf'),
+  'NotoNaskhArabic': require('../../assets/fonts/noto-naskh-arabic.ttf'),
+} as const;
+
+export const SCRIPT_FONTS: Record<Script, string> = {
+  tajweed: 'AmiriQuran',
+  indopak: 'NotoNaskhArabic',
+};
+
+export function useQuranFonts(): boolean {
+  const [loaded] = useFonts(FONT_ASSETS);
+  return loaded;
+}
+```
+
+- [ ] **Step 4: Apply the font and gate on loading**
+
+In `ReaderScreen`, set `fontFamily: SCRIPT_FONTS[script]` on the Arabic text
+style. The web pairs `'Amiri Quran'` with tajweed and `'Noto Naskh Arabic'`
+with IndoPak (`apps/web/app/globals.css`), so this matches it deliberately.
+
+Gate rendering on `useQuranFonts()` in `App.tsx` — showing the wrong face for a
+frame and then reflowing is worse than a brief hold. **Do not block on fonts
+forever**: if loading fails, render with the fallback rather than a permanent
+blank screen, and say in your report what you chose.
+
+- [ ] **Step 5: Verify on Android**
+
+Rebuild natively — `expo-font` needs it. Then capture a screenshot of Surah 1
+in tajweed and read it. The letterforms must visibly differ from the earlier
+system-font rendering, and the tajweed colours must survive the font change.
+Compare against `apps/web` rendering the same ayah.
+
+- [ ] **Step 6: Verify on iOS — this machine can do it**
+
+Xcode is installed with iOS 26.3/26.5 runtimes, CocoaPods 1.16.2, and
+simulators including `iPhone 17 Pro`. **The iOS Simulator needs no Apple
+Developer account** — that is only required for physical-device installs beyond
+7-day provisioning and for App Store submission.
+
+```bash
+cd apps/mobile && npx expo run:ios --device "iPhone 17 Pro"
+```
+
+The first iOS build runs `pod install` and takes several minutes. Verify with
+`xcrun simctl io booted screenshot <path>`, then read the image. Report whether
+the Arabic renders identically to Android.
+
+If the iOS build fails for an environment reason, report the error and carry on
+— Android is the shipping target, and iOS verification is a bonus this machine
+happens to allow.
+
+- [ ] **Step 7: Verify and commit**
+
+Root `npm test` (no fewer than before), `npm run typecheck` exit 0.
+
+```bash
+git add apps/mobile apps/web/scripts/fetch-fonts.ts docs/DATA_SOURCES.md package-lock.json
+git commit -m "feat(mobile): bundle Amiri Quran and Noto Naskh Arabic for both scripts"
+```
+
+---
+
+## Task 12: Play/pause icons matching the web
+
+**Files:**
+- Create: `apps/mobile/src/components/PlayerIcons.tsx`
+- Modify: `apps/mobile/src/screens/ReaderScreen.tsx`, `apps/mobile/package.json`
+
+- [ ] **Step 1: Install react-native-svg**
+
+```bash
+cd apps/mobile && npx expo install react-native-svg
+```
+
+It ships native code, so a native rebuild is required — for Android and, if
+Task 11 built it, iOS.
+
+- [ ] **Step 2: Port the web's exact paths**
+
+The user asked for the web's paths specifically. Copy them verbatim from
+`apps/web/components/PlayerIcons.tsx`, all on a 24×24 viewBox:
+
+| Icon | `d` |
+|---|---|
+| Play | `M7.4 6 17.4 12 7.4 18Z` |
+| Prev | `M18.6 6.4 9 12 18.6 17.6Z` |
+| Next | `M5.4 6.4 15 12 5.4 17.6Z` |
+| Spinner arc | `M20.5 12a8.5 8.5 0 0 0-8.5-8.5` |
+
+**Carry the play triangle's comment across.** Its bounding box spans x 7.4→17.4,
+centre 12.4 rather than 12 — a deliberate optical nudge, because a
+geometrically-centred triangle reads as left-of-centre inside a circular
+button. That was found by the user on the web and fixed in the geometry rather
+than with a transform; someone "correcting" it to 7→17 would reintroduce the
+bug. Use `Svg`/`Path` from `react-native-svg`, keep the pause icon as two
+rounded bars, and preserve the existing accessibility labels
+(`Play`/`Pause`/`Loading`, `Play ayah N`).
+
+- [ ] **Step 3: Verify and commit**
+
+Rebuild, screenshot, and read it: the icons must render as shapes rather than
+missing glyphs, and the play triangle must look centred in its button.
+
+```bash
+git add apps/mobile package-lock.json
+git commit -m "feat(mobile): play/pause icons matching the web"
+```
+
+---
+
+## Task 13: Responsive layout for foldables and tablets
+
+Added after user testing: foldables change screen dimensions at runtime and
+tablets are far wider than phones, but the reader hardcodes `fontSize: 26` and
+`lineHeight: 52`.
+
+**Files:**
+- Modify: `apps/mobile/src/screens/ReaderScreen.tsx`, `apps/mobile/src/screens/SurahListScreen.tsx`, `apps/mobile/app.json`
+
+- [ ] **Step 1: Derive type size from the window**
+
+Use `useWindowDimensions()` so a fold, unfold or rotation reflows. Cap the
+reader's content width on wide screens — the web caps at `max-w-3xl`, and
+unbounded lines of Arabic on a tablet are technically fine and genuinely hard
+to read.
+
+- [ ] **Step 2: Survive a configuration change without losing the place**
+
+This is the part that matters more than line length: **a fold must not restart
+playback.** Confirm the Android activity handles the configuration change
+rather than being recreated, and that `usePlayback` keeps its sequencer across
+it. If it does restart, fix it — losing your place mid-ayah because you
+unfolded the phone is the failure a user would actually resent.
+
+- [ ] **Step 3: Verify across form factors**
+
+Create a foldable AVD (Android Studio ships `7.6" Fold-in with outer display`)
+and check folded, unfolded, and both orientations. Rotate with
+`adb shell settings put system user_rotation 1`. Screenshot each and read them.
+Verify playback continues across a fold with the highlight still tracking.
+
+If Task 11 built iOS, check an iPad simulator too.
+
+- [ ] **Step 4: Verify and commit**
+
+```bash
+git add apps/mobile
+git commit -m "feat(mobile): responsive reader for foldables and tablets"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage (Stage 1 scope only).**
