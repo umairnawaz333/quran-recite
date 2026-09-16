@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { SurahText } from '@quran/core';
 import { textLoaders } from '../data/textIndex.generated';
 import { TajweedLine } from '../reader/TajweedLine';
 import { useIsActiveWord } from '../reader/activeWordStore';
 import { SCRIPT_FONTS } from '../reader/fonts';
-import { usePlayback } from '../player/usePlayback';
+import { usePlayer } from '../player/PlayerProvider';
 import { getSurahMeta } from '../data/surahs';
 
 export type Script = 'tajweed' | 'indopak';
@@ -41,9 +41,35 @@ export function ReaderScreen({
   // require cache keeps it thereafter, so this is cheap on re-render.
   const text: SurahText = useMemo(() => textLoaders[surahId](), [surahId]);
   const meta = getSurahMeta(surahId);
-  const { isPlaying, isLoading, ayah, error, play, toggle } = usePlayback(surahId);
+  const player = usePlayer();
+  // Destructure the specific actions this screen calls and depend on those
+  // stable references, not on `player` itself — the provider rebuilds that
+  // whole object on every playback tick (every ayah change, every
+  // isPlaying/isLoading flip), so an effect that closed over it would
+  // re-run on that same cadence. See PlayerProvider.tsx.
+  const { play, toggle, attachViewer } = player;
+
+  // Tell the provider this surah is the one on screen, so it knows whether
+  // it may paint into the (single, global) active-word store — otherwise
+  // browsing to a different surah while another plays would highlight text
+  // here that belongs to that other surah.
+  useEffect(() => attachViewer(surahId), [surahId, attachViewer]);
+
+  // This screen's own transport state only applies while it is actually
+  // showing the surah that's playing; otherwise it should read as idle,
+  // not as whatever surah is playing somewhere else (e.g. via the bar).
+  const isCurrent = player.surahId === surahId;
+  const isPlaying = isCurrent && player.isPlaying;
+  const isLoading = isCurrent && player.isLoading;
+  const ayah = isCurrent ? player.ayah : 1;
+  const error = isCurrent ? player.error : null;
 
   const toggleLabel = isLoading ? 'Loading' : isPlaying ? 'Pause' : 'Play';
+
+  const handleToggle = () => {
+    if (isCurrent) toggle();
+    else void play(surahId);
+  };
 
   return (
     <View style={styles.root}>
@@ -97,7 +123,7 @@ export function ReaderScreen({
 
             <View style={styles.ayahFooter}>
               <Pressable
-                onPress={() => void play(item.ayah)}
+                onPress={() => void play(surahId, item.ayah)}
                 accessibilityRole="button"
                 accessibilityLabel={`Play ayah ${item.ayah}`}
               >
@@ -112,7 +138,7 @@ export function ReaderScreen({
         <Text style={styles.ayahIndicator}>Ayah {ayah}</Text>
         <Pressable
           style={styles.playButton}
-          onPress={toggle}
+          onPress={handleToggle}
           disabled={isLoading}
           accessibilityRole="button"
           accessibilityLabel={toggleLabel}

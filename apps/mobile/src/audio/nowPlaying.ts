@@ -15,7 +15,7 @@ import type { AudioPlayer, AudioMetadata } from 'expo-audio';
  * unused-looking cleanup.
  *
  * `interruptionMode: 'doNotMix'` must also be set via `setAudioModeAsync`
- * (done in `usePlayback`) — without it the OS may not associate the
+ * (done in `PlayerProvider`) — without it the OS may not associate the
  * lock-screen controls with this player at all.
  */
 export function setNowPlaying(player: AudioPlayer, metadata: AudioMetadata): void {

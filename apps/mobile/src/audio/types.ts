@@ -19,7 +19,7 @@ export interface PlayerHandle {
    * exposes further OS integration (expo-audio's lock-screen / notification
    * controls, in production). Deliberately untyped: this interface exists
    * precisely so `AyahSequencer` never has to know what backs it. Only
-   * lock-screen wiring outside the sequencer (`usePlayback`) reaches
+   * lock-screen wiring outside the sequencer (`PlayerProvider`) reaches
    * through this, casting it back to a concrete type there.
    */
   readonly nativePlayer?: unknown;
