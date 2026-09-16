@@ -2059,6 +2059,156 @@ git commit -m "feat(mobile): global persistent player with a bar on every screen
 
 ---
 
+## Task 16: Flatten tajweed spans so Android shapes Arabic correctly
+
+**The user's top priority.** On Android the tajweed script fragments: letters at
+a colour boundary render in their isolated form instead of joining to the next
+letter, and marks sit wrongly. iOS is perfect with the same code and the same
+font.
+
+**Files:**
+- Modify: `apps/mobile/src/screens/ReaderScreen.tsx`
+- Modify: `apps/mobile/src/reader/TajweedText.tsx` (likely deleted — see Step 2)
+- Modify: `apps/mobile/src/reader/activeWordStore.ts`
+
+### The cause, established by evidence
+
+React Native's **nested `<Text>` breaks Arabic cursive shaping on Android**.
+Each nested span is shaped as an independent run, so a cursive letter at a run
+boundary cannot join across it. iOS is unaffected because it builds one
+`NSAttributedString` and shapes the whole paragraph in a single pass, applying
+colour as an attribute.
+
+The control case is on the same screen with the same font: **IndoPak renders
+perfectly** and is one `<Text>` per word — a single level of nesting under the
+ayah-level `<Text>`. **Tajweed nests four levels** — ayah `<Text>` → word
+`<Text>` → `TajweedText`'s wrapper `<Text>` → per-run `<Text>` — and fragments
+at exactly the colour boundaries. Two people verified this independently,
+including with zoomed crops.
+
+So the target is the nesting depth IndoPak already proves works: **coloured runs
+as direct children of the single ayah-level `<Text>`.**
+
+- [ ] **Step 1: Subscribe to the active word once per ayah, not once per word**
+
+Flattening removes the per-word components, so `useIsActiveWord(wordId)` has
+nowhere to live. Replace it with an ayah-level subscription in
+`activeWordStore.ts`:
+
+```ts
+/**
+ * The active word id, but only when it belongs to the given ayah.
+ *
+ * Subscribing per ayah rather than per word is forced by Android's text
+ * shaping: a per-word subscription needs a component per word, which means a
+ * nested <Text> per word, which breaks Arabic cursive joining (see
+ * ReaderScreen). So the playing ayah re-renders on each word change instead of
+ * just two words. That is one ayah — at most ~130 words in the longest ayah of
+ * al-Baqarah, not the 6,116 in the surah — and only the ayah being recited
+ * re-renders, because every other ayah's selector returns null unchanged.
+ */
+export function useActiveWordInAyah(ayahPrefix: string): string | null {
+  return useSyncExternalStore(
+    activeWordStore.subscribe,
+    () => {
+      const active = activeWordStore.getSnapshot();
+      return active !== null && active.startsWith(ayahPrefix) ? active : null;
+    },
+  );
+}
+```
+
+Word ids are `surah:ayah:position`, so `ayahPrefix` is `` `${surah}:${ayah}:` ``.
+**`getSnapshot` must return a stable value** — returning `null` for every
+non-playing ayah is what keeps their subscriptions from re-rendering, and an
+unstable snapshot would cause an infinite render loop.
+
+- [ ] **Step 2: Build a flat span list**
+
+In `ReaderScreen`, replace the nested render with a **plain function** (not a
+component — a component would reintroduce a nesting level) that returns the
+children array for one ayah:
+
+```tsx
+function ayahSpans(
+  words: SurahWord[],
+  script: Script,
+  activeWordId: string | null,
+): React.ReactNode[] {
+  const children: React.ReactNode[] = [];
+
+  words.forEach((w, wi) => {
+    const active = w.id === activeWordId;
+
+    if (script === 'tajweed') {
+      // One <Text> per coloured run, as a DIRECT child of the ayah's <Text>.
+      // Do not wrap the word: every extra nesting level is another shaping
+      // break, which is the defect this function exists to avoid.
+      parseTajweed(w.tajweed).forEach((run, ri) => {
+        const colour = colourFor(run.rules);
+        children.push(
+          <Text
+            key={`${w.id}:${ri}`}
+            style={[colour ? { color: colour } : null, active ? styles.highlight : null]}
+          >
+            {run.text}
+          </Text>,
+        );
+      });
+    } else if (active) {
+      children.push(<Text key={w.id} style={styles.highlight}>{w.indopak}</Text>);
+    } else {
+      // A raw string is not a span at all — the cheapest possible child.
+      children.push(w.indopak);
+    }
+
+    if (wi < words.length - 1) children.push(' ');
+  });
+
+  return children;
+}
+```
+
+Two details that matter:
+
+- **Separators are raw strings**, not `<Text> </Text>`. A raw string adds no
+  span; a nested `<Text>` adds a shaping break between every pair of words.
+- **The highlight is a `backgroundColor` on the run spans themselves**, not a
+  wrapping `<Text>`. Wrapping was what added the third level. Tajweed colours
+  must remain visible — the highlight is a background, never a text colour.
+
+Render it as `<Text style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script] }]}>{ayahSpans(...)}<Text style={styles.ayahNumber}>…</Text></Text>`.
+
+Delete `TajweedText.tsx` once nothing imports it. Leaving an unused component
+that reintroduces the bug is how this regresses.
+
+- [ ] **Step 3: Verify on Android — this is the whole point**
+
+Rebuild or reload, open Surah 1 in tajweed, and capture a screenshot.
+
+Check, and report, each:
+- **`بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ` joins as one continuous word.** Before the
+  fix there was a visible gap between `ٱل` and `رَّحْمَـٰنِ`, exactly at the colour
+  boundary. That gap must be gone.
+- Tajweed colours are still present and correct — this fix must not trade
+  shaping for colour.
+- Toggle to IndoPak: still renders correctly.
+- Play, and confirm the highlight still appears on the recited word and that
+  tajweed colours remain visible underneath it.
+- Compare against the same ayah on iOS; they should now match.
+
+- [ ] **Step 4: Verify and commit**
+
+Root `npm test` (at least 195 — this task changes no test count unless you add
+one), `npm run typecheck` exit 0.
+
+```bash
+git add apps/mobile
+git commit -m "fix(mobile): flatten tajweed spans so Android joins Arabic correctly"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage (Stage 1 scope only).**
