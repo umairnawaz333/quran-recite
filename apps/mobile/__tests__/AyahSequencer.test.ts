@@ -102,4 +102,94 @@ describe('AyahSequencer', () => {
 
     expect(ended).toHaveBeenCalledTimes(1);
   });
+
+  it('ignores a superseded seekToAyah when its own load resolves after a later seek', async () => {
+    const resolvers: (() => void)[] = [];
+    const p = fakePlayer({
+      load: () => new Promise<void>(resolve => { resolvers.push(resolve); }),
+    });
+    const seq = new AyahSequencer(ayahs, () => p);
+    const changes: number[] = [];
+    seq.on('ayahchange', n => changes.push(n));
+
+    const a = seq.seekToAyah(0); // not awaited — its load() is still pending
+    const b = seq.seekToAyah(2); // supersedes A before A's load settles
+
+    // Resolve the later call's load first, then the superseded call's late.
+    // Without a generation recheck right after the await, A's continuation
+    // would still run and emit a phantom ayahchange(0) after the correct
+    // ayahchange(2) — changes: [2, 0].
+    resolvers[1]();
+    await b;
+    resolvers[0]();
+    await a;
+
+    expect(changes).toEqual([2]);
+  });
+
+  it('reloads a slot before playing if its preloaded load rejected', async () => {
+    // Unlike a real <audio> element, this fake's play() only succeeds if
+    // load() previously succeeded — modelling that a rejected preload really
+    // does leave the slot silent unless something reloads it before playing.
+    let ready = false;
+    let failNextLoad = true;
+    const finishers: (() => void)[] = [];
+    const flaky: PlayerHandle & { finish(): void } = {
+      currentTimeMs: 0,
+      playing: false,
+      async load() {
+        if (failNextLoad) {
+          failNextLoad = false;
+          throw new Error('network error');
+        }
+        ready = true;
+      },
+      async play() {
+        if (!ready) throw new Error('no source loaded');
+        (flaky as { playing: boolean }).playing = true;
+      },
+      pause() { (flaky as { playing: boolean }).playing = false; },
+      seekToMs() {},
+      onFinished(cb) { finishers.push(cb); return () => {}; },
+      release() {},
+      finish() { finishers.forEach(cb => cb()); },
+    };
+
+    const players: (PlayerHandle & { finish(): void })[] = [fakePlayer(), flaky];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+    const errors: string[] = [];
+    seq.on('error', e => errors.push(e));
+
+    await seq.seekToAyah(0); // loads players[0] with ayah 0; preloads `flaky` with ayah 1 — rejects
+    await seq.play();
+    players[0].finish(); // ayah 0 ends — the boundary crossing lands on `flaky`, whose preload failed
+
+    // Let the reload that advanceInto triggers on the failed slot settle.
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(flaky.playing).toBe(true);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('reports not-playing when play() rejection is deferred past a macrotask boundary', async () => {
+    // An immediately-rejecting mock (as in the terminal-failure test above)
+    // can't tell "awaited" apart from "called but not awaited"; attemptPlay's
+    // own try/catch runs regardless, and happens to settle before the outer
+    // caller's continuation either way. Deferring the rejection past a
+    // setTimeout does discriminate: `void this.attemptPlay(...)` instead of
+    // `await this.attemptPlay(...)` would let seq.play() resolve while
+    // states is still sitting on [true], before the rejection ever lands.
+    const play = () => new Promise<void>((_resolve, reject) => {
+      setTimeout(() => reject(new Error('NotAllowedError')), 0);
+    });
+    const seq = new AyahSequencer(ayahs, () => fakePlayer({ play }));
+    const states: boolean[] = [];
+    seq.on('state', s => states.push(s));
+
+    await seq.seekToAyah(0);
+    await seq.play();
+
+    expect(states).toEqual([true, false]);
+  });
 });

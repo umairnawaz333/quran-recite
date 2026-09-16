@@ -29,8 +29,15 @@ type Events = {
  *    true forever on a rejection no test caught, because the mock always
  *    resolved);
  *  - a generation token invalidates any completion or settled promise from a
- *    call the caller has since superseded (a seek while a stale finish is
- *    in flight must not move playback backwards).
+ *    call the caller has since superseded — not just a stale finish, but a
+ *    stale *seek* too: every `await` boundary (a `load()`, a `play()`) is a
+ *    point where a newer `seekToAyah`/`next`/`prev` can have already landed,
+ *    and the resumed continuation must recheck the token before touching
+ *    live state or emitting;
+ *  - unlike a real `<audio>` element, `PlayerHandle` promises nothing about
+ *    a slot recovering from a failed `load()` on its own — a failed preload
+ *    is tracked, and a boundary crossing onto an unready slot reloads it
+ *    before playing rather than swapping onto silence.
  */
 export class AyahSequencer {
   private readonly ayahs: AyahTiming[];
@@ -41,6 +48,15 @@ export class AyahSequencer {
   private readonly players: [PlayerHandle | undefined, PlayerHandle | undefined] = [undefined, undefined];
   /** Unsubscribes the previous `onFinished` registration for each slot. */
   private readonly slotUnsub: [(() => void) | null, (() => void) | null] = [null, null];
+  /**
+   * Which ayah each slot currently holds a *successfully completed* load
+   * for, or `null` if it doesn't — nothing has been loaded into it yet, or
+   * the last attempt rejected. Checked before swapping onto a slot: a
+   * rejected preload leaves this `null` rather than silently claiming the
+   * slot is ready, which is what lets `advanceInto` tell "ready" apart from
+   * "failed and needs a reload" at the boundary.
+   */
+  private readonly slotReady: [number | null, number | null] = [null, null];
 
   private activeSlot: Slot = 0;
   private index = 0;
@@ -48,10 +64,10 @@ export class AyahSequencer {
 
   /**
    * Bumped by every `seekToAyah`/`next`/`prev`. Captured by each
-   * `onFinished` registration and by every `play()` attempt at the moment
-   * they are issued; a completion or a settled promise that reports back
-   * under a stale generation is a leftover from a call the caller has since
-   * moved past, and must not touch live state.
+   * `onFinished` registration and by every `play()`/`load()` attempt at the
+   * moment they are issued; a completion or a settled promise that reports
+   * back under a stale generation is a leftover from a call the caller has
+   * since moved past, and must not touch live state.
    */
   private generation = 0;
 
@@ -83,16 +99,27 @@ export class AyahSequencer {
 
   async seekToAyah(index: number, localMs = 0): Promise<void> {
     this.generation += 1;
+    const gen = this.generation;
     const clamped = Math.min(Math.max(index, 0), this.ayahs.length - 1);
+    const slot = this.activeSlot;
     this.index = clamped;
 
-    const player = await this.loadInto(this.activeSlot, clamped);
+    const player = await this.loadInto(slot, clamped);
+
+    // A newer seekToAyah/next/prev may have already landed while this one's
+    // load() was in flight (a double-tap, a scrub before the previous seek's
+    // load settled). Without this check the stale continuation below would
+    // still run — seeking the player to its own (now-wrong) localMs and
+    // emitting ayahchange for its own (now-superseded) index, after the live
+    // call already emitted the correct one.
+    if (gen !== this.generation) return;
+
     player.seekToMs(localMs);
     this.emit('ayahchange', clamped);
     this.preloadNext();
 
     if (this.playing) {
-      await this.attemptPlay(player, this.generation, this.activeSlot);
+      await this.attemptPlay(player, gen, slot);
     }
   }
 
@@ -141,6 +168,14 @@ export class AyahSequencer {
     const localPath = this.localPathFor ? this.localPathFor(ayah.ayah) : null;
     const { uri } = resolveAyahSource(ayah, localPath);
     await player.load(uri);
+
+    // Only record the slot as ready if no newer seek/next/prev superseded
+    // this specific load while it was in flight — otherwise a late-resolving
+    // stale load could overwrite `slotReady` with its own (wrong) index
+    // after a newer load already set the correct one.
+    if (gen === this.generation) {
+      this.slotReady[slot] = ayahIndex;
+    }
     return player;
   }
 
@@ -149,9 +184,10 @@ export class AyahSequencer {
     const nextIndex = this.index + 1;
     if (nextIndex >= this.ayahs.length) return;
     const idleSlot: Slot = this.activeSlot === 0 ? 1 : 0;
-    // Fire-and-forget: preloading must not block the caller, and a preload
-    // failure is recoverable at the boundary (the swap will retry the load)
-    // rather than a reason to fail whatever is in progress right now.
+    // Fire-and-forget: preloading must not block the caller. A rejected
+    // load() here is not silently forgotten forever, though — `slotReady`
+    // is left unset for this ayah, so `advanceInto` notices at the boundary
+    // and reloads before playing instead of swapping onto silence.
     void this.loadInto(idleSlot, nextIndex).catch(() => {});
   }
 
@@ -180,14 +216,50 @@ export class AyahSequencer {
     this.activeSlot = nextSlot;
     this.index = nextIndex;
 
-    const nextPlayer = this.players[nextSlot];
-    nextPlayer?.seekToMs(0);
-    if (this.playing && nextPlayer) {
-      void this.attemptPlay(nextPlayer, gen, nextSlot);
-    }
-
     this.emit('ayahchange', nextIndex);
     this.preloadNext();
+
+    void this.advanceInto(nextSlot, nextIndex, gen);
+  }
+
+  /**
+   * Gets `slot` actually playing `ayahIndex` after a boundary crossing.
+   *
+   * The ordinary path is that `preloadNext` already loaded `ayahIndex` into
+   * `slot` while the previous ayah was playing, so this is a same-tick
+   * no-op past the `slotReady` check. But `PlayerHandle` promises nothing
+   * like a real `<audio>` element's habit of resuming buffering on `.play()`
+   * — a rejected preload just leaves the slot empty — so if `slotReady`
+   * shows this slot never finished loading `ayahIndex`, this reloads it
+   * before seeking/playing rather than swapping onto silence. If that
+   * reload also fails, it surfaces `error` instead of leaving playback
+   * silently stalled at the boundary.
+   */
+  private async advanceInto(slot: Slot, ayahIndex: number, gen: number): Promise<void> {
+    let player = this.players[slot];
+    if (this.slotReady[slot] !== ayahIndex) {
+      try {
+        player = await this.loadInto(slot, ayahIndex);
+      } catch (err) {
+        if (gen !== this.generation || slot !== this.activeSlot) return;
+        const message = err instanceof Error ? err.message : String(err);
+        this.emit('error', message);
+        return;
+      }
+    }
+
+    if (gen !== this.generation || slot !== this.activeSlot || !player) return;
+
+    player.seekToMs(0);
+    if (this.playing) {
+      // Fire-and-forget: this runs from handleFinished, itself invoked by
+      // onFinished's `() => void` callback, so there is nothing here that
+      // could await it. That's fine — attemptPlay never rejects; every
+      // play() failure is caught and handled inside its own try/catch. Do
+      // not "fix" this into an `await` — there's no caller to propagate a
+      // rejection to, and attemptPlay produces none.
+      void this.attemptPlay(player, gen, slot);
+    }
   }
 
   /**
