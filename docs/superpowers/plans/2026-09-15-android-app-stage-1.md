@@ -2209,6 +2209,173 @@ git commit -m "fix(mobile): flatten tajweed spans so Android joins Arabic correc
 
 ---
 
+## Task 17: A native span view, so Android colours Arabic the way Apple does
+
+**The user's top priority, and the third attempt at this problem.** The first two
+failed for an instructive reason, recorded below so this one does not repeat them.
+
+**Files:**
+- Create: `apps/mobile/modules/tajweed-text/` (an Expo **local** module)
+- Create: `apps/mobile/src/reader/TajweedLine.tsx` (the platform-switching wrapper)
+- Modify: `apps/mobile/src/screens/ReaderScreen.tsx`
+
+### Why the obvious approaches do not work
+
+Per-letter tajweed colour through React Native's `<Text>` is **impossible on
+Android**, by construction. In
+`node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/text/TextLayoutManager.kt`
+RN sets spans **per text fragment**:
+
+- line 475 — `ReactAbsoluteSizeSpan`, which extends `AbsoluteSizeSpan` → **`MetricAffectingSpan`**
+- line 480 — `CustomStyleSpan` whenever `fontFamily` is set → explicitly a **`MetricAffectingSpan`**
+
+A `MetricAffectingSpan` boundary is a **shaping-run boundary** on Android, so
+every nested `<Text>` cuts the run and a cursive letter cannot join across it.
+`ReactForegroundColorSpan` is a non-metric `CharacterStyle`, so **the colour is
+harmless** — it is the size and font spans RN adds alongside it that do the
+damage. Flattening the nesting was tried and produced pixel-identical output;
+depth is irrelevant because every fragment gets the spans.
+
+iOS is unaffected because `NSAttributedString` + CoreText shapes one string with
+colour as a non-metric attribute over character ranges.
+
+**So this task builds the Android equivalent of `NSAttributedString`:** one
+string, one typeface, one size, with colour applied as non-metric spans over
+ranges. `SpannableString` + `ForegroundColorSpan` is exactly that, and Android
+shapes it as a single run.
+
+Skia was considered and rejected: canvas-drawn text is invisible to TalkBack,
+cannot be selected, ignores the system font-size setting, and would mean
+rebuilding scrolling, virtualisation and hit-testing. For a Quran reader — with
+a large elderly and visually-impaired readership — those are the wrong things to
+trade away.
+
+**Android only.** iOS already renders correctly through RN `<Text>`; do not
+replace it. `TajweedLine` switches on `Platform.OS` so there is one call site.
+
+- [ ] **Step 1: Scaffold an Expo local module**
+
+```bash
+cd apps/mobile && npx create-expo-module --local tajweed-text
+```
+
+Local modules live in `apps/mobile/modules/` and are auto-linked by Continuous
+Native Generation, so no manual Gradle or Podfile editing. Delete the generated
+iOS implementation and the example view — you need one Android view and a
+TypeScript surface.
+
+- [ ] **Step 2: The TypeScript surface**
+
+```ts
+export interface ColorRange { start: number; end: number; color: string }
+
+export interface TajweedTextViewProps {
+  /** The whole line as ONE string. Never split it. */
+  text: string;
+  /** Colour spans over character ranges of `text`. */
+  ranges: ColorRange[];
+  /** The recited word, drawn as a background span. null when nothing is active. */
+  highlight: { start: number; end: number } | null;
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+  color: string;
+}
+```
+
+Character offsets, not word indices: the native side applies spans by offset,
+which is what makes it the `NSAttributedString` model.
+
+- [ ] **Step 3: The Android view**
+
+A Kotlin view extending `AppCompatTextView` inside an `ExpoView`. On any prop
+change, rebuild:
+
+```kotlin
+val spannable = SpannableString(text)
+for (r in ranges) {
+  spannable.setSpan(
+    ForegroundColorSpan(Color.parseColor(r.color)),
+    r.start, r.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+  )
+}
+highlight?.let {
+  spannable.setSpan(
+    BackgroundColorSpan(highlightColor), it.start, it.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+  )
+}
+setText(spannable)
+```
+
+Three things are load-bearing and must be commented as such:
+
+1. **Set the typeface and text size on the view, once** — never as spans. A
+   per-range `AbsoluteSizeSpan` or `CustomStyleSpan` would reintroduce the exact
+   `MetricAffectingSpan` boundary this whole task exists to remove.
+2. Only `ForegroundColorSpan` and `BackgroundColorSpan` are permitted. Both are
+   non-metric `CharacterStyle`s, so the shaping run stays intact.
+3. Set `textDirection = View.TEXT_DIRECTION_RTL` and `textAlignment` to match
+   the reader.
+
+**Risk 1 — font resolution.** The view needs the bundled Amiri Quran `Typeface`.
+`expo-font` registers loaded fonts with React Native's font manager, so try
+`ReactFontManager.getInstance().getTypeface(fontFamily, Typeface.NORMAL, context.assets)`
+first. If that returns a fallback rather than Amiri Quran, fall back to
+`Typeface.createFromAsset(context.assets, "fonts/amiri-quran.ttf")` and say in
+your report which path worked and how you could tell the difference — a silent
+system fallback looks plausible and proves nothing.
+
+**Risk 2 — measurement.** This is the likeliest way the task fails. A custom
+native view must report its intrinsic height or the ayah list will lay out
+wrongly: collapsed to zero, clipped, or overlapping. Under Fabric that usually
+means implementing Expo's shadow-node/measure path or overriding `onMeasure`
+with a real `StaticLayout` measurement for the given width. **Verify with the
+longest ayah in the Quran, 2:282, not just Al-Fatihah** — a short line can look
+correct while measurement is broken.
+
+- [ ] **Step 4: The platform-switching wrapper**
+
+`TajweedLine.tsx` takes the ayah's words plus the active word id and:
+
+- builds **one** string for the whole ayah, recording each run's character
+  offsets as it concatenates — the offsets and the string must be produced by
+  the same pass, or they will drift
+- resolves each run's colour with the existing `colourFor(run.rules)` (leave
+  `tajweedColours.ts` alone; its innermost-first precedence was settled in an
+  earlier round and matches the web's CSS cascade)
+- computes the highlight range from the active word's offsets
+- renders the native view on Android, and the existing RN `<Text>` path on iOS
+
+- [ ] **Step 5: Verify on Android — the whole point**
+
+Rebuild natively (the module adds native code). Then, reporting what you
+actually saw for each:
+
+- **`بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ` joins continuously**, with no gap between
+  `ٱل` and `رَّحْمَـٰنِ`. Zoom in.
+- **Ayah 1:7's `ٱلضَّآلِّينَ` joins** — the starkest case, previously fragmenting
+  into isolated letters.
+- Tajweed colours are present and on the **correct letters**. A clean join with
+  colours on the wrong glyphs is still a failure and looks fine at a glance.
+- **Surah 2 ayah 282** — the longest in the Quran — lays out without clipping or
+  overlap, proving measurement.
+- Play, and confirm the highlight lands on the recited word with the tajweed
+  colours still visible beneath it.
+- Compare the same ayah against iOS; they should now match.
+- **TalkBack reads the ayah** — the reason this approach was chosen over Skia.
+  Enable it and confirm, or say plainly that you could not test it.
+
+- [ ] **Step 6: Verify and commit**
+
+Root `npm test` (at least 195), `npm run typecheck` exit 0 across four projects.
+
+```bash
+git add apps/mobile
+git commit -m "fix(mobile): native span view so Android colours Arabic without breaking shaping"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage (Stage 1 scope only).**
