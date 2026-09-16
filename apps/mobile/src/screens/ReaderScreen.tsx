@@ -4,10 +4,11 @@ import type { SurahText } from '@quran/core';
 import { textLoaders } from '../data/textIndex.generated';
 import { TajweedText } from '../reader/TajweedText';
 import { useIsActiveWord } from '../reader/activeWordStore';
+import { SCRIPT_FONTS } from '../reader/fonts';
 import { usePlayback } from '../player/usePlayback';
 import { getSurahMeta } from '../data/surahs';
 
-type Script = 'tajweed' | 'indopak';
+export type Script = 'tajweed' | 'indopak';
 
 /**
  * A single IndoPak word. Pulled out to its own component (rather than
@@ -66,7 +67,7 @@ export function ReaderScreen({
         windowSize={5}
         renderItem={({ item }) => (
           <View style={styles.ayah}>
-            <Text style={styles.arabic}>
+            <Text style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script] }]}>
               {item.words.map((w, i) => (
                 <Text key={w.id}>
                   {script === 'tajweed'

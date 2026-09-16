@@ -60,6 +60,14 @@ License reference, alongside a copyright string naming the Amiri Project
 Authors and the Noto Project Authors respectively. The OFL permits embedding
 and redistribution as used here.
 
+The same script also fetches a TTF variant of each font (Google Fonts serves
+woff2 to a browser-like user agent and TTF to an older one — same families,
+same licence) and saves them to `apps/mobile/assets/fonts/` as
+`amiri-quran.ttf` and `noto-naskh-arabic.ttf`. React Native cannot load
+woff2, so the mobile app bundles these TTFs as app assets via `expo-font`
+(`apps/mobile/src/reader/fonts.ts`) rather than fetching them at runtime —
+this app is built for offline use.
+
 ## Attribution
 
 Quran text and timing data are provided by Quran.com. This project is not
