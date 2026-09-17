@@ -128,22 +128,41 @@ export class AyahSequencer {
     // tapping several ayah play buttons stacked overlapping recitations.
     this.players.forEach(p => p?.pause());
 
-    const player = await this.loadInto(slot, clamped);
+    // If the idle slot already holds exactly the ayah being asked for — the
+    // ordinary case for `next()` while playing, because `preloadNext` put it
+    // there — swap onto that slot instead of re-downloading the same file
+    // into the active one. Reloading was the user-visible lag on "next":
+    // every tap threw away a finished preload and streamed the ayah again
+    // from the network. The preload's finish subscription was registered
+    // under an older generation, so it must be re-armed under this one or
+    // `handleFinished` would (correctly) drop the completion as stale and
+    // playback would stall at the boundary.
+    const idleSlot: Slot = slot === 0 ? 1 : 0;
+    const preloaded = this.players[idleSlot];
+    let player: PlayerHandle;
+    if (preloaded && this.slotReady[idleSlot] === clamped) {
+      this.activeSlot = idleSlot;
+      player = preloaded;
+      this.subscribeFinished(idleSlot, player, gen, clamped);
+    } else {
+      player = await this.loadInto(slot, clamped);
 
-    // A newer seekToAyah/next/prev may have already landed while this one's
-    // load() was in flight (a double-tap, a scrub before the previous seek's
-    // load settled). Without this check the stale continuation below would
-    // still run — seeking the player to its own (now-wrong) localMs and
-    // emitting ayahchange for its own (now-superseded) index, after the live
-    // call already emitted the correct one.
-    if (gen !== this.generation) return;
+      // A newer seekToAyah/next/prev may have already landed while this
+      // one's load() was in flight (a double-tap, a scrub before the
+      // previous seek's load settled). Without this check the stale
+      // continuation below would still run — seeking the player to its own
+      // (now-wrong) localMs and emitting ayahchange for its own
+      // (now-superseded) index, after the live call already emitted the
+      // correct one.
+      if (gen !== this.generation) return;
+    }
 
     player.seekToMs(localMs);
     this.emit('ayahchange', clamped);
     this.preloadNext();
 
     if (this.playing) {
-      await this.attemptPlay(player, gen, slot);
+      await this.attemptPlay(player, gen, this.activeSlot);
     }
   }
 
@@ -179,6 +198,16 @@ export class AyahSequencer {
     (Object.keys(this.listeners) as (keyof Events)[]).forEach(k => this.listeners[k].clear());
   }
 
+  /**
+   * (Re)arms `slot`'s finish subscription for `ayahIndex` under `gen`.
+   * Replace, don't stack: a real player would otherwise accumulate one
+   * listener per ayah over a 6,236-ayah corpus.
+   */
+  private subscribeFinished(slot: Slot, player: PlayerHandle, gen: number, ayahIndex: number): void {
+    this.slotUnsub[slot]?.();
+    this.slotUnsub[slot] = player.onFinished(() => this.handleFinished(slot, gen, ayahIndex));
+  }
+
   /** Loads `ayahIndex` into `slot`, (re)subscribing that slot's completion. */
   private async loadInto(slot: Slot, ayahIndex: number): Promise<PlayerHandle> {
     if (!this.players[slot]) {
@@ -186,11 +215,8 @@ export class AyahSequencer {
     }
     const player = this.players[slot]!;
 
-    // Replace, don't stack, the finish subscription: a real player would
-    // otherwise accumulate one listener per ayah over a 6,236-ayah corpus.
-    this.slotUnsub[slot]?.();
     const gen = this.generation;
-    this.slotUnsub[slot] = player.onFinished(() => this.handleFinished(slot, gen, ayahIndex));
+    this.subscribeFinished(slot, player, gen, ayahIndex);
 
     const ayah = this.ayahs[ayahIndex];
     const localPath = this.localPathFor ? this.localPathFor(ayah.ayah) : null;

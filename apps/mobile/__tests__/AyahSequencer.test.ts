@@ -221,3 +221,48 @@ describe('AyahSequencer', () => {
     expect(states).toEqual([true, false]);
   });
 });
+
+describe('AyahSequencer next() reuses the preloaded slot', () => {
+  it('swaps onto the preloaded ayah instead of downloading it again', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    // preloadNext is fire-and-forget; let its load() settle.
+    await new Promise(r => setTimeout(r, 0));
+    expect(players[1].loaded).toEqual([ayahs[1].audioUrl]);
+
+    await seq.next();
+
+    // Stated independently of the code under test: the requested ayah must
+    // not be downloaded a second time — slot 1's history stays exactly the
+    // one preload — and the only new load anywhere is the *following* ayah
+    // being preloaded into the slot that just went idle. Sound moves slots.
+    expect(players[1].loaded).toEqual([ayahs[1].audioUrl]);
+    expect(players[0].loaded).toEqual([ayahs[0].audioUrl, ayahs[2].audioUrl]);
+    expect(players[1].playing).toBe(true);
+    expect(players[0].playing).toBe(false);
+  });
+
+  it('still advances at the boundary after a swap-based next()', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+    const changes: number[] = [];
+    seq.on('ayahchange', n => changes.push(n));
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    await new Promise(r => setTimeout(r, 0));
+    await seq.next();
+
+    // The preload's finish subscription was armed under the OLD generation.
+    // If next() reused the slot without re-arming it, this completion would
+    // be dropped as stale and playback would stall on ayah 2 forever.
+    players[1].finish();
+
+    expect(changes).toEqual([0, 1, 2]);
+  });
+});
