@@ -147,6 +147,29 @@ describe('SettingsScreen — offline management', () => {
     expect(renderedText(tree)).toContain('No surahs downloaded yet.');
   });
 
+  it('"Delete all" also removes a surah that finished downloading while the confirmation was open', async () => {
+    seedDownloaded(1, 7, 100_000);
+    seedDownloaded(108, 3, 100_000);
+    refreshFromDisk();
+    const { tree } = await renderScreen();
+
+    press(control(tree, 'Delete all'));
+    const [, , buttons] = vi.mocked(Alert.alert).mock.calls[0] as [string, string, { text: string; style?: string; onPress?: () => void }[]];
+    const destructive = buttons.find(b => b.style === 'destructive');
+
+    // A third surah finishes downloading while the dialog is still open —
+    // it must not be missed just because it postdates the render that
+    // captured the button's list of surahs to delete.
+    seedDownloaded(114, 6, 100_000);
+    refreshFromDisk();
+
+    act(() => { destructive!.onPress!(); });
+
+    expect(dl.downloaded()).toEqual([]);
+    expect([...store.keys()].some(k => k.startsWith('file:///doc/offline/'))).toBe(false);
+    expect(renderedText(tree)).toContain('No surahs downloaded yet.');
+  });
+
   it('shows no surahs downloaded yet when nothing is on disk', async () => {
     const { tree } = await renderScreen();
     expect(renderedText(tree)).toContain('No surahs downloaded yet.');

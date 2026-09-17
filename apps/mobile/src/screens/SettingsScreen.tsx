@@ -1,7 +1,8 @@
+import { useMemo } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { nativeApplicationVersion } from 'expo-application';
 import { getSurahList, getSurahMeta } from '../data/surahs';
-import { cancelDownload, downloadAll, removeDownload, useDownloadedSurahs, useDownloadState } from '../offline/downloadManager';
+import { cancelDownload, downloadAll, downloads, refreshFromDisk, removeDownload, useDownloadedSurahs, useDownloadState } from '../offline/downloadManager';
 import { surahBytesOnDisk } from '../offline/offlineStore';
 import { allAudioSize, formatBytes } from '../offline/audioSizes';
 import { useTheme, useThemePreference } from '../theme/theme';
@@ -39,9 +40,9 @@ function InProgressRow({ surahId, name, palette }: { surahId: number; name: stri
 }
 
 /** One row of the downloaded list: its size, a tap to open it, and a delete button. */
-function DownloadedRow({ id, onOpenSurah, palette }: { id: number; onOpenSurah: (id: number) => void; palette: Palette }) {
+function DownloadedRow({ id, bytes, onOpenSurah, palette }: { id: number; bytes: number; onOpenSurah: (id: number) => void; palette: Palette }) {
   const name = getSurahMeta(id)?.nameSimple ?? `Surah ${id}`;
-  const size = formatBytes(surahBytesOnDisk(id));
+  const size = formatBytes(bytes);
   return (
     <View style={styles.row}>
       <Pressable
@@ -73,14 +74,29 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
   const { palette } = useTheme();
   const [preference, setPreference] = useThemePreference();
   const downloaded = useDownloadedSurahs();
-  const totalBytes = downloaded.reduce((sum, id) => sum + surahBytesOnDisk(id), 0);
+  // Walked once per surah per render, not once for the total and again per
+  // row: `DownloadedRow` takes its size as a prop rather than re-reading
+  // disk itself.
+  const downloadedSizes = useMemo(
+    () => downloaded.map(id => ({ id, bytes: surahBytesOnDisk(id) })),
+    [downloaded],
+  );
+  const totalBytes = downloadedSizes.reduce((sum, s) => sum + s.bytes, 0);
   const { bytes: allBytes, files: allFiles } = allAudioSize();
   const downloadAllLabel = `Download all (${formatBytes(allBytes)})`;
 
   const confirmDeleteAll = () => {
     Alert.alert('Delete all downloads?', `Frees ${formatBytes(totalBytes)} of storage.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete all', style: 'destructive', onPress: () => downloaded.forEach(removeDownload) },
+      {
+        text: 'Delete all',
+        style: 'destructive',
+        // Re-reads the disk at confirm time (not the `downloaded` binding
+        // captured when the row was tapped): a surah that finishes
+        // downloading while this dialog is open is on disk by the time this
+        // fires, and must not be left behind.
+        onPress: () => { refreshFromDisk(); downloads.downloaded().forEach(removeDownload); },
+      },
     ]);
   };
 
@@ -113,8 +129,8 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
           <Text style={[styles.empty, { color: palette.textMuted }]}>No surahs downloaded yet.</Text>
         ) : (
           <>
-            {downloaded.map(id => (
-              <DownloadedRow key={id} id={id} onOpenSurah={onOpenSurah} palette={palette} />
+            {downloadedSizes.map(({ id, bytes }) => (
+              <DownloadedRow key={id} id={id} bytes={bytes} onOpenSurah={onOpenSurah} palette={palette} />
             ))}
             <View style={styles.totalRow}>
               <Text style={[styles.total, { color: palette.text }]}>Total: {formatBytes(totalBytes)}</Text>
