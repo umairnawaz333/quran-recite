@@ -77,6 +77,13 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
     val pad = (20 * context.resources.displayMetrics.density).toInt()
     setPadding(pad, 0, pad, 0)
     includeFontPadding = true
+    // TextView clips what it draws to its padding box regardless of the
+    // padding, so the inset alone still cut the tail of a final ى at a line
+    // end. The one thing that widens TextView's own clip is a shadow layer
+    // (it extends the clip by the shadow radius), so an invisible one of
+    // the inset's radius lets the ink paint into the inset. Nothing is
+    // drawn for a transparent shadow; layout is untouched.
+    setShadowLayer(pad.toFloat(), 0f, 0f, Color.TRANSPARENT)
   }
 
   var text: String = ""
