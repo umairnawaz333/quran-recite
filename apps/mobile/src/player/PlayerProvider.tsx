@@ -5,13 +5,14 @@ import { AppState } from 'react-native';
 import {
   SyncEngine, loadTimings, configureTimings, configureAudioBase,
 } from '@quran/core';
-import type { SurahTimings } from '@quran/core';
+import type { AyahTiming, SurahTimings } from '@quran/core';
 import { setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer, AudioMetadata } from 'expo-audio';
 import { AyahSequencer } from '../audio/AyahSequencer';
 import { createExpoPlayer } from '../audio/expoPlayer';
 import { setNowPlaying, isNowPlaying } from '../audio/nowPlaying';
 import { cacheAyah, localPathFor } from '../audio/ayahCache';
+import { offlinePathFor, offlineTimingsStore } from '../offline/offlineStore';
 import { readLastPosition, writeLastPosition } from './lastPosition';
 import { activeWordStore } from '../reader/activeWordStore';
 import { getSurahMeta } from '../data/surahs';
@@ -21,8 +22,24 @@ import { getSurahMeta } from '../data/surahs';
 // deployment target, so there is nothing to make configurable. Mirrors the
 // web's `configureAudioBase(process.env.NEXT_PUBLIC_AUDIO_BASE_URL)` in
 // PlayerProvider.tsx, minus the env indirection this app doesn't need.
-configureTimings({ baseUrl: 'https://quran-recite-eta.vercel.app' });
+//
+// `store: offlineTimingsStore` is what makes a downloaded surah's timings
+// come from its own folder rather than the network (spec §9): `loadTimings`
+// consults the configured store before ever touching `baseUrl`, and
+// `offlineTimingsStore` reads a surah's `offline/<id>/timings.json` first, so
+// a downloaded surah's recitation — and its word-by-word highlight — comes
+// up with the network off.
+configureTimings({ baseUrl: 'https://quran-recite-eta.vercel.app', store: offlineTimingsStore });
 configureAudioBase('https://github.com/umairnawaz333/quran-recite/releases/download');
+
+/**
+ * Offline folder first, then the warm cache, else stream. Handed to the
+ * sequencer as its `localPathFor` seam so a downloaded surah's audio, like
+ * its timings above, comes from disk rather than the network.
+ */
+function localAudioFor(ayah: AyahTiming): string | null {
+  return offlinePathFor(ayah) ?? localPathFor(ayah);
+}
 
 export interface PlayerState {
   surahId: number | null;
@@ -283,11 +300,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const reuse = sequencerRef.current !== null && engineRef.current !== null;
     const engine = engineRef.current ?? new SyncEngine();
     // The next ayah is prefetched to disk while the current one plays
-    // (`cacheAyah`), and every load goes through `localPathFor`, so the
-    // single player's boundary reload — and "previous", and replays — come
-    // from a local file rather than the network.
+    // (`cacheAyah`), and every load goes through `localAudioFor` (offline
+    // folder, then warm cache), so the single player's boundary reload —
+    // and "previous", and replays — come from a local file rather than the
+    // network, offline surahs included.
     const sequencer = sequencerRef.current
-      ?? new AyahSequencer(timings.ayahs, createExpoPlayer, localPathFor, cacheAyah);
+      ?? new AyahSequencer(timings.ayahs, createExpoPlayer, localAudioFor, cacheAyah);
 
     // Nothing from here until the switch-over touches the visible state.
     // The old surah stays the surah every ref and every state field

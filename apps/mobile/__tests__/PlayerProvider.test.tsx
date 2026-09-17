@@ -28,13 +28,17 @@ vi.mock('../src/audio/nowPlaying', async () => {
 });
 
 import { act } from 'react-test-renderer';
+import { configureTimings } from '@quran/core';
 import {
   audio, lockScreenPlayer, releaseHeldLoads, setAudioModeAsync, setNowPlaying,
 } from './helpers/fakeAudio';
-import { holdLastPosition, releaseLastPosition, saveLastPosition } from './helpers/fakeFileSystem';
 import {
-  failTimings, holdTimings, provideTimings, releaseTimings, timingsReads,
+  holdLastPosition, releaseLastPosition, saveLastPosition, store as fakeDisk,
+} from './helpers/fakeFileSystem';
+import {
+  buildTimings, failTimings, holdTimings, provideTimings, releaseTimings, timingsReads,
 } from './helpers/fakeTimings';
+import { offlineTimingsStore } from '../src/offline/offlineStore';
 import { frames, runFrames } from './helpers/frames';
 import { appStateListenerCount, emitAppState } from './helpers/reactNativeMock';
 import {
@@ -175,6 +179,39 @@ describe('PlayerProvider — starting playback', () => {
     expect(setNowPlaying).toHaveBeenCalled();
     // Subscribed once for the provider's lifetime, not once per ayah.
     expect(appStateListenerCount()).toBe(1);
+  });
+});
+
+describe('PlayerProvider — playing a downloaded surah', () => {
+  it('plays a downloaded surah from its offline folder, timings included, with no network', async () => {
+    // No `provideTimings(112)`: the only timings anywhere are the offline
+    // folder's. `resetPlayerEnvironment` (this file's `beforeEach`) wipes
+    // core's configured timings store back to the harness's fake before
+    // every test (`resetTimingsCache()` drops the configured store along
+    // with the memoised cache — see fakeTimings.ts and renderPlayer.tsx), so
+    // the provider's own module-scope `configureTimings({ store:
+    // offlineTimingsStore })` has already been overwritten by the time this
+    // test's body runs. Restoring it here — the same way the harness
+    // restores its own fake store every test — is what proves the offline
+    // store is what production actually wires up at module scope; it is
+    // never re-applied by the provider itself, so nothing here can leak into
+    // (or break) any other test in this file.
+    configureTimings({ store: offlineTimingsStore });
+
+    const timings = buildTimings(112, 4);
+    fakeDisk.set('file:///doc/offline/112/timings.json', JSON.stringify(timings));
+    for (let n = 1; n <= 4; n++) {
+      fakeDisk.set(`file:///doc/offline/112/11200${n}.mp3`, 'x');
+    }
+
+    const player = mountPlayer();
+    await playFully(player, 112);
+
+    expect(player.current.surahId).toBe(112);
+    expect(sounding().loaded.at(-1)).toBe('file:///doc/offline/112/112001.mp3');
+    // Never touched the fake network-backed store: proof this played with
+    // the network off.
+    expect(timingsReads).not.toContain(112);
   });
 });
 
