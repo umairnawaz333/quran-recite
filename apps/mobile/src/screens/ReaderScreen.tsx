@@ -228,7 +228,7 @@ export function ReaderScreen({
     }
     if (retriesLeft.current-- <= 0) { pendingCentre.current = null; return; }
     approach(index);
-    setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 300);
+    setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 350);
   };
   const centreOnRow = (index: number) => {
     pendingCentre.current = index;
@@ -324,7 +324,6 @@ export function ReaderScreen({
           onScroll={e => { currentOffset.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={100}
           onScrollToIndexFailed={() => { /* handled by snapTo's own approach loop */ }}
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
             <AyahRow
               index={index}
