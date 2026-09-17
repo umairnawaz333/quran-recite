@@ -131,7 +131,7 @@ useful for offline development.
 ## Tests
 
 ```bash
-npm test          # 207 unit tests (vitest): 90 in packages/core, 34 in apps/mobile, 83 in apps/web
+npm test          # 210 unit tests (vitest): 90 in packages/core, 38 in apps/mobile, 83 in apps/web
 npm run test:e2e  # 4 Playwright tests, driving a real browser (apps/web only)
 ```
 
