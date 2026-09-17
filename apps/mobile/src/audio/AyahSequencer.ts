@@ -48,6 +48,20 @@ export class AyahSequencer {
   private readonly players: [PlayerHandle | undefined, PlayerHandle | undefined] = [undefined, undefined];
   /** Unsubscribes the previous `onFinished` registration for each slot. */
   private readonly slotUnsub: [(() => void) | null, (() => void) | null] = [null, null];
+  /** Unsubscribes each slot's lifetime `onPlayingChanged` registration. */
+  private readonly transportUnsub: [(() => void) | null, (() => void) | null] = [null, null];
+  /**
+   * Whether this sequencer last asked each slot's player to be playing.
+   *
+   * Set at every single point where the sequencer issues a `play()` or a
+   * `pause()`, always *before* the call, so that a transition reported back
+   * through `onPlayingChanged` can be classified: one that agrees with the
+   * intent recorded here is the sequencer's own doing, one that contradicts
+   * it came from outside the app — Android's notification / lock-screen
+   * transport acts directly on a native player (see `PlayerHandle
+   * .onPlayingChanged`). `handleExternalTransport` is what that buys.
+   */
+  private readonly slotIntent: [boolean, boolean] = [false, false];
   /**
    * Which ayah each slot currently holds a *successfully completed* load
    * for, or `null` if it doesn't — nothing has been loaded into it yet, or
@@ -126,7 +140,7 @@ export class AyahSequencer {
     // — loading into `slot` alone would leave that leftover sound playing
     // underneath the newly-seeked ayah. This is exactly the bug the user hit:
     // tapping several ayah play buttons stacked overlapping recitations.
-    this.players.forEach(p => p?.pause());
+    this.pauseAll();
 
     // If the idle slot already holds exactly the ayah being asked for — the
     // ordinary case for `next()` while playing, because `preloadNext` put it
@@ -174,13 +188,67 @@ export class AyahSequencer {
     await this.attemptPlay(player, this.generation, this.activeSlot);
   }
 
+  /**
+   * Pauses one slot's player, recording that the sequencer asked for it.
+   *
+   * Every pause the sequencer issues goes through here (or `pauseAll`), and
+   * the recording happens before the call, so that the resulting
+   * `onPlayingChanged(false)` is recognisable as self-inflicted rather than
+   * as someone pressing pause on the lock screen.
+   */
+  private pauseSlot(slot: Slot): void {
+    this.slotIntent[slot] = false;
+    this.players[slot]?.pause();
+  }
+
+  private pauseAll(): void {
+    this.pauseSlot(0);
+    this.pauseSlot(1);
+  }
+
+  /**
+   * Applies a play/pause that came from outside the app to whatever is
+   * actually audible.
+   *
+   * Android binds its media session — the notification buttons, the lock
+   * screen, headset keys — to *one* native player, and its transport
+   * commands go straight to that player's native object without passing
+   * through this app at all. Because playback alternates between two
+   * players, the bound one is only the audible one every other ayah; the
+   * rest of the time a "play" would start the *preloaded next* ayah
+   * underneath the live one (two voices) and a "pause" would silence a
+   * player that was not making sound. Translating the command onto the
+   * sequencer is what makes those buttons mean what they say.
+   */
+  private handleExternalTransport(slot: Slot, playing: boolean): void {
+    // Agreeing with the recorded intent means this is the sequencer's own
+    // play()/pause() being reported back, not a command from outside.
+    if (playing === this.slotIntent[slot]) return;
+
+    if (playing) {
+      if (slot === this.activeSlot) {
+        // The bound player happens to be the audible one: it is already
+        // doing the right thing, so just adopt it as intended...
+        this.slotIntent[slot] = true;
+      } else {
+        // ...otherwise it is the idle slot, holding the ayah *after* the
+        // live one. Silence it before it can be heard over the recitation.
+        this.pauseSlot(slot);
+      }
+      if (!this.playing) void this.play();
+    } else {
+      this.slotIntent[slot] = false;
+      if (this.playing) this.pause();
+    }
+  }
+
   pause(): void {
     this.playing = false;
     // Pause both slots, not just the active one — see the comment in
     // seekToAyah: "the active slot" is not the same as "the slot making
     // noise" once a boundary crossing has swapped `activeSlot` out from
     // under a still-sounding player.
-    this.players.forEach(p => p?.pause());
+    this.pauseAll();
     this.emit('state', false);
   }
 
@@ -199,6 +267,7 @@ export class AyahSequencer {
     // player that has just been released.
     this.generation += 1;
     this.slotUnsub.forEach(unsub => unsub?.());
+    this.transportUnsub.forEach(unsub => unsub?.());
     this.players.forEach(p => p?.release());
     (Object.keys(this.listeners) as (keyof Events)[]).forEach(k => this.listeners[k].clear());
   }
@@ -217,6 +286,12 @@ export class AyahSequencer {
   private async loadInto(slot: Slot, ayahIndex: number): Promise<PlayerHandle> {
     if (!this.players[slot]) {
       this.players[slot] = this.createPlayer();
+      // For the player's whole life, not per ayah: what this watches for is
+      // a transport command from outside the app, which can land on either
+      // slot at any moment regardless of which ayah it holds.
+      this.transportUnsub[slot] = this.players[slot]!.onPlayingChanged(
+        playing => this.handleExternalTransport(slot, playing),
+      );
     }
     const player = this.players[slot]!;
 
@@ -233,6 +308,11 @@ export class AyahSequencer {
     // value here would let it swap onto this slot and play whatever the
     // in-flight load brings while announcing the old index.
     this.slotReady[slot] = null;
+    // A load is never meant to make sound (`expoPlayer.load` pauses first,
+    // for exactly that reason), so record the intent alongside `slotReady`:
+    // a player that came out of a load playing did not do so on this
+    // sequencer's orders.
+    this.slotIntent[slot] = false;
     await player.load(uri);
 
     // Only record the slot as ready if no newer seek/next/prev superseded
@@ -272,6 +352,10 @@ export class AyahSequencer {
 
     if (ayahIndex >= this.ayahs.length - 1) {
       this.playing = false;
+      // Reaching the end of the surah stops this slot as surely as a pause
+      // would; recording that keeps a later, genuinely external start on
+      // this same player recognisable as external.
+      this.pauseSlot(slot);
       this.emit('state', false);
       this.emit('ended');
       return;
@@ -284,7 +368,7 @@ export class AyahSequencer {
     // the instant it loads. `expoPlayer.load()` defends against the same
     // thing at its own layer; this keeps the sequencer's invariant true for
     // any `PlayerHandle`, not just that one.
-    this.players[slot]?.pause();
+    this.pauseSlot(slot);
 
     const nextIndex = ayahIndex + 1;
     const nextSlot: Slot = slot === 0 ? 1 : 0;
@@ -355,6 +439,7 @@ export class AyahSequencer {
    */
   private async attemptPlay(player: PlayerHandle, gen: number, slotAtCall: Slot, allowRetry = true): Promise<void> {
     try {
+      this.slotIntent[slotAtCall] = true;
       await player.play();
       if (gen !== this.generation || slotAtCall !== this.activeSlot) return;
     } catch (err) {
@@ -366,6 +451,10 @@ export class AyahSequencer {
       }
 
       this.playing = false;
+      // This play never took: the slot is not playing and is not meant to
+      // be, so leaving the intent set would make its *next* genuine start
+      // look self-inflicted and its absence look like nothing at all.
+      this.slotIntent[slotAtCall] = false;
       this.emit('state', false);
       const message = err instanceof Error ? err.message : String(err);
       this.emit('error', message);

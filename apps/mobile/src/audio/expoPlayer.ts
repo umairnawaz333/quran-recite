@@ -25,12 +25,36 @@ import type { PlayerHandle } from './types';
 export function createExpoPlayer(): PlayerHandle {
   const player: AudioPlayer = createAudioPlayer();
   const finishedCbs = new Set<() => void>();
+  const playingCbs = new Set<(playing: boolean) => void>();
+  /**
+   * The last `playing` value reported to `playingCbs`, so that the status
+   * event stream — which repeats `playing: true` on expo-audio's update
+   * interval for as long as the player runs — is reduced to transitions.
+   */
+  let lastPlaying = player.playing;
 
   // Kept for the lifetime of the player: this is what turns
   // `status.didJustFinish` into the `onFinished` callbacks the sequencer
-  // relies on to advance to the next ayah.
+  // relies on to advance to the next ayah, and `status.playing` into the
+  // `onPlayingChanged` transitions it uses to notice a play/pause it never
+  // asked for.
   const subscription = player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
-    if (status.didJustFinish) finishedCbs.forEach(cb => cb());
+    if (status.didJustFinish) {
+      // Reaching the end of a file leaves the player not playing, and
+      // expo-audio says so in this very status (`playing: false` rides
+      // along with `didJustFinish`). Absorb it into `lastPlaying` without
+      // announcing it: the sequencer already learns about the boundary from
+      // `onFinished`, and announcing it here as well would be
+      // indistinguishable from a pause pressed at the exact boundary —
+      // which the sequencer would obey by stopping the recitation.
+      lastPlaying = false;
+      finishedCbs.forEach(cb => cb());
+      return;
+    }
+    if (typeof status.playing === 'boolean' && status.playing !== lastPlaying) {
+      lastPlaying = status.playing;
+      playingCbs.forEach(cb => cb(status.playing));
+    }
   });
 
   return {
@@ -116,9 +140,15 @@ export function createExpoPlayer(): PlayerHandle {
       return () => finishedCbs.delete(cb);
     },
 
+    onPlayingChanged(cb: (playing: boolean) => void): () => void {
+      playingCbs.add(cb);
+      return () => playingCbs.delete(cb);
+    },
+
     release(): void {
       subscription.remove();
       finishedCbs.clear();
+      playingCbs.clear();
       // Pause before removing, and never rely on `remove()` alone to stop
       // the sound. `PlayerProvider`'s `teardown()` releases the old
       // sequencer while its surah is *still audibly playing* — that is the

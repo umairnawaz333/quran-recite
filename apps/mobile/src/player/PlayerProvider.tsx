@@ -7,10 +7,10 @@ import {
 } from '@quran/core';
 import type { SurahTimings } from '@quran/core';
 import { setAudioModeAsync } from 'expo-audio';
-import type { AudioPlayer } from 'expo-audio';
+import type { AudioPlayer, AudioMetadata } from 'expo-audio';
 import { AyahSequencer } from '../audio/AyahSequencer';
 import { createExpoPlayer } from '../audio/expoPlayer';
-import { setNowPlaying } from '../audio/nowPlaying';
+import { setNowPlaying, isNowPlaying } from '../audio/nowPlaying';
 import { activeWordStore } from '../reader/activeWordStore';
 import { getSurahMeta } from '../data/surahs';
 
@@ -72,6 +72,15 @@ export type PlayerContextValue = PlayerState & PlayerActions;
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 
+/** What the lock screen and the notification show for a surah. */
+function lockScreenMeta(meta: { nameSimple: string }): AudioMetadata {
+  return {
+    title: meta.nameSimple,
+    artist: 'AbdulBaset AbdulSamad',
+    albumTitle: 'Murattal',
+  };
+}
+
 export function usePlayer(): PlayerContextValue {
   const value = useContext(PlayerContext);
   if (!value) throw new Error('usePlayer must be used inside <PlayerProvider>');
@@ -123,6 +132,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const requestRef = useRef(0);
   /** Index into the live surah's `ayahs` that the sequencer is on. */
   const ayahIndexRef = useRef(0);
+  /**
+   * The live playback's own "bind Android's media session to whatever is
+   * audible now" closure, republished by every `play()` that becomes live.
+   *
+   * A ref, not state: the `AppState` subscription below has to reach the
+   * *current* one without re-subscribing whenever playback changes — this
+   * provider's whole effect discipline is to never depend on values that
+   * tick per ayah (see the note on the context value at the bottom).
+   */
+  const registerRef = useRef<(() => void) | null>(null);
 
   const patch = useCallback((next: Partial<PlayerState>) => {
     setState(prev => ({ ...prev, ...next }));
@@ -244,23 +263,46 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // now but gated on `live`, which flips at the switch-over.
     let live = false;
 
+    /**
+     * The native player this playback handed to Android as the lock-screen
+     * controller. Kept so `registerLockScreen` can tell "the binding is
+     * already on one of *my* players" from "it belongs to a surah that is
+     * no longer playing" — see the comment in `registerLockScreen`.
+     */
+    let lockScreenPlayer: AudioPlayer | null = null;
+
     const registerLockScreen = () => {
-      // Re-activate lock-screen controls on whichever native player is now
-      // actually driving playback, but only while the app is in the
-      // foreground — re-issuing this for a *different* native player asks
-      // Android to promote the playback service to the foreground again,
-      // which Android refuses once truly backgrounded
-      // ("Service.startForeground() not allowed"), freezing playback. See
-      // nowPlaying.ts.
-      if (AppState.currentState !== 'active') return;
       const native = sequencer.activePlayer?.nativePlayer as AudioPlayer | undefined;
-      if (native && meta) {
-        setNowPlaying(native, {
-          title: meta.nameSimple,
-          artist: 'AbdulBaset AbdulSamad',
-          albumTitle: 'Murattal',
-        });
+      if (!native || !meta) return;
+
+      // Deliberately *not* moved to the newly active slot at every ayah.
+      //
+      // Playback alternates between two native players, and Android binds
+      // its media session to one of them, so it is tempting to move the
+      // binding every boundary onto whichever player is audible. That
+      // cannot be done from the background at all (see nowPlaying.ts), and
+      // doing it in the foreground has a cost that is not obvious: expo
+      // gives *every* `AudioPlayer` its own bare `MediaSession`
+      // ("ExpoAudioBasicMediaSession_…", see `AudioUtils
+      // .buildBasicMediaSession`), and registering a player for the lock
+      // screen releases that player's bare session and replaces it with the
+      // service's own. Move the binding back and forth and both players end
+      // up with nothing but a released session, leaving one media session
+      // for the whole app — bound, half the time, to the silent slot.
+      //
+      // Left alone, the *unbound* slot keeps its bare session, and Android
+      // routes transport commands (media keys, `cmd media_session dispatch`,
+      // headsets, the Assistant) to whichever session is actually playing.
+      // Between that and `AyahSequencer`'s external-transport handling for
+      // the bound slot, both players stay controllable at every ayah.
+      if (lockScreenPlayer && isNowPlaying(lockScreenPlayer)) {
+        // Still bound to this playback: only the metadata can need a nudge
+        // (cheap, and safe while backgrounded).
+        setNowPlaying(lockScreenPlayer, lockScreenMeta(meta));
+        return;
       }
+      lockScreenPlayer = native;
+      setNowPlaying(native, lockScreenMeta(meta));
     };
 
     engine.onChange(paint);
@@ -332,6 +374,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // ran off locals, so until here the old surah was audible and its state
     // accurate. Nothing is pending any more: this call succeeded, and any
     // later call has already claimed `pendingSurahId` for itself.
+    // Before `teardown()`, not after: tearing down releases the outgoing
+    // sequencer's native players, and expo-audio's `releasePlayer()` calls
+    // `unregisterPlayer()` on any player still registered for the lock
+    // screen — which stops the playback foreground service outright
+    // (`clearSessionInternal` → `stopForeground`). From the background (this
+    // path runs on its own at the end of every surah, continuing into the
+    // next one) that service could then never be promoted again, and with
+    // it goes the protection this registration exists for. Registering the
+    // incoming player first clears the outgoing one's
+    // `isActiveForLockScreen`, so its release passes over that branch.
+    registerLockScreen();
+    registerRef.current = registerLockScreen;
+
     teardown();
     engineRef.current = engine;
     sequencerRef.current = sequencer;
@@ -347,8 +402,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       error: null,
       pendingSurahId: null,
     });
-    // The first ayah's `ayahchange` fired before `live`; register now.
-    registerLockScreen();
 
     await sequencer.play();
   }, [patch, paint, teardown]);
@@ -405,6 +458,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Re-bind Android's media session to the audible player whenever the app
+  // comes back to the foreground. Boundary crossings keep the binding
+  // current on their own, but nothing else re-checks it, so without this a
+  // binding left stale by anything at all — a boundary the app slept
+  // through, a registration the OS declined while backgrounded — would
+  // persist until the *next* boundary, leaving the notification's buttons
+  // pointed at a player that is not the one making sound.
+  //
+  // Mounted once, with no dependencies: it reaches the live playback only
+  // through `registerRef`, never through state, so it is not re-subscribed
+  // on every ayah (see the note on the context value at the bottom).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => {
+      if (next === 'active') registerRef.current?.();
+    });
+    return () => sub.remove();
+  }, []);
+
   // Unmount only (this provider is mounted once, for the app's lifetime) —
   // `teardown()` itself stays purely ref-based on purpose: it is also called
   // from inside `play()`'s own rebuild, mid-flight, where a newly-set
@@ -414,6 +485,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // left pending forever" property without that risk — even though nothing
   // is left to observe it once the provider is gone.
   useEffect(() => () => {
+    registerRef.current = null;
     teardown();
     setState(prev => ({ ...prev, pendingSurahId: null }));
   }, [teardown]);

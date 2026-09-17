@@ -13,7 +13,17 @@ const ayahs: AyahTiming[] = [1, 2, 3].map(n => ({
 
 function fakePlayer(overrides: Partial<PlayerHandle> = {}) {
   const finishers: (() => void)[] = [];
-  const p: PlayerHandle & { finish(): void; loaded: string[] } = {
+  const transport: ((playing: boolean) => void)[] = [];
+  const p: PlayerHandle & {
+    finish(): void;
+    /**
+     * Reports a play/pause that this player underwent without the sequencer
+     * asking — what a real `PlayerHandle` emits when Android's notification
+     * or a media key acts straight on the native player.
+     */
+    transportChanged(playing: boolean): void;
+    loaded: string[];
+  } = {
     currentTimeMs: 0,
     playing: false,
     loaded: [],
@@ -22,8 +32,10 @@ function fakePlayer(overrides: Partial<PlayerHandle> = {}) {
     pause() { (p as { playing: boolean }).playing = false; },
     seekToMs() {},
     onFinished(cb) { finishers.push(cb); return () => {}; },
+    onPlayingChanged(cb) { transport.push(cb); return () => {}; },
     release() {},
     finish() { finishers.forEach(cb => cb()); },
+    transportChanged(playing) { transport.forEach(cb => cb(playing)); },
     ...overrides,
   };
   return p;
@@ -151,6 +163,7 @@ describe('AyahSequencer', () => {
       pause() { (flaky as { playing: boolean }).playing = false; },
       seekToMs() {},
       onFinished(cb) { finishers.push(cb); return () => {}; },
+      onPlayingChanged() { return () => {}; },
       release() {},
       finish() { finishers.forEach(cb => cb()); },
     };
