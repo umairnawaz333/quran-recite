@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { usePlayer } from './PlayerProvider';
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon, Spinner } from '../components/PlayerIcons';
+import { useTheme } from '../theme/theme';
 
 /**
  * The player, visible on every screen — rendered once from `App.tsx`,
@@ -12,6 +13,7 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
   const {
     surahId, surahName, ayah, isPlaying, isLoading, pendingSurahId, toggle, next, prev,
   } = usePlayer();
+  const { palette } = useTheme();
 
   // Nothing has ever played — show no chrome at all.
   if (surahId === null) return null;
@@ -39,15 +41,15 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
   const transportDisabled = isLoadingForThis;
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: palette.background, borderTopColor: palette.border }]}>
       <Pressable
         style={styles.info}
         onPress={() => onNavigate(surahId)}
         accessibilityRole="button"
         accessibilityLabel={`Go to ${surahName ?? 'playing surah'}`}
       >
-        <Text style={styles.name} numberOfLines={1}>{surahName}</Text>
-        <Text style={styles.ayah}>Ayah {ayah}</Text>
+        <Text style={[styles.name, { color: palette.text }]} numberOfLines={1}>{surahName}</Text>
+        <Text style={[styles.ayah, { color: palette.textMuted }]}>Ayah {ayah}</Text>
       </Pressable>
 
       <View style={styles.transport}>
@@ -58,19 +60,19 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
           accessibilityRole="button"
           accessibilityLabel="Previous ayah"
         >
-          <PrevIcon size={18} color={transportDisabled ? '#ccc' : '#555'} />
+          <PrevIcon size={18} color={transportDisabled ? palette.border : palette.textMuted} />
         </Pressable>
 
         <Pressable
-          style={styles.toggle}
+          style={[styles.toggle, { backgroundColor: palette.accent }]}
           onPress={toggle}
           disabled={isLoadingForThis}
           accessibilityRole="button"
           accessibilityLabel={toggleLabel}
         >
           {isLoadingForThis
-            ? <Spinner size={20} color="#fff" />
-            : isPlaying ? <PauseIcon size={20} color="#fff" /> : <PlayIcon size={20} color="#fff" />}
+            ? <Spinner size={20} color={palette.accentText} />
+            : isPlaying ? <PauseIcon size={20} color={palette.accentText} /> : <PlayIcon size={20} color={palette.accentText} />}
         </Pressable>
 
         <Pressable
@@ -80,13 +82,15 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
           accessibilityRole="button"
           accessibilityLabel="Next ayah"
         >
-          <NextIcon size={18} color={transportDisabled ? '#ccc' : '#555'} />
+          <NextIcon size={18} color={transportDisabled ? palette.border : palette.textMuted} />
         </Pressable>
       </View>
     </View>
   );
 }
 
+// Layout only — the bar's colours come from the palette at the call site, so
+// it follows the scheme (see `theme.tsx`).
 const styles = StyleSheet.create({
   root: {
     flexDirection: 'row',
@@ -95,19 +99,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ddd',
-    backgroundColor: '#fff',
   },
   info: { flex: 1, marginRight: 12 },
-  name: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
-  ayah: { fontSize: 12, color: '#777', marginTop: 2, fontVariant: ['tabular-nums'] },
+  name: { fontSize: 14, fontWeight: '600' },
+  ayah: { fontSize: 12, marginTop: 2, fontVariant: ['tabular-nums'] },
   transport: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   side: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
   },
   toggle: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#1a1a1a',
+    width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
   },
 });

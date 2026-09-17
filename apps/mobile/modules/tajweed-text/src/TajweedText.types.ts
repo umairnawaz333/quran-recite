@@ -44,6 +44,12 @@ export interface TajweedTextViewProps {
   /** The base text colour for any character `ranges` doesn't cover. */
   color: string;
   /**
+   * The recited word's background tint — the theme's `palette.highlight`,
+   * so it follows the light/dark scheme. A background colour only: the
+   * tajweed colours underneath it must stay visible while a word plays.
+   */
+  highlightColor: string;
+  /**
    * A tap on the line, reported as the character offset into `text` under
    * the finger. The word boundaries are only known to whoever built `text`,
    * so mapping offset → word happens in JS (`TajweedLine`), not here.

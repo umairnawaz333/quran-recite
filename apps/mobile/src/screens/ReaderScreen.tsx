@@ -8,10 +8,9 @@ import { SCRIPT_FONTS } from '../reader/fonts';
 import { usePlayer } from '../player/PlayerProvider';
 import { getSurahMeta } from '../data/surahs';
 import { PlayIcon } from '../components/PlayerIcons';
+import { useTheme } from '../theme/theme';
 
 export type Script = 'tajweed' | 'indopak';
-
-const ARABIC_COLOR = '#000000';
 
 // Mirrors the web's `.quran-text` rule exactly (apps/web/app/globals.css):
 //   font-size: clamp(1.75rem, 5vw, 2.75rem); line-height: 2.4;
@@ -71,9 +70,15 @@ function AyahRow({ index, onLayout, onUnmount, children }: {
   );
 }
 
-function IndopakWord({ wordId, text, onPress }: { wordId: string; text: string; onPress: () => void }) {
+function IndopakWord({ wordId, text, highlightStyle, onPress }: {
+  wordId: string;
+  text: string;
+  /** The recited word's tint, from the palette — a background colour only. */
+  highlightStyle: { backgroundColor: string };
+  onPress: () => void;
+}) {
   const isActive = useIsActiveWord(wordId);
-  return <Text style={isActive ? styles.highlight : undefined} onPress={onPress}>{text}</Text>;
+  return <Text style={isActive ? highlightStyle : undefined} onPress={onPress}>{text}</Text>;
 }
 
 export function ReaderScreen({
@@ -90,6 +95,10 @@ export function ReaderScreen({
   // require cache keeps it thereafter, so this is cheap on re-render.
   const text: SurahText = useMemo(() => textLoaders[surahId](), [surahId]);
   const meta = getSurahMeta(surahId);
+  // A context read of an object that only changes with the scheme (see
+  // `theme.tsx`), so nothing here is on the per-word tick path.
+  const { palette } = useTheme();
+  const highlightStyle = useMemo(() => ({ backgroundColor: palette.highlight }), [palette.highlight]);
   const player = usePlayer();
   // Destructure the specific actions this screen calls and depend on those
   // stable references, not on `player` itself — the provider rebuilds that
@@ -237,26 +246,26 @@ export function ReaderScreen({
       <View style={[styles.content, { maxWidth: contentWidth }]}>
         <View style={styles.header}>
           <Pressable onPress={onBack} accessibilityRole="button">
-            <Text style={styles.back}>All surahs</Text>
+            <Text style={[styles.back, { color: palette.textMuted }]}>All surahs</Text>
           </Pressable>
-          <Text style={styles.title}>{meta?.nameSimple ?? `Surah ${surahId}`}</Text>
+          <Text style={[styles.title, { color: palette.text }]}>{meta?.nameSimple ?? `Surah ${surahId}`}</Text>
           <Pressable
-            style={styles.toggle}
+            style={[styles.toggle, { backgroundColor: palette.surface }]}
             onPress={() => onScriptChange(script === 'tajweed' ? 'indopak' : 'tajweed')}
             accessibilityRole="button"
           >
-            <Text style={styles.toggleText}>{script === 'tajweed' ? 'Tajweed' : 'IndoPak'}</Text>
+            <Text style={[styles.toggleText, { color: palette.text }]}>{script === 'tajweed' ? 'Tajweed' : 'IndoPak'}</Text>
           </Pressable>
         </View>
 
         {error && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
+          <View style={[styles.errorBanner, { backgroundColor: palette.error }]}>
+            <Text style={[styles.bannerText, { color: palette.errorText }]}>{error}</Text>
           </View>
         )}
         {!error && isLoading && (
-          <View style={styles.loadingBanner} accessibilityLiveRegion="polite">
-            <Text style={styles.loadingText}>Loading recitation…</Text>
+          <View style={[styles.loadingBanner, { backgroundColor: palette.loadingBg }]} accessibilityLiveRegion="polite">
+            <Text style={[styles.bannerText, { color: palette.textMuted }]}>Loading recitation…</Text>
           </View>
         )}
 
@@ -288,7 +297,7 @@ export function ReaderScreen({
                   fontFamily={SCRIPT_FONTS[script]}
                   fontSize={arabicFontSize}
                   lineHeight={arabicLineHeight}
-                  color={ARABIC_COLOR}
+                  color={palette.text}
                   width={contentWidth - 2 * ROW_PADDING}
                   onWordPress={wordId => void play(surahId, item.ayah, wordId)}
                   onHighlightLayout={item.ayah === playingAyah ? line => followHighlight(index, line) : undefined}
@@ -297,7 +306,7 @@ export function ReaderScreen({
                 <Text
                   style={[
                     styles.arabic,
-                    { fontFamily: SCRIPT_FONTS[script], fontSize: arabicFontSize, lineHeight: arabicLineHeight },
+                    { fontFamily: SCRIPT_FONTS[script], fontSize: arabicFontSize, lineHeight: arabicLineHeight, color: palette.text },
                   ]}
                 >
                   {item.words.map((w, i) => (
@@ -305,12 +314,13 @@ export function ReaderScreen({
                       <IndopakWord
                         wordId={w.id}
                         text={w.indopak}
+                        highlightStyle={highlightStyle}
                         onPress={() => void play(surahId, item.ayah, w.id)}
                       />
                       {i < item.words.length - 1 ? <Text> </Text> : null}
                     </Text>
                   ))}
-                  <Text style={styles.ayahNumber}>  ﴿{item.ayah}﴾</Text>
+                  <Text style={[styles.ayahNumber, { color: palette.textMuted }]}>  ﴿{item.ayah}﴾</Text>
                 </Text>
               )}
 
@@ -321,8 +331,8 @@ export function ReaderScreen({
                   accessibilityLabel={`Play ayah ${item.ayah}`}
                   style={styles.ayahPlayButton}
                 >
-                  <PlayIcon size={12} color="#888" />
-                  <Text style={styles.ayahPlay}>{surahId}:{item.ayah}</Text>
+                  <PlayIcon size={12} color={palette.textMuted} />
+                  <Text style={[styles.ayahPlay, { color: palette.textMuted }]}>{surahId}:{item.ayah}</Text>
                 </Pressable>
               </View>
             </AyahRow>
@@ -333,25 +343,25 @@ export function ReaderScreen({
   );
 }
 
+// Layout only: every colour is a palette value applied at the call site, so
+// the reader follows the scheme (see `theme.tsx`). The highlight stays
+// `palette.highlight` — a background colour only, never a text-colour
+// change, so tajweed colours remain visible under the recited word.
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flex: 1, width: '100%', alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, paddingVertical: 12 },
-  back: { color: '#666', fontSize: 14 },
+  back: { fontSize: 14 },
   title: { fontSize: 16, fontWeight: '600', flex: 1 },
-  toggle: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#eee' },
-  toggleText: { fontSize: 13, fontWeight: '500', color: '#333' },
+  toggle: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  toggleText: { fontSize: 13, fontWeight: '500' },
   ayah: { paddingHorizontal: 16, paddingVertical: 10 },
   arabic: { textAlign: 'right', writingDirection: 'rtl' },
-  ayahNumber: { fontSize: 16, color: '#999' },
+  ayahNumber: { fontSize: 16 },
   ayahFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
   ayahPlayButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ayahPlay: { fontSize: 13, color: '#888', fontVariant: ['tabular-nums'] },
-  // Matches the web's `.word--active` tint (#fde68a) — a background colour
-  // only, never a text-colour change, so tajweed colours stay visible.
-  highlight: { backgroundColor: '#fde68a' },
-  errorBanner: { backgroundColor: '#fee2e2', paddingVertical: 8, paddingHorizontal: 16 },
-  loadingBanner: { backgroundColor: '#f3f4f6', paddingVertical: 6, paddingHorizontal: 16 },
-  loadingText: { color: '#555', fontSize: 13, textAlign: 'center' },
-  errorText: { color: '#991b1b', fontSize: 13, textAlign: 'center' },
+  ayahPlay: { fontSize: 13, fontVariant: ['tabular-nums'] },
+  errorBanner: { paddingVertical: 8, paddingHorizontal: 16 },
+  loadingBanner: { paddingVertical: 6, paddingHorizontal: 16 },
+  bannerText: { fontSize: 13, textAlign: 'center' },
 });

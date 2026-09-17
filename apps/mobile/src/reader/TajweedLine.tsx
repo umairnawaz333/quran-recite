@@ -8,6 +8,7 @@ import { Platform, StyleSheet, Text } from 'react-native';
 // import the scaffolding CLI itself printed when the module was created.
 import { TajweedTextView } from '../../modules/tajweed-text/src';
 import { useActiveWordAmong } from './activeWordStore';
+import { useTheme } from '../theme/theme';
 import { buildTajweedLine, type TajweedLineWord } from './buildTajweedLine';
 import { colourFor } from './tajweedColours';
 import { parseTajweed } from '@quran/core';
@@ -45,6 +46,14 @@ export function TajweedLine({
    */
   onHighlightLayout?: (line: { top: number; bottom: number }) => void;
 }) {
+  // A context read of an object that only changes with the scheme, so this
+  // adds nothing to the per-word tick path (see `theme.tsx`'s `useTheme`).
+  const { palette } = useTheme();
+  // Stable style objects, so the iOS path's per-word `<Text>`s are not handed
+  // a fresh style on every word tick.
+  const highlightStyle = useMemo(() => ({ backgroundColor: palette.highlight }), [palette.highlight]);
+  const ayahNumberStyle = useMemo(() => ({ color: palette.textMuted }), [palette.textMuted]);
+
   // Subscribe to "this ayah's active word, or null" rather than the global
   // active word: the store re-renders this component only when that value
   // changes, so a word tick re-renders the two ayahs it concerns, not every
@@ -81,6 +90,7 @@ export function TajweedLine({
         fontSize={fontSize}
         lineHeight={lineHeight}
         color={color}
+        highlightColor={palette.highlight}
         onCharacterPress={onWordPress ? (e) => {
           const wordId = wordAtOffset(line.words, e.nativeEvent.offset);
           if (wordId) onWordPress(wordId);
@@ -97,7 +107,7 @@ export function TajweedLine({
       {words.map((w, i) => (
         <Text key={w.id}>
           <Text
-            style={activeWordId === w.id ? styles.highlight : undefined}
+            style={activeWordId === w.id ? highlightStyle : undefined}
             onPress={onWordPress ? () => onWordPress(w.id) : undefined}
           >
             {parseTajweed(w.tajweed).map((run, j) => {
@@ -112,7 +122,7 @@ export function TajweedLine({
           {i < words.length - 1 ? ' ' : null}
         </Text>
       ))}
-      <Text style={styles.ayahNumber}>  ﴿{ayahNumber}﴾</Text>
+      <Text style={ayahNumberStyle}>  ﴿{ayahNumber}﴾</Text>
     </Text>
   );
 }
@@ -129,10 +139,9 @@ export function wordAtOffset(words: WordRange[], offset: number): string | null 
   return null;
 }
 
+// Colour lives in the palette (see `theme.tsx`), never here: the highlight is
+// `palette.highlight` — a background colour only, never a text-colour change,
+// so the tajweed colours underneath stay visible.
 const styles = StyleSheet.create({
   arabic: { textAlign: 'right', writingDirection: 'rtl' },
-  ayahNumber: { color: '#999' },
-  // Matches the web's `.word--active` tint (#fde68a) — a background colour
-  // only, never a text-colour change, so tajweed colours stay visible.
-  highlight: { backgroundColor: '#fde68a' },
 });

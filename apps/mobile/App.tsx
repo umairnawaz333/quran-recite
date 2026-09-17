@@ -8,6 +8,7 @@ import { ReaderScreen, type Script } from './src/screens/ReaderScreen';
 import { PlayerProvider, usePlayer } from './src/player/PlayerProvider';
 import { PlayerBar } from './src/player/PlayerBar';
 import { useQuranFonts } from './src/reader/fonts';
+import { ThemeProvider, useTheme } from './src/theme/theme';
 
 // app.json's `expo-audio` plugin is configured with `enableBackgroundPlayback`,
 // which only changes the Android manifest (a foreground service + the
@@ -35,7 +36,12 @@ function FollowPlayingSurah({ viewed, onFollow }: { viewed: number | null; onFol
   return null;
 }
 
-export default function App() {
+/**
+ * Everything below the providers: the screen switch, the player bar and the
+ * chrome that has to know the current scheme. Separate from `App` because it
+ * reads `useTheme()`, which needs the `ThemeProvider` `App` renders.
+ */
+function AppShell() {
   const [surahId, setSurahId] = useState<number | null>(null);
   // Tapping the bar while already reading the playing surah re-centres on
   // the recitation instead of doing nothing; a counter the reader watches.
@@ -46,47 +52,62 @@ export default function App() {
   };
   const [script, setScript] = useState<Script>('tajweed');
   const fontsReady = useQuranFonts();
+  const { palette, scheme } = useTheme();
 
+  return (
+    <SafeAreaView style={[styles.root, { backgroundColor: palette.background }]}>
+      <View style={styles.content}>
+        {!fontsReady
+          ? null
+          : surahId === null
+          ? <SurahListScreen onSelect={setSurahId} script={script} />
+          : (
+            <ReaderScreen
+              surahId={surahId}
+              script={script}
+              onScriptChange={setScript}
+              onBack={() => setSurahId(null)}
+              focusRequest={focusRequest}
+            />
+          )}
+      </View>
+      <PlayerBar onNavigate={goToSurah} />
+      <FollowPlayingSurah viewed={surahId} onFollow={setSurahId} />
+      {/*
+        Follows the app's OWN scheme, not the system's: `auto` would draw
+        white icons over a light app whenever the phone was in dark mode
+        while the user had asked this app for light — an invisible status
+        bar. `scheme` is the resolved one, so the icons are always readable
+        against `palette.background`.
+      */}
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+    </SafeAreaView>
+  );
+}
+
+export default function App() {
   return (
     <SafeAreaProvider>
       {/*
-        Mounted once, above the screen switch below, so navigating between
-        the list and the reader never unmounts it — that's what lets
-        recitation (and the bar showing it) survive navigation.
+        Outside the player: the theme is read by the bar and by every screen,
+        and a scheme change must not disturb playback.
       */}
-      <PlayerProvider>
-        <SafeAreaView style={styles.root}>
-          <View style={styles.content}>
-            {!fontsReady
-              ? null
-              : surahId === null
-              ? <SurahListScreen onSelect={setSurahId} script={script} />
-              : (
-                <ReaderScreen
-                  surahId={surahId}
-                  script={script}
-                  onScriptChange={setScript}
-                  onBack={() => setSurahId(null)}
-                  focusRequest={focusRequest}
-                />
-              )}
-          </View>
-          <PlayerBar onNavigate={goToSurah} />
-          <FollowPlayingSurah viewed={surahId} onFollow={setSurahId} />
-          {/*
-            "dark" (icons), not "auto": `auto` follows the SYSTEM colour
-            scheme, so on a phone set to dark mode it drew white icons over
-            this app's always-white background — an invisible status bar.
-            The app is light-only until Stage 2's theme work; revisit there.
-          */}
-          <StatusBar style="dark" />
-        </SafeAreaView>
-      </PlayerProvider>
+      <ThemeProvider>
+        {/*
+          Mounted once, above the screen switch inside `AppShell`, so
+          navigating between the list and the reader never unmounts it —
+          that's what lets recitation (and the bar showing it) survive
+          navigation.
+        */}
+        <PlayerProvider>
+          <AppShell />
+        </PlayerProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
+  root: { flex: 1 },
   content: { flex: 1 },
 });

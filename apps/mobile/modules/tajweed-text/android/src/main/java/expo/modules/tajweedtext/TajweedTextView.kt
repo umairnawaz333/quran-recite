@@ -94,6 +94,8 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
   /** In dp, same unit as `fontSize` — converted to px below. */
   var lineHeightDp: Float = 0f
   var textColor: String = "#000000"
+  /** The recited word's background tint — a colour only, never a text colour. */
+  var highlightColor: String = DEFAULT_HIGHLIGHT
 
   private val onCharacterPress by EventDispatcher()
   private val onHighlightLayout by EventDispatcher()
@@ -177,7 +179,7 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
       val end = h.end.coerceIn(start, length)
       if (start != end) {
         spannable.setSpan(
-          BackgroundColorSpan(HIGHLIGHT_COLOR),
+          BackgroundColorSpan(parseColorOr(highlightColor, FALLBACK_HIGHLIGHT_COLOR)),
           start,
           end,
           Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -304,9 +306,11 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
   companion object {
-    // Matches the web's `.word--active` tint and `ReaderScreen.tsx`'s
-    // `styles.highlight` — a background tint only, never a text-colour
-    // change, so tajweed colours stay visible underneath it.
-    private val HIGHLIGHT_COLOR = Color.parseColor("#fde68a")
+    // The light scheme's highlight (the web's `.word--active` tint), used
+    // until JS sends one — a background tint only, never a text-colour
+    // change, so tajweed colours stay visible underneath it. The theme owns
+    // the real value; see `src/theme/theme.tsx`'s `Palette.highlight`.
+    private const val DEFAULT_HIGHLIGHT = "#fde68a"
+    private val FALLBACK_HIGHLIGHT_COLOR = Color.parseColor(DEFAULT_HIGHLIGHT)
   }
 }

@@ -9,7 +9,7 @@
  * — keeps every prop the component passed (`accessibilityLabel`, `onPress`,
  * `disabled`) inspectable, which is what the PlayerBar assertions query by.
  */
-import { createElement } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 type HostProps = Record<string, unknown> & { children?: ReactNode };
@@ -70,6 +70,35 @@ export const Platform = {
 export const useWindowDimensions = () => ({ width: 400, height: 800, scale: 2, fontScale: 1 });
 export const Dimensions = { get: () => ({ width: 400, height: 800, scale: 2, fontScale: 1 }) };
 
+/**
+ * The device's colour scheme, as the real `useColorScheme()` reports it: a
+ * hook that re-renders its component when the OS flips dark mode. The theme
+ * treats "system" as a live state, so a test has to be able to flip it
+ * mid-render-tree — `setColorScheme` is the stand-in for the OS doing so.
+ */
+type ColorSchemeName = 'light' | 'dark';
+
+let colorScheme: ColorSchemeName = 'light';
+const colorSchemeListeners = new Set<(scheme: ColorSchemeName) => void>();
+
+export function useColorScheme(): ColorSchemeName {
+  const [scheme, setScheme] = useState(colorScheme);
+  useEffect(() => {
+    colorSchemeListeners.add(setScheme);
+    // A flip between this component's first render and this effect would
+    // otherwise be missed.
+    setScheme(colorScheme);
+    return () => { colorSchemeListeners.delete(setScheme); };
+  }, []);
+  return scheme;
+}
+
+/** Drives the OS flipping dark mode on or off (`adb shell cmd uimode night yes|no`). */
+export function setColorScheme(next: ColorSchemeName): void {
+  colorScheme = next;
+  colorSchemeListeners.forEach(listener => listener(next));
+}
+
 export type AppStateStatus = 'active' | 'background' | 'inactive';
 
 type AppStateListener = (status: AppStateStatus) => void;
@@ -102,4 +131,5 @@ export function appStateListenerCount(): number {
 export function resetReactNative(): void {
   appStateListeners.clear();
   AppState.currentState = 'active';
+  colorScheme = 'light';
 }

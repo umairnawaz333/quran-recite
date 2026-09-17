@@ -22,6 +22,7 @@ class TajweedTextModule : Module() {
       Prop("fontSize") { view: TajweedTextView, value: Float -> view.fontSize = value }
       Prop("lineHeight") { view: TajweedTextView, value: Float -> view.lineHeightDp = value }
       Prop("color") { view: TajweedTextView, value: String -> view.textColor = value }
+      Prop("highlightColor") { view: TajweedTextView, value: String -> view.highlightColor = value }
 
       // Rebuild the SpannableString once per prop-update batch, not once per
       // individual prop — see `TajweedTextView.render()`.

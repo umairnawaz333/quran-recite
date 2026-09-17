@@ -4,6 +4,7 @@ import type { SurahMeta } from '@quran/core';
 import { getSurahList } from '../data/surahs';
 import { SCRIPT_FONTS } from '../reader/fonts';
 import type { Script } from './ReaderScreen';
+import { useTheme } from '../theme/theme';
 
 // Where the list was scrolled to when the user last left it, and how tall
 // its (uniform) rows are. The screen unmounts while a surah is open, so
@@ -19,6 +20,7 @@ let rowHeight = 0;
 const MAX_CONTENT_WIDTH = 768;
 
 export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) => void; script: Script }) {
+  const { palette } = useTheme();
   const surahs = getSurahList();
   const { width } = useWindowDimensions();
   const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
@@ -31,15 +33,15 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
       accessibilityRole="button"
       onLayout={e => { rowHeight = e.nativeEvent.layout.height; }}
     >
-      <Text style={styles.number}>{item.id}</Text>
+      <Text style={[styles.number, { color: palette.textMuted }]}>{item.id}</Text>
       <View style={styles.names}>
-        <Text style={styles.simple}>{item.nameSimple}</Text>
-        <Text style={styles.english}>{item.nameEnglish} · {item.ayahCount} ayahs</Text>
+        <Text style={[styles.simple, { color: palette.text }]}>{item.nameSimple}</Text>
+        <Text style={[styles.english, { color: palette.textMuted }]}>{item.nameEnglish} · {item.ayahCount} ayahs</Text>
       </View>
       {/* The same face the reader uses for the chosen script — the script
           choice is app-wide, so the names on the home page follow it. */}
       <Text
-        style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script] }]}
+        style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script], color: palette.text }]}
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={0.7}
@@ -68,13 +70,15 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
   );
 }
 
+// Layout only — every colour comes from the palette at the call site, so the
+// list follows the scheme (see `theme.tsx`).
 const styles = StyleSheet.create({
   list: { paddingVertical: 8 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, gap: 12 },
-  number: { width: 28, textAlign: 'center', color: '#888', fontVariant: ['tabular-nums'] },
+  number: { width: 28, textAlign: 'center', fontVariant: ['tabular-nums'] },
   names: { flex: 1 },
   simple: { fontSize: 16, fontWeight: '500' },
-  english: { fontSize: 13, color: '#777', marginTop: 2 },
+  english: { fontSize: 13, marginTop: 2 },
   // A fixed column: RN under-measures the Quran faces' width, so an
   // intrinsically-sized Text wrapped two-word names ("آل عمران") onto a
   // clipped second line. Wide enough for the longest name at this size.
