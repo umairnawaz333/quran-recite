@@ -40,9 +40,9 @@ type Events = {
  *    before playing rather than swapping onto silence.
  */
 export class AyahSequencer {
-  private readonly ayahs: AyahTiming[];
+  private ayahs: AyahTiming[];
   private readonly createPlayer: PlayerFactory;
-  private readonly localPathFor?: (ayah: number) => string | null;
+  private readonly localPathFor?: (ayah: AyahTiming) => string | null;
 
   /** The two alternating player instances, created lazily on first use. */
   private readonly players: [PlayerHandle | undefined, PlayerHandle | undefined] = [undefined, undefined];
@@ -92,7 +92,7 @@ export class AyahSequencer {
     ended: new Set(),
   };
 
-  constructor(ayahs: AyahTiming[], createPlayer: PlayerFactory, localPathFor?: (ayah: number) => string | null) {
+  constructor(ayahs: AyahTiming[], createPlayer: PlayerFactory, localPathFor?: (ayah: AyahTiming) => string | null) {
     this.ayahs = ayahs;
     this.createPlayer = createPlayer;
     this.localPathFor = localPathFor;
@@ -123,6 +123,53 @@ export class AyahSequencer {
 
   on<K extends keyof Events>(event: K, cb: Events[K]): void {
     this.listeners[event].add(cb as never);
+  }
+
+  off<K extends keyof Events>(event: K, cb: Events[K]): void {
+    this.listeners[event].delete(cb as never);
+  }
+
+  /**
+   * Move this sequencer — and, crucially, its two players — onto another
+   * surah. The alternative, building a new sequencer with new players for
+   * every surah, is what lost the lock-screen binding at every background
+   * surah boundary: Android's media session is bound to ONE native player
+   * and re-binding while backgrounded is refused, so a fresh pair of players
+   * left the foreground service to die. Keeping the same players means the
+   * bound one is simply still there.
+   *
+   * The new surah's first ayah is loaded into the IDLE slot while the active
+   * slot keeps reciting the old surah — the old surah is audible right up to
+   * the swap, which also keeps the provider's state honest for that long. A
+   * finish of the old surah's ayah during the load is dropped as stale (the
+   * generation moved), so the old surah neither advances nor reports
+   * `ended` mid-switch. If the load fails, nothing has been touched: the old
+   * surah plays on.
+   */
+  async switchTo(ayahs: AyahTiming[], index: number, localMs = 0): Promise<void> {
+    this.generation += 1;
+    const gen = this.generation;
+    this.ayahs = ayahs;
+    const clamped = Math.min(Math.max(index, 0), this.ayahs.length - 1);
+    this.index = clamped;
+    // Whatever either slot holds is the OLD surah's — no preload is reusable.
+    this.slotReady[0] = null;
+    this.slotReady[1] = null;
+
+    const active = this.activeSlot;
+    const idle: Slot = active === 0 ? 1 : 0;
+    const player = await this.loadInto(idle, clamped);
+    if (gen !== this.generation) return;
+
+    this.pauseSlot(active);
+    this.activeSlot = idle;
+    player.seekToMs(localMs);
+    this.emit('ayahchange', clamped);
+    this.preloadNext();
+
+    if (this.playing) {
+      await this.attemptPlay(player, gen, idle);
+    }
   }
 
   async seekToAyah(index: number, localMs = 0): Promise<void> {
@@ -299,7 +346,7 @@ export class AyahSequencer {
     this.subscribeFinished(slot, player, gen, ayahIndex);
 
     const ayah = this.ayahs[ayahIndex];
-    const localPath = this.localPathFor ? this.localPathFor(ayah.ayah) : null;
+    const localPath = this.localPathFor ? this.localPathFor(ayah) : null;
     const { uri } = resolveAyahSource(ayah, localPath);
     // Invalidate before the load starts, not after it settles: the platform
     // player swaps its source synchronously inside `load()`, so from here

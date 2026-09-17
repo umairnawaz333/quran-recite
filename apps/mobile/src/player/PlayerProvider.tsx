@@ -134,6 +134,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const requestRef = useRef(0);
   /** Index into the live surah's `ayahs` that the sequencer is on. */
   const ayahIndexRef = useRef(0);
+  /** Removes the live surah's sequencer handlers; replaced at each switch-over. */
+  const detachHandlersRef = useRef<(() => void) | null>(null);
+  /** The native player currently handed to Android as the lock-screen controller. */
+  const lockScreenPlayerRef = useRef<AudioPlayer | null>(null);
   /**
    * The live playback's own "bind Android's media session to whatever is
    * audible now" closure, republished by every `play()` that becomes live.
@@ -160,6 +164,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const teardown = useCallback(() => {
+    detachHandlersRef.current?.();
+    detachHandlersRef.current = null;
+    lockScreenPlayerRef.current = null;
     engineRef.current?.detach();
     sequencerRef.current?.release();
     engineRef.current = null;
@@ -253,14 +260,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (token !== requestRef.current) return;
 
     const meta = getSurahMeta(surahId);
-    const engine = new SyncEngine();
+
+    // ONE sequencer, one engine, two native players — for the app's whole
+    // life. A surah switch moves the existing sequencer onto the new surah
+    // (`switchTo`) rather than building a new one. This is what keeps the
+    // lock-screen binding alive across a surah boundary in the background:
+    // Android binds its media session to a single native player and refuses
+    // to re-bind while backgrounded, so a fresh pair of players for each
+    // surah left the foreground service to die (and with it the ~3-minute
+    // background protection) at the first boundary crossed hands-free.
+    // With the same players the bound one is simply still there.
+    const reuse = sequencerRef.current !== null && engineRef.current !== null;
+    const engine = engineRef.current ?? new SyncEngine();
     // Recently recited ayahs are served from the warm cache (see
     // ayahCache.ts) through the sequencer's `localPathFor` seam, so
     // "previous" and replays do not stream the same file again.
-    const sequencer = new AyahSequencer(timings.ayahs, createExpoPlayer, n => {
-      const timing = timings.ayahs.find(a => a.ayah === n);
-      return timing ? localPathFor(timing) : null;
-    });
+    const sequencer = sequencerRef.current ?? new AyahSequencer(timings.ayahs, createExpoPlayer, localPathFor);
 
     // Nothing from here until the switch-over touches the live playback.
     // The old surah keeps sounding, and stays the surah every ref and every
@@ -268,7 +283,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // first ayah. That is what keeps the bar honest (it never shows a surah
     // that is not the one making sound) and keeps `toggle`/`next` during the
     // wait acting on what the user can hear. The handlers below are armed
-    // now but gated on `live`, which flips at the switch-over.
+    // now but gated on `live`, which flips at the switch-over; the previous
+    // surah's handlers are removed at that same moment (and this surah's,
+    // instead, if its load fails).
     let live = false;
 
     /**
@@ -277,7 +294,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
      * already on one of *my* players" from "it belongs to a surah that is
      * no longer playing" — see the comment in `registerLockScreen`.
      */
-    let lockScreenPlayer: AudioPlayer | null = null;
+    let lockScreenPlayer: AudioPlayer | null = lockScreenPlayerRef.current;
 
     const registerLockScreen = () => {
       const native = sequencer.activePlayer?.nativePlayer as AudioPlayer | undefined;
@@ -310,14 +327,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       lockScreenPlayer = native;
+      lockScreenPlayerRef.current = native;
       setNowPlaying(native, lockScreenMeta(meta));
     };
 
-    engine.onChange(paint);
+    if (!reuse) engine.onChange(paint);
 
-    sequencer.on('ayahchange', index => {
-      // The engine is this sequencer's own; feeding it is safe before `live`
-      // (it paints nothing until `playingSurahRef` names this surah).
+    const onAyahChange = (index: number) => {
+      // The engine is shared; feeding it is safe before `live` (it paints
+      // nothing until `playingSurahRef` names this surah), and after the
+      // switch-over these are the only handlers left standing.
       engine.setWords(timings.ayahs[index]?.words ?? []);
       if (!live) return;
       ayahIndexRef.current = index;
@@ -330,8 +349,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         writeLastPosition({ surahId, ayah: timing.ayah, localMs: 0 });
         void cacheAyah(timing);
       }
-    });
-    sequencer.on('state', playing => {
+    };
+    const onStateChange = (playing: boolean) => {
+      if (!live) return;
       // Run the highlight loop only while sound is actually playing. It is
       // a requestAnimationFrame loop waking the JS thread every frame; left
       // attached it would run for the app's lifetime after the first play —
@@ -341,20 +361,30 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // the current word on its first frame.
       if (playing) engine.attach(() => sequencer.localTimeMs, timings.ayahs[sequencer.currentIndex]?.words ?? []);
       else engine.detach();
-      if (live) patch({ isPlaying: playing });
-    });
-    sequencer.on('error', message => {
+      patch({ isPlaying: playing });
+    };
+    const onError = (message: string) => {
       if (live) patch({ error: message, isPlaying: false, isLoading: false, pendingSurahId: surahId });
-    });
-    sequencer.on('ended', () => {
-      engine.detach();
+    };
+    const onEnded = () => {
       if (!live) return;
+      engine.detach();
       paint(null);
       patch({ isPlaying: false });
       // Recitation runs on into the next surah rather than stopping at the
       // end of this one — asked for from the device. The web stops here.
       if (surahId < 114) void play(surahId + 1);
-    });
+    };
+    const detachHandlers = () => {
+      sequencer.off('ayahchange', onAyahChange);
+      sequencer.off('state', onStateChange);
+      sequencer.off('error', onError);
+      sequencer.off('ended', onEnded);
+    };
+    sequencer.on('ayahchange', onAyahChange);
+    sequencer.on('state', onStateChange);
+    sequencer.on('error', onError);
+    sequencer.on('ended', onEnded);
 
     const startIndex = ayah
       ? Math.max(0, timings.ayahs.findIndex(a => a.ayah === ayah))
@@ -363,10 +393,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // Not attached here: the loop starts with the first `state: true`.
 
     try {
-      await sequencer.seekToAyah(startIndex, localMsFor(timings, startIndex));
+      if (reuse) await sequencer.switchTo(timings.ayahs, startIndex, localMsFor(timings, startIndex));
+      else await sequencer.seekToAyah(startIndex, localMsFor(timings, startIndex));
     } catch {
-      engine.detach();
-      sequencer.release();
+      detachHandlers();
+      if (!reuse) { engine.detach(); sequencer.release(); }
       if (token !== requestRef.current) return;
       // The old surah was never touched and is still audible; this failure
       // belongs to the surah that was asked for, so it is attributed there.
@@ -379,36 +410,33 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
     if (token !== requestRef.current) {
       // A faster later call became the live playback while this loaded.
-      engine.detach();
-      sequencer.release();
+      detachHandlers();
+      if (!reuse) { engine.detach(); sequencer.release(); }
       return;
     }
 
     // The switch-over: the one point where the visible surah changes, and
-    // the first point where the old one stops sounding. Everything above
-    // ran off locals, so until here the old surah was audible and its state
-    // accurate. Nothing is pending any more: this call succeeded, and any
-    // later call has already claimed `pendingSurahId` for itself.
-    // Before `teardown()`, not after: tearing down releases the outgoing
-    // sequencer's native players, and expo-audio's `releasePlayer()` calls
-    // `unregisterPlayer()` on any player still registered for the lock
-    // screen — which stops the playback foreground service outright
-    // (`clearSessionInternal` → `stopForeground`). From the background (this
-    // path runs on its own at the end of every surah, continuing into the
-    // next one) that service could then never be promoted again, and with
-    // it goes the protection this registration exists for. Registering the
-    // incoming player first clears the outgoing one's
-    // `isActiveForLockScreen`, so its release passes over that branch.
+    // the first point where the old one stops sounding (`switchTo` paused
+    // its slot as it swapped). Everything above ran off locals, so until
+    // here the old surah was audible and its state accurate. The previous
+    // surah's handlers go now; nothing is pending any more: this call
+    // succeeded, and any later call has already claimed `pendingSurahId`.
     registerLockScreen();
     registerRef.current = registerLockScreen;
+    detachHandlersRef.current?.();
+    detachHandlersRef.current = detachHandlers;
 
-    teardown();
     engineRef.current = engine;
     sequencerRef.current = sequencer;
     timingsRef.current = timings;
     playingSurahRef.current = surahId;
     ayahIndexRef.current = startIndex;
     live = true;
+    // `switchTo` may have resumed the new surah on its own (the old one was
+    // playing); the engine follows the live state either way.
+    if (sequencer.activePlayer?.playing) {
+      engine.attach(() => sequencer.localTimeMs, timings.ayahs[startIndex]?.words ?? []);
+    }
     patch({
       surahId,
       surahName: meta?.nameSimple ?? null,

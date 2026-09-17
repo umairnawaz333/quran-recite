@@ -212,9 +212,16 @@ describe('PlayerProvider — switching surahs', () => {
     expect(player.current.isPlaying).toBe(true);
     expect(player.current.isLoading).toBe(false);
     expect(player.current.pendingSurahId).toBeNull();
-    // Released only at the switch-over, and silent once released.
-    expect(surahAPlayers.every(p => p.released)).toBe(true);
-    expect(surahAPlayers.every(p => !p.playing)).toBe(true);
+    // The SAME two native players carry on into surah 2 — none released,
+    // none created. This is what keeps the lock-screen binding alive across
+    // a surah boundary in the background: Android binds its media session
+    // to one native player and refuses to re-bind while backgrounded.
+    expect(audio.players.length).toBe(surahAPlayers.length);
+    expect(surahAPlayers.every(p => !p.released)).toBe(true);
+    // Exactly one of them sounds now, and it holds surah 2's first ayah.
+    const sounding = surahAPlayers.filter(p => p.playing);
+    expect(sounding).toHaveLength(1);
+    expect(sounding[0].loaded.at(-1)).toMatch(/audio-002/);
 
     // One atomic patch: surah 2 never appeared half-switched — never paused,
     // never still pending — in any render the screens could have seen.

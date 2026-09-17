@@ -42,7 +42,9 @@ function fakePlayer(overrides: Partial<PlayerHandle> = {}) {
     currentTimeMs: 0,
     playing: false,
     loaded: [],
-    async load(uri) { p.loaded.push(uri); },
+    // Models the real seam: `expoPlayer.load()` pauses before replacing the
+    // source, so a player never comes out of a load playing.
+    async load(uri) { p.loaded.push(uri); setPlaying(false); },
     async play() { setPlaying(true); },
     pause() { setPlaying(false); },
     seekToMs() {},
@@ -461,5 +463,99 @@ describe('AyahSequencer keeps exactly one slot sounding', () => {
     await flush();
 
     expect(states).toContain(true);
+  });
+});
+
+describe('AyahSequencer switchTo (one sequencer across surahs)', () => {
+  const surahB: AyahTiming[] = [1, 2].map(n => ({
+    ayah: n,
+    audioUrl: `/audio/abdulbasit-murattal/00200${n}.mp3`,
+    startOffsetMs: (n - 1) * 5000,
+    durationMs: 5000,
+    words: [],
+  }));
+
+  it('keeps the old surah audible while the new first ayah loads, then swaps slots', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    let releaseLoad: (() => void) | null = null;
+    const gate: { release: (() => void) | null } = { release: null };
+    players[1].load = async (uri) => {
+      players[1].loaded.push(uri);
+      // The second load into slot 1 is surah B's first ayah — hold it.
+      if (uri.includes('002001')) await new Promise<void>(r => { gate.release = r; });
+    };
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+    const changes: number[] = [];
+    seq.on('ayahchange', n => changes.push(n));
+    await seq.seekToAyah(0);
+    await seq.play();
+    await new Promise(r => setTimeout(r, 0));
+
+    const switching = seq.switchTo(surahB, 0);
+    await new Promise(r => setTimeout(r, 0));
+    // Mid-switch: surah A still sounds on slot 0, nothing announced yet.
+    expect(players[0].playing).toBe(true);
+    expect(changes).toEqual([0]);
+
+    gate.release?.();
+    releaseLoad = null;
+    await switching;
+
+    // Swapped: slot 1 recites surah B's first ayah, slot 0 is silent, and
+    // the SAME two players are in use — none created.
+    expect(players[1].loaded.at(-1)).toBe(surahB[0].audioUrl);
+    expect(players[1].playing).toBe(true);
+    expect(players[0].playing).toBe(false);
+    expect(i).toBe(2);
+    expect(changes).toEqual([0, 0]);
+  });
+
+  it('drops the old surah finishing mid-switch instead of ending or advancing', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const gate: { release: (() => void) | null } = { release: null };
+    players[1].load = async (uri) => {
+      players[1].loaded.push(uri);
+      if (uri.includes('002001')) await new Promise<void>(r => { gate.release = r; });
+    };
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+    let ended = 0;
+    const changes: number[] = [];
+    seq.on('ended', () => { ended++; });
+    seq.on('ayahchange', n => changes.push(n));
+    await seq.seekToAyah(2);           // last ayah of surah A
+    await seq.play();
+
+    const switching = seq.switchTo(surahB, 0);
+    await new Promise(r => setTimeout(r, 0));
+    players[0].finish();               // surah A's last ayah ends during the switch
+    gate.release?.();
+    await switching;
+
+    expect(ended).toBe(0);
+    expect(changes).toEqual([2, 0]);
+    expect(players[1].playing).toBe(true);
+  });
+
+  it('preloads from the new surah after a switch', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+    await seq.seekToAyah(0);
+    await seq.switchTo(surahB, 0);
+    await new Promise(r => setTimeout(r, 0));
+    // Slot 0 (now idle) holds surah B's SECOND ayah, not anything of surah A.
+    expect(players[0].loaded.at(-1)).toBe(surahB[1].audioUrl);
+  });
+
+  it('off() removes a listener', async () => {
+    const seq = new AyahSequencer(ayahs, () => fakePlayer());
+    const changes: number[] = [];
+    const cb = (n: number) => changes.push(n);
+    seq.on('ayahchange', cb);
+    seq.off('ayahchange', cb);
+    await seq.seekToAyah(1);
+    expect(changes).toEqual([]);
   });
 });
