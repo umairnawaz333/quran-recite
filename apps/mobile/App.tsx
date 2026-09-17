@@ -37,6 +37,13 @@ function FollowPlayingSurah({ viewed, onFollow }: { viewed: number | null; onFol
 
 export default function App() {
   const [surahId, setSurahId] = useState<number | null>(null);
+  // Tapping the bar while already reading the playing surah re-centres on
+  // the recitation instead of doing nothing; a counter the reader watches.
+  const [focusRequest, setFocusRequest] = useState(0);
+  const goToSurah = (id: number) => {
+    if (id === surahId) setFocusRequest(n => n + 1);
+    else setSurahId(id);
+  };
   const [script, setScript] = useState<Script>('tajweed');
   const fontsReady = useQuranFonts();
 
@@ -60,10 +67,11 @@ export default function App() {
                   script={script}
                   onScriptChange={setScript}
                   onBack={() => setSurahId(null)}
+                  focusRequest={focusRequest}
                 />
               )}
           </View>
-          <PlayerBar onNavigate={setSurahId} />
+          <PlayerBar onNavigate={goToSurah} />
           <FollowPlayingSurah viewed={surahId} onFollow={setSurahId} />
           {/*
             "dark" (icons), not "auto": `auto` follows the SYSTEM colour

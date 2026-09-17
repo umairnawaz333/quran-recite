@@ -51,12 +51,14 @@ function IndopakWord({ wordId, text, onPress }: { wordId: string; text: string; 
 }
 
 export function ReaderScreen({
-  surahId, script, onScriptChange, onBack,
+  surahId, script, onScriptChange, onBack, focusRequest = 0,
 }: {
   surahId: number;
   script: Script;
   onScriptChange: (script: Script) => void;
   onBack: () => void;
+  /** Bumped to ask the reader to re-centre on the playing ayah (bar tapped while already here). */
+  focusRequest?: number;
 }) {
   // The generated loader parses this surah's JSON on first access and the
   // require cache keeps it thereafter, so this is cheap on re-render.
@@ -95,81 +97,45 @@ export function ReaderScreen({
 
   // Precise, centred following.
   //
-  // FlatList's own `scrollToIndex` estimates every unmeasured row from one
-  // running average, and ayah rows run from one line to fifteen — which is
-  // why it used to land five or seven ayahs early in a long surah, and why
-  // a jump that did land drifted afterwards: as rows above were measured for
-  // real, the estimated space above shrank and the content slid under a
-  // fixed scroll offset. Three things fix that together:
-  //  - every row reports its real height on layout, and rows never laid out
-  //    are estimated from their own text length (lines × line height),
-  //    calibrated against the rows that have been measured;
-  //  - those heights are handed to FlatList through `getItemLayout`, so its
-  //    idea of where each row sits agrees with ours;
-  //  - `maintainVisibleContentPosition` keeps the row on screen anchored
-  //    while rows above it change size.
-  // The playing ayah — or, on Android's tajweed path, the very LINE being
-  // recited — is put in the middle of the viewport.
+  // FlatList knows the real frame of every row it has rendered and only
+  // estimates the rest, so centring is done in two phases. Phase one gets
+  // the target row rendered: `scrollToIndex` on an unrendered row fails
+  // into `onScrollToIndexFailed`, which jumps near FlatList's own estimate
+  // and retries once rows there have laid out — each retry lands closer,
+  // and `maintainVisibleContentPosition` keeps the content from sliding
+  // under the offset as rows above are measured. Phase two runs the moment
+  // the target row lays out (`onRowLayout`): a final `scrollToIndex` by its
+  // measured frame, exact, with `viewPosition: 0.5` for the middle of the
+  // viewport. No height estimates of our own are handed to FlatList —
+  // given `getItemLayout`, it would trust those over measured frames for
+  // every phase, and estimates cannot be exact for a hundred rows.
   const rowHeights = useRef<Record<number, number>>({});
-  const viewportHeight = useRef(0);
-  const ROW_CHROME = 72; // footer row + vertical padding, independent of text
-  const charCount = (index: number) =>
-    text.ayahs[index]?.words.reduce((n, w) => n + w.indopak.length + 1, 0) ?? 0;
-  /** Characters per rendered line, from measured rows when there are enough, else from the type size. */
-  const charsPerLine = () => {
-    const samples = Object.entries(rowHeights.current)
-      .map(([i, h]) => {
-        const lines = Math.max(1, Math.round((h - ROW_CHROME) / arabicLineHeight));
-        return charCount(Number(i)) / lines;
-      })
-      .filter(v => Number.isFinite(v) && v > 0)
-      .sort((a, b) => a - b);
-    if (samples.length >= 3) return samples[Math.floor(samples.length / 2)];
-    return Math.max(8, Math.floor(contentWidth / (arabicFontSize * 0.55)));
-  };
-  const rowHeight = (index: number) => {
-    const measured = rowHeights.current[index];
-    if (measured !== undefined) return measured;
-    const lines = Math.max(1, Math.ceil(charCount(index) / charsPerLine()));
-    return ROW_CHROME + lines * arabicLineHeight;
-  };
-  const rowTop = (index: number) => {
-    let offset = 0;
-    for (let i = 0; i < index; i++) offset += rowHeight(i);
-    return offset;
-  };
-  /**
-   * Centre a row in two phases. Summed estimates are only approximate for a
-   * hundred unrendered rows, so phase one jumps by estimate purely to get
-   * the target row *rendered*; phase two, once it has laid out, asks
-   * FlatList to centre it by the row's real, measured frame — exact. A row
-   * already rendered skips straight to phase two. `viewOffset` shifts the
-   * centre from the row's middle to a point within it (the recited line).
-   */
   const pendingCentre = useRef<number | null>(null);
+  /** Centre a rendered row; `withinRow` shifts the centre from the row's middle to a y inside it. */
   const centreRendered = (index: number, withinRow?: number) => {
-    const height = rowHeights.current[index] ?? rowHeight(index);
+    const height = rowHeights.current[index] ?? 0;
     listRef.current?.scrollToIndex({
       index,
       viewPosition: 0.5,
-      viewOffset: withinRow === undefined ? 0 : height / 2 - withinRow,
+      viewOffset: withinRow === undefined || !height ? 0 : height / 2 - withinRow,
       animated: true,
     });
   };
   const centreOnRow = (index: number) => {
-    if (index in rowHeights.current) {
-      centreRendered(index);
-      return;
-    }
     pendingCentre.current = index;
-    const estimate = Math.max(0, rowTop(index) + rowHeight(index) / 2 - viewportHeight.current / 2);
-    listRef.current?.scrollToOffset({ offset: estimate, animated: false });
+    centreRendered(index);
+  };
+  const retryCentre = (info: { index: number; averageItemLength: number }) => {
+    listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+    setTimeout(() => {
+      if (pendingCentre.current === info.index) centreRendered(info.index);
+    }, 300);
   };
   const onRowLayout = (index: number, height: number) => {
     rowHeights.current[index] = height;
     if (pendingCentre.current === index) {
       pendingCentre.current = null;
-      // Let FlatList absorb the new frame before asking it to centre on it.
+      // Let FlatList record the new frame before centring on it.
       setTimeout(() => centreRendered(index), 50);
     }
   };
@@ -177,15 +143,16 @@ export function ReaderScreen({
     if (playingAyah === null) return;
     const index = text.ayahs.findIndex(a => a.ayah === playingAyah);
     if (index >= 0) centreOnRow(index);
-    // `centreOnRow` reads only refs and render-time constants; the two
-    // values that change the target are the deps.
+    // `focusRequest` is bumped by the bar when the user taps the playing
+    // surah while already reading it: "take me back to the recitation".
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playingAyah, text]);
+  }, [playingAyah, text, focusRequest]);
   /**
    * Follow the recited line within a long ayah. Re-centres only when the
    * highlight has moved well away from the line last centred, so the page
    * does not twitch on every word and a reader who nudges it is not fought.
    */
+  const viewportHeight = useRef(0);
   const lastCentredLine = useRef<{ index: number; y: number } | null>(null);
   const followHighlight = (index: number, line: { top: number; bottom: number }) => {
     const y = (line.top + line.bottom) / 2;
@@ -250,7 +217,7 @@ export function ReaderScreen({
           initialNumToRender={8}
           windowSize={5}
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
-          getItemLayout={(_, index) => ({ length: rowHeight(index), offset: rowTop(index), index })}
+          onScrollToIndexFailed={retryCentre}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
             <View
