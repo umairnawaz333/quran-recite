@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { SurahText } from '@quran/core';
 import { textLoaders } from '../data/textIndex.generated';
 import { TajweedLine } from '../reader/TajweedLine';
@@ -7,16 +7,36 @@ import { useIsActiveWord } from '../reader/activeWordStore';
 import { SCRIPT_FONTS } from '../reader/fonts';
 import { usePlayer } from '../player/PlayerProvider';
 import { getSurahMeta } from '../data/surahs';
-import { PauseIcon, PlayIcon, Spinner } from '../components/PlayerIcons';
+import { PlayIcon } from '../components/PlayerIcons';
 
 export type Script = 'tajweed' | 'indopak';
 
-// Shared by both scripts' arabic text so the tajweed (native-view, Android;
-// RN <Text>, iOS) and IndoPak (RN <Text> on both) renderings stay the same
-// size — only their word-joining mechanism differs.
-const ARABIC_FONT_SIZE = 26;
-const ARABIC_LINE_HEIGHT = 52;
 const ARABIC_COLOR = '#000000';
+
+// Mirrors the web's `.quran-text` rule exactly (apps/web/app/globals.css):
+//   font-size: clamp(1.75rem, 5vw, 2.75rem); line-height: 2.4;
+//   @media (max-width: 640px) { font-size: clamp(1.5rem, 7vw, 2rem); line-height: 2.2; }
+// (1rem = 16px there; RN's dp is the same "layout pixel" unit CSS px is, so
+// the numbers translate directly.) `useWindowDimensions()` stands in for
+// `vw`, so a fold, unfold or rotation reflows the same way resizing a
+// browser window would. `width` — not the capped content width below — is
+// used for the "vw" term, since CSS `vw` is always relative to the full
+// viewport, not to a `max-width` container inside it.
+const NARROW_BREAKPOINT = 640;
+function clampSize(min: number, preferred: number, max: number): number {
+  return Math.max(min, Math.min(preferred, max));
+}
+function arabicTypeForWidth(width: number): { fontSize: number; lineHeight: number } {
+  const narrow = width <= NARROW_BREAKPOINT;
+  const fontSize = narrow
+    ? clampSize(24, width * 0.07, 32)
+    : clampSize(28, width * 0.05, 44);
+  return { fontSize, lineHeight: fontSize * (narrow ? 2.2 : 2.4) };
+}
+// Mirrors the web's `max-w-3xl` (48rem = 768px) cap on the reading column —
+// unbounded lines of Arabic on a tablet are technically fine and genuinely
+// hard to read.
+const MAX_CONTENT_WIDTH = 768;
 
 /**
  * A single IndoPak word. Pulled out to its own component (rather than
@@ -48,7 +68,7 @@ export function ReaderScreen({
   // whole object on every playback tick (every ayah change, every
   // isPlaying/isLoading flip), so an effect that closed over it would
   // re-run on that same cadence. See PlayerProvider.tsx.
-  const { play, toggle, attachViewer } = player;
+  const { play, attachViewer } = player;
 
   // Tell the provider this surah is the one on screen, so it knows whether
   // it may paint into the (single, global) active-word store — otherwise
@@ -56,108 +76,100 @@ export function ReaderScreen({
   // here that belongs to that other surah.
   useEffect(() => attachViewer(surahId), [surahId, attachViewer]);
 
-  // This screen's own transport state only applies while it is actually
-  // showing the surah that's playing; otherwise it should read as idle,
-  // not as whatever surah is playing somewhere else (e.g. via the bar).
-  const isCurrent = player.surahId === surahId;
-  const isPlaying = isCurrent && player.isPlaying;
-  const ayah = isCurrent ? player.ayah : 1;
-
-  // `isLoading`/`error` are attributed via `pendingSurahId`, not `surahId`:
-  // while a *different* surah is still live, loading or failing to load
-  // this one leaves `surahId` correctly naming that other surah, so gating
-  // on `isCurrent` here would show this screen as idle throughout its own
-  // fetch, and would show its failure on whichever screen happens to be
-  // `isCurrent` instead of on this one. See PlayerProvider's `PlayerState`.
+  // `error` is attributed via `pendingSurahId`, not `surahId`: while a
+  // *different* surah is still live, failing to load this one leaves
+  // `surahId` correctly naming that other, still-fine surah — so this
+  // screen's own failure only ever surfaces via `pendingSurahId === surahId`.
+  // See PlayerProvider's `PlayerState`.
   const isPending = player.pendingSurahId === surahId;
-  const isLoading = isPending && player.isLoading;
   const error = isPending ? player.error : null;
 
-  const toggleLabel = isLoading ? 'Loading' : isPlaying ? 'Pause' : 'Play';
-
-  const handleToggle = () => {
-    if (isCurrent) toggle();
-    else void play(surahId);
-  };
+  // `useWindowDimensions()` re-renders this component on every dimension
+  // change (fold, unfold, rotation) — exactly what's wanted here, since
+  // both derived values below are pure functions of `width` alone. Nothing
+  // derived from it is allowed into an effect/memo dependency array that
+  // also depends on player actions (see PlayerProvider.tsx) — it isn't
+  // here; it only ever feeds render output.
+  const { width } = useWindowDimensions();
+  const { fontSize: arabicFontSize, lineHeight: arabicLineHeight } = arabicTypeForWidth(width);
+  const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Pressable onPress={onBack} accessibilityRole="button">
-          <Text style={styles.back}>All surahs</Text>
-        </Pressable>
-        <Text style={styles.title}>{meta?.nameSimple ?? `Surah ${surahId}`}</Text>
-        <Pressable
-          style={styles.toggle}
-          onPress={() => onScriptChange(script === 'tajweed' ? 'indopak' : 'tajweed')}
-          accessibilityRole="button"
-        >
-          <Text style={styles.toggleText}>{script === 'tajweed' ? 'Tajweed' : 'IndoPak'}</Text>
-        </Pressable>
-      </View>
-
-      {error && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
+      {/*
+        Caps the whole reading column — header included, mirroring the web's
+        `max-w-3xl` on both its header and its reader — at `contentWidth`,
+        which tracks `width` every render, so a fold/unfold/rotation reflows
+        instead of leaving the column pinned to a stale size.
+      */}
+      <View style={[styles.content, { maxWidth: contentWidth }]}>
+        <View style={styles.header}>
+          <Pressable onPress={onBack} accessibilityRole="button">
+            <Text style={styles.back}>All surahs</Text>
+          </Pressable>
+          <Text style={styles.title}>{meta?.nameSimple ?? `Surah ${surahId}`}</Text>
+          <Pressable
+            style={styles.toggle}
+            onPress={() => onScriptChange(script === 'tajweed' ? 'indopak' : 'tajweed')}
+            accessibilityRole="button"
+          >
+            <Text style={styles.toggleText}>{script === 'tajweed' ? 'Tajweed' : 'IndoPak'}</Text>
+          </Pressable>
         </View>
-      )}
 
-      <FlatList
-        data={text.ayahs}
-        keyExtractor={a => String(a.ayah)}
-        initialNumToRender={8}
-        windowSize={5}
-        renderItem={({ item }) => (
-          <View style={styles.ayah}>
-            {script === 'tajweed' ? (
-              <TajweedLine
-                words={item.words}
-                ayahNumber={item.ayah}
-                fontFamily={SCRIPT_FONTS[script]}
-                fontSize={ARABIC_FONT_SIZE}
-                lineHeight={ARABIC_LINE_HEIGHT}
-                color={ARABIC_COLOR}
-              />
-            ) : (
-              <Text style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script] }]}>
-                {item.words.map((w, i) => (
-                  <Text key={w.id}>
-                    <IndopakWord wordId={w.id} text={w.indopak} />
-                    {i < item.words.length - 1 ? <Text> </Text> : null}
-                  </Text>
-                ))}
-                <Text style={styles.ayahNumber}>  ﴿{item.ayah}﴾</Text>
-              </Text>
-            )}
-
-            <View style={styles.ayahFooter}>
-              <Pressable
-                onPress={() => void play(surahId, item.ayah)}
-                accessibilityRole="button"
-                accessibilityLabel={`Play ayah ${item.ayah}`}
-                style={styles.ayahPlayButton}
-              >
-                <PlayIcon size={12} color="#888" />
-                <Text style={styles.ayahPlay}>{surahId}:{item.ayah}</Text>
-              </Pressable>
-            </View>
+        {error && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      />
 
-      <View style={styles.controls}>
-        <Text style={styles.ayahIndicator}>Ayah {ayah}</Text>
-        <Pressable
-          style={styles.playButton}
-          onPress={handleToggle}
-          disabled={isLoading}
-          accessibilityRole="button"
-          accessibilityLabel={toggleLabel}
-        >
-          {isLoading
-            ? <Spinner size={20} color="#fff" />
-            : isPlaying ? <PauseIcon size={20} color="#fff" /> : <PlayIcon size={20} color="#fff" />}
-        </Pressable>
+        <FlatList
+          data={text.ayahs}
+          keyExtractor={a => String(a.ayah)}
+          initialNumToRender={8}
+          windowSize={5}
+          renderItem={({ item }) => (
+            <View style={styles.ayah}>
+              {script === 'tajweed' ? (
+                <TajweedLine
+                  words={item.words}
+                  ayahNumber={item.ayah}
+                  fontFamily={SCRIPT_FONTS[script]}
+                  fontSize={arabicFontSize}
+                  lineHeight={arabicLineHeight}
+                  color={ARABIC_COLOR}
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.arabic,
+                    { fontFamily: SCRIPT_FONTS[script], fontSize: arabicFontSize, lineHeight: arabicLineHeight },
+                  ]}
+                >
+                  {item.words.map((w, i) => (
+                    <Text key={w.id}>
+                      <IndopakWord wordId={w.id} text={w.indopak} />
+                      {i < item.words.length - 1 ? <Text> </Text> : null}
+                    </Text>
+                  ))}
+                  <Text style={styles.ayahNumber}>  ﴿{item.ayah}﴾</Text>
+                </Text>
+              )}
+
+              <View style={styles.ayahFooter}>
+                <Pressable
+                  onPress={() => void play(surahId, item.ayah)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Play ayah ${item.ayah}`}
+                  style={styles.ayahPlayButton}
+                >
+                  <PlayIcon size={12} color="#888" />
+                  <Text style={styles.ayahPlay}>{surahId}:{item.ayah}</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        />
       </View>
     </View>
   );
@@ -165,13 +177,14 @@ export function ReaderScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  content: { flex: 1, width: '100%', alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, paddingVertical: 12 },
   back: { color: '#666', fontSize: 14 },
   title: { fontSize: 16, fontWeight: '600', flex: 1 },
   toggle: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#eee' },
   toggleText: { fontSize: 13, fontWeight: '500', color: '#333' },
   ayah: { paddingHorizontal: 16, paddingVertical: 10 },
-  arabic: { fontSize: ARABIC_FONT_SIZE, lineHeight: ARABIC_LINE_HEIGHT, textAlign: 'right', writingDirection: 'rtl' },
+  arabic: { textAlign: 'right', writingDirection: 'rtl' },
   ayahNumber: { fontSize: 16, color: '#999' },
   ayahFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
   ayahPlayButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -181,13 +194,4 @@ const styles = StyleSheet.create({
   highlight: { backgroundColor: '#fde68a' },
   errorBanner: { backgroundColor: '#fee2e2', paddingVertical: 8, paddingHorizontal: 16 },
   errorText: { color: '#991b1b', fontSize: 13, textAlign: 'center' },
-  controls: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#ddd',
-  },
-  ayahIndicator: { fontSize: 14, color: '#555', fontVariant: ['tabular-nums'] },
-  playButton: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: '#1a1a1a',
-    alignItems: 'center', justifyContent: 'center',
-  },
 });

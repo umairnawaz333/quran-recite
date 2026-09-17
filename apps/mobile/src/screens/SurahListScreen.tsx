@@ -1,9 +1,16 @@
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { SurahMeta } from '@quran/core';
 import { getSurahList } from '../data/surahs';
 
+// Mirrors the web's `max-w-3xl` (48rem = 768px) cap on the home page's list
+// column (apps/web/app/page.tsx) — on a tablet-width screen the list would
+// otherwise stretch into unreadably long rows.
+const MAX_CONTENT_WIDTH = 768;
+
 export function SurahListScreen({ onSelect }: { onSelect: (id: number) => void }) {
   const surahs = getSurahList();
+  const { width } = useWindowDimensions();
+  const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
 
   const renderItem = ({ item }: { item: SurahMeta }) => (
     <Pressable style={styles.row} onPress={() => onSelect(item.id)} accessibilityRole="button">
@@ -21,7 +28,7 @@ export function SurahListScreen({ onSelect }: { onSelect: (id: number) => void }
       data={surahs}
       renderItem={renderItem}
       keyExtractor={item => String(item.id)}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, { maxWidth: contentWidth, width: '100%', alignSelf: 'center' }]}
     />
   );
 }
