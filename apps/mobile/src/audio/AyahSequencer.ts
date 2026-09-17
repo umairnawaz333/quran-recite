@@ -7,6 +7,8 @@ type Events = {
   state: (playing: boolean) => void;
   error: (message: string) => void;
   ended: () => void;
+  /** A load the recitation is waiting on has started (true) or settled (false). */
+  loading: (loading: boolean) => void;
 };
 
 /**
@@ -82,6 +84,7 @@ export class AyahSequencer {
     state: new Set(),
     error: new Set(),
     ended: new Set(),
+    loading: new Set(),
   };
 
   constructor(
@@ -290,7 +293,12 @@ export class AyahSequencer {
     // that came out of a load playing did not do so on this sequencer's
     // orders.
     this.intent = false;
-    await player.load(uri);
+    this.emit('loading', true);
+    try {
+      await player.load(uri);
+    } finally {
+      this.emit('loading', false);
+    }
 
     // Only record the load as complete if no newer call superseded it while
     // it was in flight — otherwise a late-resolving stale load could claim

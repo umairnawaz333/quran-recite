@@ -7,7 +7,7 @@ import { Platform, StyleSheet, Text } from 'react-native';
 // JS side it is only ever reachable by relative path. This matches the
 // import the scaffolding CLI itself printed when the module was created.
 import { TajweedTextView } from '../../modules/tajweed-text/src';
-import { useActiveWordId } from './activeWordStore';
+import { useActiveWordAmong } from './activeWordStore';
 import { buildTajweedLine, type TajweedLineWord } from './buildTajweedLine';
 import { colourFor } from './tajweedColours';
 import { parseTajweed } from '@quran/core';
@@ -43,16 +43,13 @@ export function TajweedLine({
    */
   onHighlightLayout?: (line: { top: number; bottom: number }) => void;
 }) {
-  const activeWordId = useActiveWordId();
-
-  // The active word is global. Depending on it directly would rebuild every
-  // mounted ayah's line on every word change — parsing every word's markup
-  // again for ayahs that do not even contain the active word. Collapse it
-  // to "this ayah's active word or null" so only the ayah that actually
-  // changed rebuilds (spec §8: a word change re-renders what it touches).
-  const ownActiveWordId = activeWordId !== null && words.some(w => w.id === activeWordId)
-    ? activeWordId
-    : null;
+  // Subscribe to "this ayah's active word, or null" rather than the global
+  // active word: the store re-renders this component only when that value
+  // changes, so a word tick re-renders the two ayahs it concerns, not every
+  // ayah of a surah rendered in full (spec §8).
+  const wordIds = useMemo(() => new Set(words.map(w => w.id)), [words]);
+  const ownActiveWordId = useActiveWordAmong(wordIds);
+  const activeWordId = ownActiveWordId;
 
   // Only Android needs the single-string form — iOS renders straight from
   // `words` below — so skip building it there rather than doing the work on

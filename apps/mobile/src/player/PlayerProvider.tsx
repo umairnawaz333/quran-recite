@@ -379,12 +379,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // end of this one — asked for from the device. The web stops here.
       if (surahId < 114) void play(surahId + 1);
     };
+    // A load the recitation is waiting on — a word tap, prev/next, a
+    // boundary whose prefetch did not land. Shown only once it has taken a
+    // beat, so the sub-100 ms cache-hit reloads at every boundary do not
+    // flash a spinner, but a real wait on the network is visible instead of
+    // a Pause icon over silence.
+    let loadingTimer: ReturnType<typeof setTimeout> | null = null;
+    const onLoading = (loading: boolean) => {
+      if (!mine()) return;
+      if (loading) {
+        if (loadingTimer) return;
+        loadingTimer = setTimeout(() => {
+          loadingTimer = null;
+          patch({ isLoading: true, pendingSurahId: surahId });
+        }, 300);
+      } else {
+        if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
+        patch({ isLoading: false });
+      }
+    };
     const detachHandlers = () => {
+      if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
+      sequencer.off('loading', onLoading);
       sequencer.off('ayahchange', onAyahChange);
       sequencer.off('state', onStateChange);
       sequencer.off('error', onError);
       sequencer.off('ended', onEnded);
     };
+    sequencer.on('loading', onLoading);
     sequencer.on('ayahchange', onAyahChange);
     sequencer.on('state', onStateChange);
     sequencer.on('error', onError);

@@ -138,7 +138,7 @@ describe('PlayerBar — what it shows', () => {
     expect(controlLabels(renderBar({ isPlaying: true }).tree)).toContain('Pause');
   });
 
-  it('says Loading, and refuses taps, only while this surah is the one loading', () => {
+  it('says Loading, and refuses taps, while any load is in progress', () => {
     const loadingThisSurah = renderBar({
       surahId: 1, isLoading: true, pendingSurahId: 1, isPlaying: false,
     }).tree;
@@ -148,18 +148,18 @@ describe('PlayerBar — what it shows', () => {
     expect(control(loadingThisSurah, 'Previous ayah').props.disabled).toBe(true);
     expect(control(loadingThisSurah, 'Next ayah').props.disabled).toBe(true);
 
-    // A *different* surah is loading in the background: this bar still
-    // describes the surah that is actually making sound, and that surah is
-    // not loading, so it must neither spin nor disable its own controls.
+    // A *different* surah is loading: the bar still NAMES the surah that is
+    // live, but it is the one transport, so it shows that a load is under
+    // way — the user tapped something and must see it working. (Which
+    // screen shows a loading strip is still decided by `pendingSurahId`.)
     const loadingOtherSurah = renderBar({
       surahId: 1, isLoading: true, pendingSurahId: 2, isPlaying: true,
     }).tree;
 
-    expect(controlLabels(loadingOtherSurah)).toContain('Pause');
-    expect(controlLabels(loadingOtherSurah)).not.toContain('Loading');
-    expect(control(loadingOtherSurah, 'Pause').props.disabled).toBe(false);
-    expect(control(loadingOtherSurah, 'Previous ayah').props.disabled).toBe(false);
-    expect(control(loadingOtherSurah, 'Next ayah').props.disabled).toBe(false);
+    expect(controlLabels(loadingOtherSurah)).toContain('Loading');
+    expect(control(loadingOtherSurah, 'Loading').props.disabled).toBe(true);
+    expect(control(loadingOtherSurah, 'Previous ayah').props.disabled).toBe(true);
+    expect(control(loadingOtherSurah, 'Next ayah').props.disabled).toBe(true);
   });
 
   it('offers prev, toggle and next as the three transport controls', () => {
@@ -220,10 +220,10 @@ describe('PlayerBar — what it does', () => {
     const switching = harness.current.play(2);
     await flush();
 
+    // Still named after the surah that is live — but visibly loading.
     const text = renderedText(harness.tree);
     expect(text).toContain('Al-Fatihah');
-    expect(controlLabels(harness.tree)).toContain('Pause');
-    expect(controlLabels(harness.tree)).not.toContain('Loading');
+    expect(controlLabels(harness.tree)).toContain('Loading');
 
     const { releaseHeldLoads } = await import('./helpers/fakeAudio');
     await actFlush(async () => {

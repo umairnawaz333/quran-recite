@@ -58,3 +58,17 @@ export function useIsActiveWord(wordId: string): boolean {
 export function useActiveWordId(): string | null {
   return useSyncExternalStore(activeWordStore.subscribe, activeWordStore.getSnapshot);
 }
+
+/**
+ * The active word if it is one of `ids`, else null — and, crucially, a
+ * re-render only when THAT value changes. With a long surah rendered in
+ * full, subscribing every ayah to the raw active word made ~286 components
+ * re-render on every word tick; with this selector only the ayah the word
+ * left and the ayah it entered do.
+ */
+export function useActiveWordAmong(ids: ReadonlySet<string>): string | null {
+  return useSyncExternalStore(
+    activeWordStore.subscribe,
+    () => (active !== null && ids.has(active) ? active : null),
+  );
+}

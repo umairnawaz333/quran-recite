@@ -21,7 +21,13 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
   // correctly name the surah that's actually live, and that surah is not
   // loading — so the bar must not show its spinner (or disable its own
   // toggle) for a fetch that belongs to some other, not-yet-live surah.
-  const isLoadingForThis = isLoading && pendingSurahId === surahId;
+  // Any load the recitation is waiting on shows here — the bar is the one
+  // transport, whichever surah the load belongs to. (`pendingSurahId` still
+  // decides which SCREEN shows its loading strip; the bar just says
+  // "loading".) Without this, tapping the next surah from the bar while one
+  // played gave no feedback at all until the switch-over.
+  void pendingSurahId;
+  const isLoadingForThis = isLoading;
   const toggleLabel = isLoadingForThis ? 'Loading' : isPlaying ? 'Pause' : 'Play';
 
   // The web disables prev/next with `disabled={!p.hasPlaylist}` — true only

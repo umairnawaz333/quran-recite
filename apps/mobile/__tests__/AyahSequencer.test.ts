@@ -525,3 +525,26 @@ describe('AyahSequencer failure reporting (final review)', () => {
     expect(seq.currentIndex).toBe(1);
   });
 });
+
+describe('AyahSequencer loading events', () => {
+  it('reports a load the recitation waits on, and its end', async () => {
+    const p = fakePlayer();
+    const seq = new AyahSequencer(ayahs, () => p);
+    const events: boolean[] = [];
+    seq.on('loading', l => events.push(l));
+    await seq.seekToAyah(1);
+    expect(events).toEqual([true, false]);
+    // A seek to the ayah already held loads nothing and says nothing.
+    await seq.seekToAyah(1, 500);
+    expect(events).toEqual([true, false]);
+  });
+
+  it('ends the loading report even when the load fails', async () => {
+    const p = fakePlayer({ async load() { throw new Error('offline'); } });
+    const seq = new AyahSequencer(ayahs, () => p);
+    const events: boolean[] = [];
+    seq.on('loading', l => events.push(l));
+    await seq.seekToAyah(0);
+    expect(events).toEqual([true, false]);
+  });
+});

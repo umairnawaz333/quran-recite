@@ -261,7 +261,10 @@ export function ReaderScreen({
           maxToRenderPerBatch={24}
           updateCellsBatchingPeriod={30}
           windowSize={1001}
-          removeClippedSubviews={false}
+          // Rows stay mounted and measured (frames stay exact) but off-screen
+          // ones are detached from the native hierarchy, which is what keeps
+          // a fully rendered long surah scrolling smoothly.
+          removeClippedSubviews
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
           onScrollToIndexFailed={() => { /* unreachable: only mounted rows are targeted */ }}
           renderItem={({ item, index }) => (
