@@ -5,6 +5,7 @@
   "description": "Quran text and surah index as data. No code; consumed by both apps.",
   "exports": {
     "./surahs.json": "./surahs.json",
+    "./audio-sizes.json": "./audio-sizes.json",
     "./text/*.json": "./text/*.json"
   }
 }

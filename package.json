@@ -13,7 +13,8 @@
     "mobile:start": "npm run start --workspace @quran/mobile",
     "typecheck": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.test.json && tsc --noEmit -p apps/mobile/tsconfig.json",
     "fetch:data": "npm run fetch:data --workspace @quran/web",
-    "fetch:fonts": "npm run fetch:fonts --workspace @quran/web"
+    "fetch:fonts": "npm run fetch:fonts --workspace @quran/web",
+    "build:audio-sizes": "node packages/quran-data/scripts/build-audio-sizes.mjs"
   },
   "devDependencies": {
     "typescript": "5.9.3"
