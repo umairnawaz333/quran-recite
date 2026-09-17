@@ -113,6 +113,15 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
 
   init {
     addView(textView)
+    // Draw, do not clip, ink that spills past this view's edge. Android
+    // breaks lines by glyph advance, and Amiri's final letters draw behind
+    // the pen position; the inset above covers the usual overhang, and
+    // whatever exceeds it now renders into the row's own margin instead of
+    // being cut off — the tail of a final ى at a line end, say. Layout and
+    // wrapping are untouched; this is purely about what gets painted.
+    clipChildren = false
+    clipToPadding = false
+    textView.clipToOutline = false
   }
 
   /**
