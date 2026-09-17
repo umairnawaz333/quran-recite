@@ -60,7 +60,7 @@ export default function App() {
             {!fontsReady
               ? null
               : surahId === null
-              ? <SurahListScreen onSelect={setSurahId} />
+              ? <SurahListScreen onSelect={setSurahId} script={script} />
               : (
                 <ReaderScreen
                   surahId={surahId}
