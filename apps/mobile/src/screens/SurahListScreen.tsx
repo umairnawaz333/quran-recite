@@ -57,6 +57,10 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
       keyExtractor={item => String(item.id)}
       contentContainerStyle={[styles.list, { maxWidth: contentWidth, width: '100%', alignSelf: 'center' }]}
       onScroll={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
+      // The throttled stream can miss the final position of a fling; these
+      // two fire once it has actually come to rest.
+      onMomentumScrollEnd={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
+      onScrollEndDrag={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
       scrollEventThrottle={100}
       getItemLayout={rowHeight ? (_, index) => ({ length: rowHeight, offset: rowHeight * index, index }) : undefined}
       initialScrollIndex={rowHeight && lastOffset > 0 ? Math.min(surahs.length - 1, Math.floor(lastOffset / rowHeight)) : undefined}

@@ -160,11 +160,25 @@ export function ReaderScreen({
       .sort((a, b) => a - b);
     return samples.length >= 3 ? samples[Math.floor(samples.length / 2)] : Math.max(8, Math.floor(contentWidth / (arabicFontSize * 0.55)));
   };
+  const estimateRaw = (i: number, cpl: number) =>
+    ROW_CHROME + Math.max(1, Math.ceil(charCount(i) / cpl)) * arabicLineHeight;
   const estimatedTop = (index: number) => {
     const cpl = charsPerLine();
+    // Systematic correction: the ratio of measured height to raw estimate
+    // over every row measured so far. Without it a jump that lands short
+    // renders rows whose true heights barely move the sum (they replace a
+    // handful of estimates among dozens), and the next jump lands in the
+    // same place — a fixed point thirteen ayahs short of the target.
+    let measured = 0;
+    let estimatedForMeasured = 0;
+    for (const [i, h] of Object.entries(rowHeights.current)) {
+      measured += h;
+      estimatedForMeasured += estimateRaw(Number(i), cpl);
+    }
+    const scale = measured > 0 && estimatedForMeasured > 0 ? measured / estimatedForMeasured : 1;
     let offset = 0;
     for (let i = 0; i < index; i++) {
-      offset += rowHeights.current[i] ?? (ROW_CHROME + Math.max(1, Math.ceil(charCount(i) / cpl)) * arabicLineHeight);
+      offset += rowHeights.current[i] ?? estimateRaw(i, cpl) * scale;
     }
     return offset;
   };
