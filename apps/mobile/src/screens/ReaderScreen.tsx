@@ -45,6 +45,30 @@ const MAX_CONTENT_WIDTH = 768;
  * `ReaderScreen` itself — the latter would violate the rules of hooks.
  * Tajweed words get the equivalent treatment inside `TajweedLine`.
  */
+/**
+ * One ayah row. Reports its laid-out height and — the part a plain `View`
+ * cannot — its unmount, so the reader knows which rows FlatList currently
+ * has rendered and can therefore position exactly.
+ */
+function AyahRow({ index, onLayout, onUnmount, children }: {
+  index: number;
+  onLayout: (index: number, height: number) => void;
+  onUnmount: (index: number) => void;
+  children: React.ReactNode;
+}) {
+  // The handler is read through a ref so this cleanup runs on a real
+  // unmount only — not on every render, where a fresh `onUnmount` identity
+  // would otherwise mark a mounted row as gone.
+  const unmountRef = useRef(onUnmount);
+  unmountRef.current = onUnmount;
+  useEffect(() => () => unmountRef.current(index), [index]);
+  return (
+    <View style={styles.ayah} onLayout={e => onLayout(index, e.nativeEvent.layout.height)}>
+      {children}
+    </View>
+  );
+}
+
 function IndopakWord({ wordId, text, onPress }: { wordId: string; text: string; onPress: () => void }) {
   const isActive = useIsActiveWord(wordId);
   return <Text style={isActive ? styles.highlight : undefined} onPress={onPress}>{text}</Text>;
@@ -110,47 +134,11 @@ export function ReaderScreen({
   // given `getItemLayout`, it would trust those over measured frames for
   // every phase, and estimates cannot be exact for a hundred rows.
   const rowHeights = useRef<Record<number, number>>({});
+  /** Rows FlatList currently has rendered — the only ones it can position exactly. */
+  const mountedRows = useRef<Set<number>>(new Set());
   const pendingCentre = useRef<number | null>(null);
   const viewportHeight = useRef(0);
   const retriesLeft = useRef(0);
-  /**
-   * Put row `index` — or a y inside it, `withinRow`, for the recited line —
-   * at the viewport's centre, by FlatList's own `scrollToIndex`, which
-   * positions a RENDERED row by the frame it measured for it: exact. On a
-   * row not yet rendered (or one whose frame FlatList has not recorded yet)
-   * it fails synchronously into `onScrollToIndexFailed`; only then does
-   * `pendingCentre` stay set, so the layout-time snap and the retry path
-   * keep trying until an attempt succeeds. (A `measureLayout`-based snap was
-   * tried and abandoned: on Fabric its coordinates are shadow-tree layout,
-   * neither reliably screen- nor content-relative across scroll states.)
-   */
-  const failed = useRef(false);
-  const snapTo = (index: number, withinRow?: number) => {
-    const height = rowHeights.current[index] ?? 0;
-    failed.current = false;
-    listRef.current?.scrollToIndex({
-      index,
-      viewPosition: 0.5,
-      viewOffset: withinRow === undefined || !height ? 0 : height / 2 - withinRow,
-      animated: true,
-    });
-    if (!failed.current && pendingCentre.current === index) pendingCentre.current = null;
-  };
-  const centreOnRow = (index: number) => {
-    pendingCentre.current = index;
-    retriesLeft.current = 25;
-    snapTo(index);
-  };
-  /**
-   * Where row `index` is expected to start, from every row height measured
-   * so far plus, for rows never laid out, an estimate from their own text
-   * length (lines × line height) calibrated against the measured rows. Used
-   * ONLY to jump close enough for the target to render — never handed to
-   * FlatList — and it sharpens with every hop, since each hop lays out the
-   * rows around where it landed. FlatList's own `averageItemLength` jump
-   * did not converge: one running average lands in the same place each
-   * time when the rows between are much taller than it.
-   */
   const ROW_CHROME = 72;
   const charCount = (i: number) => text.ayahs[i]?.words.reduce((n, w) => n + w.indopak.length + 1, 0) ?? 0;
   const charsPerLine = () => {
@@ -162,13 +150,16 @@ export function ReaderScreen({
   };
   const estimateRaw = (i: number, cpl: number) =>
     ROW_CHROME + Math.max(1, Math.ceil(charCount(i) / cpl)) * arabicLineHeight;
+  /**
+   * Where row `index` is expected to start: every row height measured so
+   * far, plus a text-length estimate (lines × line height) for the rest,
+   * scaled by the ratio of measured height to raw estimate over the rows
+   * measured — a systematic correction, so a jump that lands short renders
+   * rows whose real heights move the whole sum rather than a handful of
+   * terms. Used only to bring the target into FlatList's rendered window.
+   */
   const estimatedTop = (index: number) => {
     const cpl = charsPerLine();
-    // Systematic correction: the ratio of measured height to raw estimate
-    // over every row measured so far. Without it a jump that lands short
-    // renders rows whose true heights barely move the sum (they replace a
-    // handful of estimates among dozens), and the next jump lands in the
-    // same place — a fixed point thirteen ayahs short of the target.
     let measured = 0;
     let estimatedForMeasured = 0;
     for (const [i, h] of Object.entries(rowHeights.current)) {
@@ -177,27 +168,54 @@ export function ReaderScreen({
     }
     const scale = measured > 0 && estimatedForMeasured > 0 ? measured / estimatedForMeasured : 1;
     let offset = 0;
-    for (let i = 0; i < index; i++) {
-      offset += rowHeights.current[i] ?? estimateRaw(i, cpl) * scale;
-    }
+    for (let i = 0; i < index; i++) offset += rowHeights.current[i] ?? estimateRaw(i, cpl) * scale;
     return offset;
   };
-  const retryCentre = (info: { index: number }) => {
-    failed.current = true;
-    if (pendingCentre.current !== info.index || retriesLeft.current-- <= 0) return;
-    const jump = Math.max(0, estimatedTop(info.index) - viewportHeight.current / 3);
-    listRef.current?.scrollToOffset({ offset: jump, animated: false });
-    setTimeout(() => {
-      if (pendingCentre.current === info.index) snapTo(info.index);
-    }, 250);
+  /**
+   * Centring, in two kinds of step. A MOUNTED row FlatList positions exactly
+   * (`scrollToIndex` by the frame it measured), so that is the final snap;
+   * `withinRow` moves the centre from the row's middle to the recited line.
+   * An unmounted row is approached by jumping to its estimated top, then
+   * trying again once rows there have laid out — repeated until the row
+   * is mounted or the attempts run out. FlatList's own `scrollToIndex` on
+   * an unmounted row is not trusted even when it does not fail: for any
+   * index below the highest it has ever measured it scrolls to an
+   * *approximate* frame and reports nothing, which is how earlier versions
+   * stopped a few ayahs short and called it done.
+   */
+  const snapTo = (index: number, withinRow?: number) => {
+    if (mountedRows.current.has(index)) {
+      const height = rowHeights.current[index] ?? 0;
+      listRef.current?.scrollToIndex({
+        index,
+        viewPosition: 0.5,
+        viewOffset: withinRow === undefined || !height ? 0 : height / 2 - withinRow,
+        animated: true,
+      });
+      if (pendingCentre.current === index) pendingCentre.current = null;
+      return;
+    }
+    if (retriesLeft.current-- <= 0) { pendingCentre.current = null; return; }
+    listRef.current?.scrollToOffset({
+      offset: Math.max(0, estimatedTop(index) - viewportHeight.current / 3),
+      animated: false,
+    });
+    setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 250);
+  };
+  const centreOnRow = (index: number) => {
+    pendingCentre.current = index;
+    retriesLeft.current = 30;
+    snapTo(index);
   };
   const onRowLayout = (index: number, height: number) => {
     rowHeights.current[index] = height;
+    mountedRows.current.add(index);
     if (pendingCentre.current === index) {
       // Let FlatList record the new frame before centring on it.
       setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 60);
     }
   };
+  const onRowUnmount = (index: number) => { mountedRows.current.delete(index); };
   useEffect(() => {
     if (playingAyah === null) return;
     const index = text.ayahs.findIndex(a => a.ayah === playingAyah);
@@ -275,12 +293,13 @@ export function ReaderScreen({
           initialNumToRender={8}
           windowSize={5}
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
-          onScrollToIndexFailed={retryCentre}
+          onScrollToIndexFailed={() => { /* handled by snapTo's own approach loop */ }}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
-            <View
-              style={styles.ayah}
-              onLayout={e => onRowLayout(index, e.nativeEvent.layout.height)}
+            <AyahRow
+              index={index}
+              onLayout={onRowLayout}
+              onUnmount={onRowUnmount}
             >
               {script === 'tajweed' ? (
                 <TajweedLine
@@ -325,7 +344,7 @@ export function ReaderScreen({
                   <Text style={styles.ayahPlay}>{surahId}:{item.ayah}</Text>
                 </Pressable>
               </View>
-            </View>
+            </AyahRow>
           )}
         />
       </View>
