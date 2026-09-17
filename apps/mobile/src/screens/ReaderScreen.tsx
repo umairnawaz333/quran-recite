@@ -133,114 +133,52 @@ export function ReaderScreen({
   // viewport. No height estimates of our own are handed to FlatList —
   // given `getItemLayout`, it would trust those over measured frames for
   // every phase, and estimates cannot be exact for a hundred rows.
+  // Precise, centred following.
+  //
+  // The surah is rendered in full — progressively, in batches, but with a
+  // render window so large that nothing above the playing ayah is ever an
+  // estimate. Every attempt to keep virtualising while jumping deep into a
+  // 286-ayah surah failed for the same reason: FlatList positions
+  // unrendered rows by estimate, and either the estimate steered the final
+  // scroll (landing a dozen ayahs off) or it shifted the content under a
+  // fixed offset as rows measured (a scroll that was exact when made drifted
+  // afterwards). With every row above the target really laid out, FlatList's
+  // frame for it is exact and `scrollToIndex` centres it exactly. The cost
+  // is rendering a long surah's rows up front, which the batching spreads
+  // over a second or so and which the user asked for in so many words.
   const rowHeights = useRef<Record<number, number>>({});
-  /** Rows FlatList currently has rendered (index → when it laid out) — the only ones it can position exactly. */
-  const mountedRows = useRef<Map<number, number>>(new Map());
-  /** Content offset as last set by us or reported by the list. */
-  const currentOffset = useRef(0);
-  const lastJumpAt = useRef(0);
+  const mountedRows = useRef<Set<number>>(new Set());
   const pendingCentre = useRef<number | null>(null);
   const viewportHeight = useRef(0);
-  const retriesLeft = useRef(0);
-  const ROW_CHROME = 72;
-  const charCount = (i: number) => text.ayahs[i]?.words.reduce((n, w) => n + w.indopak.length + 1, 0) ?? 0;
-  const charsPerLine = () => {
-    const samples = Object.entries(rowHeights.current)
-      .map(([i, h]) => charCount(Number(i)) / Math.max(1, Math.round((h - ROW_CHROME) / arabicLineHeight)))
-      .filter(v => Number.isFinite(v) && v > 0)
-      .sort((a, b) => a - b);
-    return samples.length >= 3 ? samples[Math.floor(samples.length / 2)] : Math.max(8, Math.floor(contentWidth / (arabicFontSize * 0.55)));
-  };
-  const estimateRaw = (i: number, cpl: number) =>
-    ROW_CHROME + Math.max(1, Math.ceil(charCount(i) / cpl)) * arabicLineHeight;
-  /**
-   * Where row `index` is expected to start: every row height measured so
-   * far, plus a text-length estimate (lines × line height) for the rest,
-   * scaled by the ratio of measured height to raw estimate over the rows
-   * measured — a systematic correction, so a jump that lands short renders
-   * rows whose real heights move the whole sum rather than a handful of
-   * terms. Used only to bring the target into FlatList's rendered window.
-   */
-  const estimatedTop = (index: number) => {
-    const cpl = charsPerLine();
-    let measured = 0;
-    let estimatedForMeasured = 0;
-    for (const [i, h] of Object.entries(rowHeights.current)) {
-      measured += h;
-      estimatedForMeasured += estimateRaw(Number(i), cpl);
-    }
-    const scale = measured > 0 && estimatedForMeasured > 0 ? measured / estimatedForMeasured : 1;
-    let offset = 0;
-    for (let i = 0; i < index; i++) offset += rowHeights.current[i] ?? estimateRaw(i, cpl) * scale;
-    return offset;
-  };
-  /**
-   * Centring, in two kinds of step. A MOUNTED row FlatList positions exactly
-   * (`scrollToIndex` by the frame it measured), so that is the final snap;
-   * `withinRow` moves the centre from the row's middle to the recited line.
-   * An unmounted row is approached by jumping to its estimated top, then
-   * trying again once rows there have laid out — repeated until the row
-   * is mounted or the attempts run out. FlatList's own `scrollToIndex` on
-   * an unmounted row is not trusted even when it does not fail: for any
-   * index below the highest it has ever measured it scrolls to an
-   * *approximate* frame and reports nothing, which is how earlier versions
-   * stopped a few ayahs short and called it done.
-   */
-  /**
-   * One approach step for an unmounted target. Steer from what the last
-   * jump actually rendered: if every row laid out since then sits below the
-   * target, move up by the gap times the local row height, and vice versa.
-   * Local heights are accurate where they were measured, so this converges
-   * in a few hops where a global estimate — even re-scaled — wandered by a
-   * dozen ayahs in a 286-ayah surah. The first hop (nothing rendered since
-   * a jump) uses the text-length estimate to get into the neighbourhood.
-   */
-  const approach = (index: number) => {
-    const since = lastJumpAt.current;
-    const fresh = [...mountedRows.current.entries()].filter(([, t]) => t > since).map(([i]) => i).sort((a, b) => a - b);
-    let target: number;
-    if (fresh.length === 0) {
-      target = estimatedTop(index) - viewportHeight.current / 3;
-    } else {
-      const lo = fresh[0];
-      const hi = fresh[fresh.length - 1];
-      const avg = fresh.reduce((sum, i) => sum + (rowHeights.current[i] ?? 0), 0) / fresh.length;
-      if (hi < index) target = currentOffset.current + (index - hi) * avg;
-      else if (lo > index) target = currentOffset.current - (lo - index) * avg;
-      else target = estimatedTop(index) - viewportHeight.current / 3;
-    }
-    target = Math.max(0, target);
-    lastJumpAt.current = Date.now();
-    currentOffset.current = target;
-    listRef.current?.scrollToOffset({ offset: target, animated: false });
-  };
+  /** Centre a rendered row; `withinRow` moves the centre from the row's middle to the recited line. */
   const snapTo = (index: number, withinRow?: number) => {
-    if (mountedRows.current.has(index)) {
-      const height = rowHeights.current[index] ?? 0;
-      listRef.current?.scrollToIndex({
-        index,
-        viewPosition: 0.5,
-        viewOffset: withinRow === undefined || !height ? 0 : height / 2 - withinRow,
-        animated: true,
-      });
-      if (pendingCentre.current === index) pendingCentre.current = null;
-      return;
-    }
-    if (retriesLeft.current-- <= 0) { pendingCentre.current = null; return; }
-    approach(index);
-    setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 350);
+    if (!mountedRows.current.has(index)) return false;
+    const height = rowHeights.current[index] ?? 0;
+    listRef.current?.scrollToIndex({
+      index,
+      viewPosition: 0.5,
+      viewOffset: withinRow === undefined || !height ? 0 : height / 2 - withinRow,
+      animated: true,
+    });
+    return true;
   };
   const centreOnRow = (index: number) => {
-    pendingCentre.current = index;
-    retriesLeft.current = 30;
-    snapTo(index);
+    // Rendered already: centre now. Otherwise wait — rendering is marching
+    // down the surah regardless of scroll position, and `onRowLayout`
+    // centres the moment the row exists.
+    pendingCentre.current = snapTo(index) ? null : index;
   };
   const onRowLayout = (index: number, height: number) => {
+    // A row lays out once with only its footer (the native text view sizes
+    // itself a beat later) and again at its real height; only the latter is
+    // a height worth recording or centring on.
+    if (height < 60) return;
     rowHeights.current[index] = height;
-    mountedRows.current.set(index, Date.now());
+    mountedRows.current.add(index);
     if (pendingCentre.current === index) {
-      // Let FlatList record the new frame before centring on it.
-      setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 60);
+      pendingCentre.current = null;
+      // Let FlatList record the frame before centring on it.
+      setTimeout(() => snapTo(index), 60);
     }
   };
   const onRowUnmount = (index: number) => { mountedRows.current.delete(index); };
@@ -318,12 +256,14 @@ export function ReaderScreen({
           ref={listRef}
           data={text.ayahs}
           keyExtractor={a => String(a.ayah)}
-          initialNumToRender={8}
-          windowSize={5}
+          // Render everything, in batches — see the centring comment above.
+          initialNumToRender={12}
+          maxToRenderPerBatch={24}
+          updateCellsBatchingPeriod={30}
+          windowSize={1001}
+          removeClippedSubviews={false}
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
-          onScroll={e => { currentOffset.current = e.nativeEvent.contentOffset.y; }}
-          scrollEventThrottle={100}
-          onScrollToIndexFailed={() => { /* handled by snapTo's own approach loop */ }}
+          onScrollToIndexFailed={() => { /* unreachable: only mounted rows are targeted */ }}
           renderItem={({ item, index }) => (
             <AyahRow
               index={index}
