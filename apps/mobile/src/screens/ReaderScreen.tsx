@@ -110,48 +110,31 @@ export function ReaderScreen({
   // given `getItemLayout`, it would trust those over measured frames for
   // every phase, and estimates cannot be exact for a hundred rows.
   const rowHeights = useRef<Record<number, number>>({});
-  const rowRefs = useRef<Record<number, View | null>>({});
   const pendingCentre = useRef<number | null>(null);
   const viewportHeight = useRef(0);
-  /** Current scroll offset; `measureLayout` against the scroll view yields
-   * on-screen coordinates, so the content offset must be added back. */
-  const scrollY = useRef(0);
   const retriesLeft = useRef(0);
   /**
-   * Put `withinRow` (a y inside row `index`; its middle when omitted) at the
-   * viewport's centre, by MEASURING the rendered row against the list's
-   * scroll view. FlatList's own `scrollToIndex` was the previous final step
-   * and it would sometimes fail on a row that had only just laid out —
-   * its frame not yet recorded — and, with the pending guard already
-   * cleared, nothing retried: the list stopped wherever the crawl had got
-   * to, with the ayah on screen but not centred. Measuring asks Android for
-   * the row's real position instead, so the snap is exact whenever the row
-   * exists; the pending guard clears only once that has happened.
+   * Put row `index` — or a y inside it, `withinRow`, for the recited line —
+   * at the viewport's centre, by FlatList's own `scrollToIndex`, which
+   * positions a RENDERED row by the frame it measured for it: exact. On a
+   * row not yet rendered (or one whose frame FlatList has not recorded yet)
+   * it fails synchronously into `onScrollToIndexFailed`; only then does
+   * `pendingCentre` stay set, so the layout-time snap and the retry path
+   * keep trying until an attempt succeeds. (A `measureLayout`-based snap was
+   * tried and abandoned: on Fabric its coordinates are shadow-tree layout,
+   * neither reliably screen- nor content-relative across scroll states.)
    */
+  const failed = useRef(false);
   const snapTo = (index: number, withinRow?: number) => {
-    const row = rowRefs.current[index];
-    const list = listRef.current;
-    const scrollNode = list?.getNativeScrollRef?.();
-    if (row && list && scrollNode) {
-      row.measureLayout(
-        scrollNode as unknown as number,
-        (_x, y, _w, h) => {
-          // `y` is where the row sits within the scroll view's frame right
-          // now — a screen position, not a content position — so the
-          // current offset is added to get the content y being centred.
-          const focus = scrollY.current + y + (withinRow ?? h / 2);
-          const target = Math.max(0, focus - viewportHeight.current / 2);
-          list.scrollToOffset({ offset: target, animated: true });
-          scrollY.current = target;
-          if (pendingCentre.current === index) pendingCentre.current = null;
-        },
-        () => list.scrollToIndex({ index, viewPosition: 0.5, animated: true }),
-      );
-      return;
-    }
-    // Not rendered yet: this fails into `onScrollToIndexFailed`, whose jump
-    // near FlatList's estimate is what gets the row rendered.
-    list?.scrollToIndex({ index, viewPosition: 0.5, animated: false });
+    const height = rowHeights.current[index] ?? 0;
+    failed.current = false;
+    listRef.current?.scrollToIndex({
+      index,
+      viewPosition: 0.5,
+      viewOffset: withinRow === undefined || !height ? 0 : height / 2 - withinRow,
+      animated: true,
+    });
+    if (!failed.current && pendingCentre.current === index) pendingCentre.current = null;
   };
   const centreOnRow = (index: number) => {
     pendingCentre.current = index;
@@ -159,10 +142,11 @@ export function ReaderScreen({
     snapTo(index);
   };
   const retryCentre = (info: { index: number; averageItemLength: number }) => {
+    failed.current = true;
     if (pendingCentre.current !== info.index || retriesLeft.current-- <= 0) return;
-    const estimate = info.averageItemLength * info.index;
-    listRef.current?.scrollToOffset({ offset: estimate, animated: false });
-    scrollY.current = estimate;
+    // Jump near FlatList's estimate so the target row gets rendered, then
+    // try again once rows there have laid out.
+    listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
     setTimeout(() => {
       if (pendingCentre.current === info.index) snapTo(info.index);
     }, 300);
@@ -170,8 +154,8 @@ export function ReaderScreen({
   const onRowLayout = (index: number, height: number) => {
     rowHeights.current[index] = height;
     if (pendingCentre.current === index) {
-      // Let the row settle in the scroll view before measuring it.
-      setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 50);
+      // Let FlatList record the new frame before centring on it.
+      setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 60);
     }
   };
   useEffect(() => {
@@ -251,13 +235,10 @@ export function ReaderScreen({
           initialNumToRender={8}
           windowSize={5}
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
-          onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
-          scrollEventThrottle={50}
           onScrollToIndexFailed={retryCentre}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
             <View
-              ref={el => { rowRefs.current[index] = el; }}
               style={styles.ayah}
               onLayout={e => onRowLayout(index, e.nativeEvent.layout.height)}
             >

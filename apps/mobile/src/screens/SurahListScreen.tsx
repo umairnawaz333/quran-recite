@@ -20,6 +20,7 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
   const { width } = useWindowDimensions();
   const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
   const listRef = useRef<FlatList<SurahMeta>>(null);
+  const restored = useRef(false);
 
   const renderItem = ({ item }: { item: SurahMeta }) => (
     <Pressable style={styles.row} onPress={() => onSelect(item.id)} accessibilityRole="button">
@@ -30,7 +31,14 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
       </View>
       {/* The same face the reader uses for the chosen script — the script
           choice is app-wide, so the names on the home page follow it. */}
-      <Text style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script] }]}>{item.nameArabic}</Text>
+      <Text
+        style={[styles.arabic, { fontFamily: SCRIPT_FONTS[script] }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {item.nameArabic}
+      </Text>
     </Pressable>
   );
 
@@ -43,8 +51,13 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
       contentContainerStyle={[styles.list, { maxWidth: contentWidth, width: '100%', alignSelf: 'center' }]}
       onScroll={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
       scrollEventThrottle={100}
-      onLayout={() => {
-        if (lastOffset > 0) listRef.current?.scrollToOffset({ offset: lastOffset, animated: false });
+      // Restore once the content exists — on layout the list is still empty
+      // and a scroll would clamp to the top.
+      onContentSizeChange={() => {
+        if (!restored.current && lastOffset > 0) {
+          restored.current = true;
+          listRef.current?.scrollToOffset({ offset: lastOffset, animated: false });
+        }
       }}
     />
   );
@@ -57,5 +70,8 @@ const styles = StyleSheet.create({
   names: { flex: 1 },
   simple: { fontSize: 16, fontWeight: '500' },
   english: { fontSize: 13, color: '#777', marginTop: 2 },
-  arabic: { fontSize: 18 },
+  // A fixed column: RN under-measures the Quran faces' width, so an
+  // intrinsically-sized Text wrapped two-word names ("آل عمران") onto a
+  // clipped second line. Wide enough for the longest name at this size.
+  arabic: { fontSize: 18, width: 150, textAlign: 'right' },
 });
