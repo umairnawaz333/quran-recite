@@ -53,6 +53,13 @@ export class SyncEngine {
   }
 
   attach(getTimeMs: () => number, words: WordTiming[]): void {
+    // Idempotent: a host that attaches on every play (and detaches on every
+    // pause) must never end up with two frame loops running. Cancel any
+    // loop already scheduled before starting this one.
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
     this.getTimeMs = getTimeMs;
     this.words = words;
     this.lastEmitted = null;

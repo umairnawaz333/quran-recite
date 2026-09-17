@@ -116,11 +116,14 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
     textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSize)
     textView.setTextColor(parseColorOr(textColor, Color.BLACK))
     if (lineHeightDp > 0f) {
-      // `lineHeight` arrives in dp (the same unit RN's own `style.lineHeight`
-      // uses) — TextViewCompat wants raw px, so convert explicitly rather
-      // than passing the dp value straight through.
+      // Same unit as the text size above — SP, not DIP — so the line height
+      // scales with the system/accessibility font-size setting exactly as
+      // the glyphs do. RN's own `<Text>` scales both together under
+      // `allowFontScaling`; converting only the size (as this once did) made
+      // large font scales crowd and clip lines on this path alone.
+      // TextViewCompat wants raw px, so convert explicitly.
       val lineHeightPx = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP,
+        TypedValue.COMPLEX_UNIT_SP,
         lineHeightDp,
         resources.displayMetrics,
       )

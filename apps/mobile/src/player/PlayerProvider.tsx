@@ -274,11 +274,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       patch({ ayah: timings.ayahs[index]?.ayah ?? 1, error: null });
       registerLockScreen();
     });
-    sequencer.on('state', playing => { if (live) patch({ isPlaying: playing }); });
+    sequencer.on('state', playing => {
+      // Run the highlight loop only while sound is actually playing. It is
+      // a requestAnimationFrame loop waking the JS thread every frame; left
+      // attached it would run for the app's lifetime after the first play —
+      // through pauses, past the end, and while the user browses the list.
+      // Detaching leaves the last painted word in place (nothing emits
+      // null), so the highlight stays put while paused; re-attaching emits
+      // the current word on its first frame.
+      if (playing) engine.attach(() => sequencer.localTimeMs, timings.ayahs[sequencer.currentIndex]?.words ?? []);
+      else engine.detach();
+      if (live) patch({ isPlaying: playing });
+    });
     sequencer.on('error', message => {
       if (live) patch({ error: message, isPlaying: false, isLoading: false, pendingSurahId: surahId });
     });
     sequencer.on('ended', () => {
+      engine.detach();
       if (!live) return;
       paint(null);
       patch({ isPlaying: false });
@@ -291,7 +303,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       ? Math.max(0, timings.ayahs.findIndex(a => a.ayah === ayah))
       : 0;
 
-    engine.attach(() => sequencer.localTimeMs, timings.ayahs[startIndex]?.words ?? []);
+    // Not attached here: the loop starts with the first `state: true`.
 
     try {
       await sequencer.seekToAyah(startIndex, localMsFor(timings, startIndex));

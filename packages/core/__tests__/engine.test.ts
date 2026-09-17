@@ -68,6 +68,20 @@ describe('SyncEngine', () => {
     engine.detach();
   });
 
+  it('attaching again replaces the running loop instead of adding a second one', () => {
+    const engine = new SyncEngine();
+    const cancel = vi.mocked(cancelAnimationFrame);
+    engine.attach(() => 0, WORDS);
+    engine.attach(() => 0, WORDS);
+
+    // A host that attaches on every play and detaches on every pause must
+    // never accumulate frame loops. The first loop's frame (id 1, from the
+    // mock) must be cancelled before the second is scheduled.
+    expect(cancel).toHaveBeenCalledWith(1);
+    expect(raf).toHaveBeenCalledTimes(2);
+    engine.detach();
+  });
+
   it('does not re-emit while the same word stays active', () => {
     let now = 700;
     const engine = new SyncEngine();
