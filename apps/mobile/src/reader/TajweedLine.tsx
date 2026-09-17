@@ -26,7 +26,7 @@ const EMPTY_LINE: TajweedLineContent = { text: '', ranges: [], highlight: null, 
  * `TajweedTextView.kt`'s class doc for the full mechanism.
  */
 export function TajweedLine({
-  words, ayahNumber, fontFamily, fontSize, lineHeight, color, onWordPress,
+  words, ayahNumber, fontFamily, fontSize, lineHeight, color, onWordPress, onHighlightLayout,
 }: {
   words: TajweedLineWord[];
   ayahNumber: number;
