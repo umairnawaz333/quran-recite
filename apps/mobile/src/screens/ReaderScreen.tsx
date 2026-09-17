@@ -110,35 +110,58 @@ export function ReaderScreen({
   // given `getItemLayout`, it would trust those over measured frames for
   // every phase, and estimates cannot be exact for a hundred rows.
   const rowHeights = useRef<Record<number, number>>({});
+  const rowRefs = useRef<Record<number, View | null>>({});
   const pendingCentre = useRef<number | null>(null);
-  /** Centre a rendered row; `withinRow` shifts the centre from the row's middle to a y inside it. */
-  const centreRendered = (index: number, withinRow?: number) => {
-    const height = rowHeights.current[index] ?? 0;
-    listRef.current?.scrollToIndex({
-      index,
-      viewPosition: 0.5,
-      viewOffset: withinRow === undefined || !height ? 0 : height / 2 - withinRow,
-      animated: true,
-    });
+  const viewportHeight = useRef(0);
+  const retriesLeft = useRef(0);
+  /**
+   * Put `withinRow` (a y inside row `index`; its middle when omitted) at the
+   * viewport's centre, by MEASURING the rendered row against the list's
+   * scroll view. FlatList's own `scrollToIndex` was the previous final step
+   * and it would sometimes fail on a row that had only just laid out —
+   * its frame not yet recorded — and, with the pending guard already
+   * cleared, nothing retried: the list stopped wherever the crawl had got
+   * to, with the ayah on screen but not centred. Measuring asks Android for
+   * the row's real position instead, so the snap is exact whenever the row
+   * exists; the pending guard clears only once that has happened.
+   */
+  const snapTo = (index: number, withinRow?: number) => {
+    const row = rowRefs.current[index];
+    const list = listRef.current;
+    const scrollNode = list?.getNativeScrollRef?.();
+    if (row && list && scrollNode) {
+      row.measureLayout(
+        scrollNode as unknown as number,
+        (_x, y, _w, h) => {
+          const focus = y + (withinRow ?? h / 2);
+          list.scrollToOffset({ offset: Math.max(0, focus - viewportHeight.current / 2), animated: true });
+          if (pendingCentre.current === index) pendingCentre.current = null;
+        },
+        () => list.scrollToIndex({ index, viewPosition: 0.5, animated: true }),
+      );
+      return;
+    }
+    // Not rendered yet: this fails into `onScrollToIndexFailed`, whose jump
+    // near FlatList's estimate is what gets the row rendered.
+    list?.scrollToIndex({ index, viewPosition: 0.5, animated: false });
   };
   const centreOnRow = (index: number) => {
-    // A row already laid out centres exactly right away; only a row FlatList
-    // has yet to render needs the layout-time snap (and the retry path).
-    pendingCentre.current = index in rowHeights.current ? null : index;
-    centreRendered(index);
+    pendingCentre.current = index;
+    retriesLeft.current = 12;
+    snapTo(index);
   };
   const retryCentre = (info: { index: number; averageItemLength: number }) => {
+    if (pendingCentre.current !== info.index || retriesLeft.current-- <= 0) return;
     listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
     setTimeout(() => {
-      if (pendingCentre.current === info.index) centreRendered(info.index);
+      if (pendingCentre.current === info.index) snapTo(info.index);
     }, 300);
   };
   const onRowLayout = (index: number, height: number) => {
     rowHeights.current[index] = height;
     if (pendingCentre.current === index) {
-      pendingCentre.current = null;
-      // Let FlatList record the new frame before centring on it.
-      setTimeout(() => centreRendered(index), 50);
+      // Let the row settle in the scroll view before measuring it.
+      setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 50);
     }
   };
   useEffect(() => {
@@ -154,14 +177,13 @@ export function ReaderScreen({
    * highlight has moved well away from the line last centred, so the page
    * does not twitch on every word and a reader who nudges it is not fought.
    */
-  const viewportHeight = useRef(0);
   const lastCentredLine = useRef<{ index: number; y: number } | null>(null);
   const followHighlight = (index: number, line: { top: number; bottom: number }) => {
     const y = (line.top + line.bottom) / 2;
     const last = lastCentredLine.current;
     if (last && last.index === index && Math.abs(y - last.y) < viewportHeight.current * 0.2) return;
     lastCentredLine.current = { index, y };
-    centreRendered(index, y);
+    snapTo(index, y);
   };
 
   // `error` is attributed via `pendingSurahId`, not `surahId`: while a
@@ -223,6 +245,7 @@ export function ReaderScreen({
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
             <View
+              ref={el => { rowRefs.current[index] = el; }}
               style={styles.ayah}
               onLayout={e => onRowLayout(index, e.nativeEvent.layout.height)}
             >
