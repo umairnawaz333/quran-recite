@@ -66,9 +66,21 @@ export class FakeFile {
     return content;
   }
   delete() { store.delete(this.uri); }
-  /** Real `File.move()` returns `Promise<void>` — an un-awaited call must not appear to have finished. */
+  /**
+   * Real `File.move()` returns `Promise<void>` and genuinely happens later —
+   * an un-awaited call must not appear to have finished. Deferring past a
+   * real macrotask (not just a microtask) means a caller that forgets to
+   * `await` this observes the rename as *not yet done* when it checks
+   * `exists` right afterwards, which is what makes that mistake testable.
+   *
+   * `failMoves`, when it matches the destination, simulates a rename that
+   * resolves without producing the destination file — the source is left
+   * exactly as it was, exercising the caller's post-move `exists` check.
+   */
   async move(to: FakeFile | FakeDirectory) {
     const dest = to instanceof FakeDirectory ? `${to.uri}/${this.name}` : to.uri;
+    await new Promise<void>(r => setTimeout(r, 0));
+    if (failMoves?.test(dest)) return;
     store.set(dest, store.get(this.uri) ?? '');
     store.delete(this.uri);
     this.uri = dest;
@@ -81,6 +93,10 @@ export class FakeFile {
 }
 
 export const Paths = { document: new FakeDirectory('file:///doc'), cache: new FakeDirectory('file:///cache') };
+
+/** A `move()` whose destination matches this pattern resolves without renaming — see `FakeFile.move`. */
+export let failMoves: RegExp | null = null;
+export function setFailMovesMatching(r: RegExp | null) { failMoves = r; }
 
 /**
  * Stand-in for `expo-file-system`'s `DownloadTask` (see `NetworkTasks.d.ts`):
@@ -162,6 +178,7 @@ export function reset(): void {
   downloads.length = 0;
   holdDownloads = null;
   failDownloads = null;
+  failMoves = null;
 }
 
 /** Alias kept for the player-provider harness, which was written against this name. */

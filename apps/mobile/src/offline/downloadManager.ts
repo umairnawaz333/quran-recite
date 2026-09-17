@@ -31,6 +31,8 @@ function expectedFiles(surahId: number): number { return getSurahList().find(s =
 export const downloads = {
   getState(surahId: number): DownloadState { return states.get(surahId) ?? { status: 'idle' }; },
   subscribe(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; },
+  /** The snapshot backing `useDownloadedSurahs` — same array reference across a no-op `refreshFromDisk()`. */
+  downloaded(): number[] { return downloadedSnapshot; },
   /** Test seam: forget everything in memory (the fake disk is reset separately). */
   __resetForTests() { states.clear(); queue.length = 0; active = null; },
 };
@@ -44,9 +46,19 @@ export function useDownloadedSurahs(): number[] {
   return useSyncExternalStore(downloads.subscribe, () => downloadedSnapshot);
 }
 
-/** Re-derive "done" from the disk (the filesystem is the source of truth). */
+function sameIds(a: number[], b: number[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
+/**
+ * Re-derive "done" from the disk (the filesystem is the source of truth).
+ * Keeps the previous snapshot array (same reference) when nothing actually
+ * changed, so `useDownloadedSurahs()` — a `useSyncExternalStore` snapshot —
+ * does not force a re-render on a no-op refresh.
+ */
 export function refreshFromDisk(): void {
-  downloadedSnapshot = downloadedSurahs(expectedFiles);
+  const next = downloadedSurahs(expectedFiles);
+  if (!sameIds(next, downloadedSnapshot)) downloadedSnapshot = next;
   const done = new Set(downloadedSnapshot);
   for (const s of getSurahList()) {
     const current = states.get(s.id);
@@ -59,7 +71,8 @@ export function refreshFromDisk(): void {
 export function startDownload(surahId: number): void {
   const state = downloads.getState(surahId);
   if (state.status === 'queued' || state.status === 'downloading' || state.status === 'done') return;
-  if (isSurahDownloaded(surahId, expectedFiles(surahId))) { set(surahId, { status: 'done' }); return; }
+  // refreshFromDisk (not a bare `set`) so useDownloadedSurahs() cannot lag useDownloadState().
+  if (isSurahDownloaded(surahId, expectedFiles(surahId))) { refreshFromDisk(); return; }
   set(surahId, { status: 'queued' });
   queue.push(surahId);
   void pump();
@@ -86,11 +99,16 @@ async function pump(): Promise<void> {
   if (active) return;
   const surahId = queue.shift();
   if (surahId === undefined) return;
-  active = { surahId, task: null, cancelled: false };
+  const ctl = { surahId, task: null, cancelled: false };
+  active = ctl;
   try {
-    await downloadSurah(surahId, active);
+    await downloadSurah(surahId, ctl);
   } finally {
-    active = null;
+    // Only this generation's own slot — a chain still unwinding from an
+    // un-abortable await (e.g. a real network fetch with no AbortController)
+    // must not clear a *newer* generation's `active` out from under it were
+    // one somehow already running by the time this settles.
+    if (active === ctl) active = null;
     void pump();
   }
 }
@@ -102,6 +120,7 @@ async function downloadSurah(surahId: number, ctl: { task: DownloadTask | null; 
   try {
     timings = await loadTimings(surahId);
   } catch (err) {
+    if (ctl.cancelled) { set(surahId, { status: 'idle' }); return; }
     set(surahId, { status: 'error', message: err instanceof Error ? err.message : String(err) });
     return;
   }
@@ -126,6 +145,8 @@ async function downloadSurah(surahId: number, ctl: { task: DownloadTask | null; 
       // as complete, or race a cancel/crash into losing the final file.
       await part.move(final);
       if (!final.exists) {
+        if (part.exists) part.delete();
+        if (ctl.cancelled) { set(surahId, { status: 'idle' }); return; }
         set(surahId, { status: 'error', message: `rename failed for ${name}` });
         return;
       }

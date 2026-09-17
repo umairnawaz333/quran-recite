@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('expo-file-system', async () => (await import('./helpers/fakeFileSystem')).fakeFileSystemModule);
-import { store, reset, downloads, setHoldDownloads, setFailDownloads, releaseAllHeld } from './helpers/fakeFileSystem';
+import { store, reset, downloads, setHoldDownloads, setFailDownloads, setFailMovesMatching, releaseAllHeld } from './helpers/fakeFileSystem';
 import { configureTimings, primeTimings, resetTimingsCache, configureAudioBase } from '@quran/core';
+import type { TimingsStore } from '@quran/core';
 import { downloads as dl, startDownload, cancelDownload, removeDownload, downloadAll, refreshFromDisk } from '../src/offline/downloadManager';
 import { isSurahDownloaded } from '../src/offline/offlineStore';
 
@@ -91,5 +92,64 @@ describe('downloadManager', () => {
     store.set('file:///doc/offline/112/timings.json', JSON.stringify(timings(112, 4)));
     refreshFromDisk();
     expect(dl.getState(112)).toEqual({ status: 'done' });
+  });
+
+  it('cancelling while timings are still loading ends idle, not error', async () => {
+    // A surah id outside the real 1..114 list — no other test's `downloadAll`
+    // traffic can ever land on it, so this is immune to any stray background
+    // work another test's queue left running. Its timings are never primed,
+    // so loadTimings falls through to the configured store — held pending
+    // here until the test rejects it, exactly the window a cancel needs to
+    // land in for this to be worth anything.
+    const surahId = 9001;
+    let rejectTimings: (err: unknown) => void = () => {};
+    const pendingStore: TimingsStore = {
+      read: () => new Promise((_resolve, reject) => { rejectTimings = reject; }),
+      write: async () => {},
+    };
+    configureTimings({ store: pendingStore });
+
+    startDownload(surahId);
+    await flush();
+    expect(dl.getState(surahId).status).toBe('downloading');
+    cancelDownload(surahId);
+    rejectTimings(new Error('timings unavailable'));
+    await settle();
+    expect(dl.getState(surahId)).toEqual({ status: 'idle' });
+  });
+
+  it('a failed rename ends error, with no .part left, and the surah stays not-downloaded', async () => {
+    setFailMovesMatching(/112003/);
+    startDownload(112);
+    await settle();
+    expect(dl.getState(112)).toEqual({ status: 'error', message: 'rename failed for 112003.mp3' });
+    expect(isSurahDownloaded(112, 4)).toBe(false);
+    expect([...store.keys()].some(k => k.includes('/offline/112/') && k.endsWith('.part'))).toBe(false);
+  });
+
+  it('cancelling while a failed rename is still in flight ends idle, not error', async () => {
+    // The rename for ayah 1 will resolve (one real tick later, per the fake's
+    // `move`) without producing the destination. Cancel lands in that window
+    // — after the file "downloaded" but before the rename settles — which is
+    // exactly the gap the `!final.exists` branch used to report as an error
+    // regardless of a pending cancellation.
+    setFailMovesMatching(/112001/);
+    startDownload(112);
+    await flush(); // past loadTimings + downloadAsync (pure microtasks); the rename's own tick has not fired yet
+    cancelDownload(112);
+    await settle();
+    expect(dl.getState(112)).toEqual({ status: 'idle' });
+    expect([...store.keys()].some(k => k.includes('/offline/112/') && k.endsWith('.part'))).toBe(false);
+  });
+
+  it('refreshFromDisk keeps the same snapshot array when nothing on disk changed', () => {
+    for (let n = 1; n <= 4; n++) store.set(`file:///doc/offline/112/11200${n}.mp3`, 'x');
+    store.set('file:///doc/offline/112/timings.json', JSON.stringify(timings(112, 4)));
+    refreshFromDisk();
+    const first = dl.downloaded();
+    refreshFromDisk();
+    const second = dl.downloaded();
+    expect(second).toBe(first); // same reference: useSyncExternalStore must not see a "change" here
+    expect(second).toEqual([112]);
   });
 });
