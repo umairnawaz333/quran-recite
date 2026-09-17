@@ -112,7 +112,6 @@ export function ReaderScreen({
   // recited — is put in the middle of the viewport.
   const rowHeights = useRef<Record<number, number>>({});
   const viewportHeight = useRef(0);
-  const scrollY = useRef(0);
   const ROW_CHROME = 72; // footer row + vertical padding, independent of text
   const charCount = (index: number) =>
     text.ayahs[index]?.words.reduce((n, w) => n + w.indopak.length + 1, 0) ?? 0;
@@ -139,17 +138,40 @@ export function ReaderScreen({
     for (let i = 0; i < index; i++) offset += rowHeight(i);
     return offset;
   };
-  /** Scroll so that `focusY` (a content-space y) sits at the viewport's centre. */
-  const centreOn = (focusY: number, animated = true) => {
-    const target = Math.max(0, focusY - viewportHeight.current / 2);
-    listRef.current?.scrollToOffset({ offset: target, animated });
-    scrollY.current = target;
+  /**
+   * Centre a row in two phases. Summed estimates are only approximate for a
+   * hundred unrendered rows, so phase one jumps by estimate purely to get
+   * the target row *rendered*; phase two, once it has laid out, asks
+   * FlatList to centre it by the row's real, measured frame — exact. A row
+   * already rendered skips straight to phase two. `viewOffset` shifts the
+   * centre from the row's middle to a point within it (the recited line).
+   */
+  const pendingCentre = useRef<number | null>(null);
+  const centreRendered = (index: number, withinRow?: number) => {
+    const height = rowHeights.current[index] ?? rowHeight(index);
+    listRef.current?.scrollToIndex({
+      index,
+      viewPosition: 0.5,
+      viewOffset: withinRow === undefined ? 0 : height / 2 - withinRow,
+      animated: true,
+    });
   };
   const centreOnRow = (index: number) => {
-    centreOn(rowTop(index) + rowHeight(index) / 2);
-    // Rows around the target lay out over the next few frames; re-centre
-    // once they have, so an estimate is replaced by the measured position.
-    setTimeout(() => centreOn(rowTop(index) + rowHeight(index) / 2), 400);
+    if (index in rowHeights.current) {
+      centreRendered(index);
+      return;
+    }
+    pendingCentre.current = index;
+    const estimate = Math.max(0, rowTop(index) + rowHeight(index) / 2 - viewportHeight.current / 2);
+    listRef.current?.scrollToOffset({ offset: estimate, animated: false });
+  };
+  const onRowLayout = (index: number, height: number) => {
+    rowHeights.current[index] = height;
+    if (pendingCentre.current === index) {
+      pendingCentre.current = null;
+      // Let FlatList absorb the new frame before asking it to centre on it.
+      setTimeout(() => centreRendered(index), 50);
+    }
   };
   useEffect(() => {
     if (playingAyah === null) return;
@@ -161,13 +183,16 @@ export function ReaderScreen({
   }, [playingAyah, text]);
   /**
    * Follow the recited line within a long ayah. Re-centres only when the
-   * highlight has drifted well away from the middle, so the page does not
-   * twitch on every word and a reader who nudges it is not fought.
+   * highlight has moved well away from the line last centred, so the page
+   * does not twitch on every word and a reader who nudges it is not fought.
    */
+  const lastCentredLine = useRef<{ index: number; y: number } | null>(null);
   const followHighlight = (index: number, line: { top: number; bottom: number }) => {
-    const focusY = rowTop(index) + (line.top + line.bottom) / 2;
-    const centre = scrollY.current + viewportHeight.current / 2;
-    if (Math.abs(focusY - centre) > viewportHeight.current * 0.2) centreOn(focusY);
+    const y = (line.top + line.bottom) / 2;
+    const last = lastCentredLine.current;
+    if (last && last.index === index && Math.abs(y - last.y) < viewportHeight.current * 0.2) return;
+    lastCentredLine.current = { index, y };
+    centreRendered(index, y);
   };
 
   // `error` is attributed via `pendingSurahId`, not `surahId`: while a
@@ -225,14 +250,12 @@ export function ReaderScreen({
           initialNumToRender={8}
           windowSize={5}
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
-          onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
-          scrollEventThrottle={100}
           getItemLayout={(_, index) => ({ length: rowHeight(index), offset: rowTop(index), index })}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
             <View
               style={styles.ayah}
-              onLayout={e => { rowHeights.current[index] = e.nativeEvent.layout.height; }}
+              onLayout={e => onRowLayout(index, e.nativeEvent.layout.height)}
             >
               {script === 'tajweed' ? (
                 <TajweedLine
