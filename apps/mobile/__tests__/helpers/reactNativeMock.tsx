@@ -1,0 +1,105 @@
+/**
+ * The slice of `react-native` the player touches, as plain host components.
+ *
+ * `react-native`'s own entry point cannot be imported under vitest's `node`
+ * environment at all (its sources are Flow-typed and its modules expect the
+ * native bridge), and the Jest preset that normally supplies these mocks is
+ * not available here. Rendering each of these as a host element instead —
+ * `<View>` becomes `{ type: 'View', props }` in `react-test-renderer`'s JSON
+ * — keeps every prop the component passed (`accessibilityLabel`, `onPress`,
+ * `disabled`) inspectable, which is what the PlayerBar assertions query by.
+ */
+import { createElement } from 'react';
+import type { ReactNode } from 'react';
+
+type HostProps = Record<string, unknown> & { children?: ReactNode };
+
+function host(name: string) {
+  const Component = (props: HostProps) => createElement(name, props);
+  Component.displayName = name;
+  return Component;
+}
+
+export const View = host('View');
+export const Text = host('Text');
+export const Pressable = host('Pressable');
+export const ScrollView = host('ScrollView');
+export const SafeAreaView = host('SafeAreaView');
+export const ActivityIndicator = host('ActivityIndicator');
+
+export const StyleSheet = {
+  create: <T extends Record<string, unknown>>(styles: T): T => styles,
+  flatten: (style: unknown) => style,
+  hairlineWidth: 1,
+  absoluteFill: {},
+};
+
+class AnimatedValue {
+  constructor(private value: number) {}
+  /** The real one returns an opaque node; a string is enough for a style. */
+  interpolate(_config: unknown): string {
+    return `${this.value}deg`;
+  }
+  setValue(next: number) {
+    this.value = next;
+  }
+}
+
+const animation = { start: (_cb?: () => void) => {}, stop: () => {}, reset: () => {} };
+
+export const Animated = {
+  Value: AnimatedValue,
+  View: host('Animated.View'),
+  Text: host('Animated.Text'),
+  timing: (_value: AnimatedValue, _config: unknown) => animation,
+  loop: (_animation: unknown) => animation,
+  sequence: (_animations: unknown[]) => animation,
+};
+
+export const Easing = {
+  linear: (t: number) => t,
+  inOut: (fn: (t: number) => number) => fn,
+};
+
+export const Platform = {
+  OS: 'android' as const,
+  select: <T,>(specifics: { android?: T; ios?: T; default?: T }): T | undefined =>
+    specifics.android ?? specifics.default,
+};
+
+export const useWindowDimensions = () => ({ width: 400, height: 800, scale: 2, fontScale: 1 });
+export const Dimensions = { get: () => ({ width: 400, height: 800, scale: 2, fontScale: 1 }) };
+
+export type AppStateStatus = 'active' | 'background' | 'inactive';
+
+type AppStateListener = (status: AppStateStatus) => void;
+
+const appStateListeners = new Set<AppStateListener>();
+
+export const AppState = {
+  currentState: 'active' as AppStateStatus,
+  addEventListener(_event: 'change', listener: AppStateListener) {
+    appStateListeners.add(listener);
+    return {
+      remove() {
+        appStateListeners.delete(listener);
+      },
+    };
+  },
+};
+
+/** Drives the real OS event the provider re-binds the media session on. */
+export function emitAppState(status: AppStateStatus): void {
+  AppState.currentState = status;
+  appStateListeners.forEach(listener => listener(status));
+}
+
+/** How many live `AppState` subscriptions exist — a leak check. */
+export function appStateListenerCount(): number {
+  return appStateListeners.size;
+}
+
+export function resetReactNative(): void {
+  appStateListeners.clear();
+  AppState.currentState = 'active';
+}
