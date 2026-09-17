@@ -26,7 +26,19 @@ export class FakeFile {
   get exists() { return store.has(this.uri); }
   create() { store.set(this.uri, ''); }
   write(content: string) { store.set(this.uri, content); }
-  async text() { return store.get(this.uri) ?? ''; }
+  async text() {
+    // The bytes are taken when the read is issued, not when it completes:
+    // playback bookmarks the position it is on as it goes, and a read that
+    // picked up those later writes could never tell yesterday's position
+    // from today's.
+    const content = store.get(this.uri) ?? '';
+    // A disk read is not instantaneous, and the provider's "continue where
+    // you left off" rule turns on what has happened by the time it lands.
+    if (holdingPositionRead && this.uri === LAST_POSITION_URI) {
+      await new Promise<void>(resolve => { heldReads.push(resolve); });
+    }
+    return content;
+  }
   delete() { store.delete(this.uri); }
   get modificationTime(): number { return 0; }
   static downloadFileAsync = vi.fn(async (_url: string, dest: FakeFile) => {
@@ -42,6 +54,9 @@ export const Paths = {
 
 const LAST_POSITION_URI = 'file:///doc/lastPosition.json';
 
+let holdingPositionRead = false;
+const heldReads: (() => void)[] = [];
+
 /** Puts a bookmark on disk, as a previous session's playback would have. */
 export function saveLastPosition(pos: { surahId: number; ayah: number; localMs?: number }): void {
   store.set(LAST_POSITION_URI, JSON.stringify({
@@ -50,6 +65,21 @@ export function saveLastPosition(pos: { surahId: number; ayah: number; localMs?:
     localMs: pos.localMs ?? 0,
     updatedAt: 1_700_000_000_000,
   }));
+}
+
+/**
+ * Puts a bookmark on disk whose read does not complete until
+ * `releaseLastPosition()` — the window in which the user can press play
+ * before the bookmark arrives.
+ */
+export function holdLastPosition(pos: { surahId: number; ayah: number; localMs?: number }): void {
+  saveLastPosition(pos);
+  holdingPositionRead = true;
+}
+
+export function releaseLastPosition(): void {
+  holdingPositionRead = false;
+  heldReads.splice(0).forEach(resolve => resolve());
 }
 
 /** What the provider has bookmarked, or null if it has written nothing. */
@@ -61,5 +91,7 @@ export function readSavedPosition(): { surahId: number; ayah: number } | null {
 
 export function resetFileSystem(): void {
   store.clear();
+  holdingPositionRead = false;
+  heldReads.length = 0;
   FakeFile.downloadFileAsync.mockClear();
 }

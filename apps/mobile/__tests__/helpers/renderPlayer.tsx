@@ -30,6 +30,11 @@ import { resetReactNative } from './reactNativeMock';
  * into the next.
  */
 export function resetPlayerEnvironment(): void {
+  // Without this React refuses to treat `act` as an act scope ("the current
+  // testing environment is not configured to support act(...)"), and the
+  // updates a test triggers are no longer guaranteed to be flushed by the
+  // time it asserts.
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   installFrameClock();
   resetFrames();
   resetAudio();

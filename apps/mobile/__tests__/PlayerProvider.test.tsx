@@ -31,7 +31,7 @@ import { act } from 'react-test-renderer';
 import {
   audio, lockScreenPlayer, releaseHeldLoads, setAudioModeAsync, setNowPlaying,
 } from './helpers/fakeAudio';
-import { saveLastPosition } from './helpers/fakeFileSystem';
+import { holdLastPosition, releaseLastPosition, saveLastPosition } from './helpers/fakeFileSystem';
 import {
   failTimings, holdTimings, provideTimings, releaseTimings, timingsReads,
 } from './helpers/fakeTimings';
@@ -87,13 +87,18 @@ describe('PlayerProvider — what the bar is offering', () => {
   });
 
   it('never yanks the bar back to the bookmark when play() was pressed first', async () => {
-    saveLastPosition({ surahId: 3, ayah: 12 });
+    // The bookmark is on disk, but the read is slow.
+    holdLastPosition({ surahId: 3, ayah: 12 });
     provideTimings(1, 3);
 
     const player = mountPlayer();
-    // The bookmark read is still in flight here; pressing play now must win.
     const started = startPlay(player, 1);
     await actFlush(async () => { await started; });
+    expect(player.current.surahId).toBe(1);
+    expect(player.current.isPlaying).toBe(true);
+
+    // Yesterday's position finally arrives, with surah 1 already reciting.
+    await actFlush(() => { releaseLastPosition(); });
 
     expect(player.current.surahId).toBe(1);
     expect(player.current.ayah).toBe(1);
