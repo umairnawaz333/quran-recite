@@ -99,6 +99,23 @@ test('the control never claims to be playing while audio is still loading', asyn
   expect(loadingIndex).toBeLessThan(pauseIndex);
 });
 
+// Requirement 3 end-to-end: when a surah ends while its own page is open,
+// playback must continue into the next surah AND the page must follow. This
+// starts from Al-Ikhlas's (surah 112) last ayah rather than its first: its
+// audio is ~4s long, keeping this test fast, versus playing the whole
+// ~12s surah from the start (already the shortest available surah).
+test('surah ends -> next surah plays and the page follows', async ({ page }) => {
+  await page.goto('/surah/112/');
+  await page.getByRole('button', { name: 'Play ayah 4', exact: true }).click();
+  await expect(page.locator('.word--active')).toHaveCount(1, { timeout: 20_000 });
+
+  // The last ayah's audio finishes and playback runs on into surah 113,
+  // taking the page with it.
+  await expect(page).toHaveURL(/\/surah\/113\/?$/, { timeout: 20_000 });
+  await expect(page.getByRole('link', { name: /Al-Falaq/ })).toBeVisible();
+  await expect(page.locator('.word--active')).toHaveCount(1, { timeout: 20_000 });
+});
+
 test('the saved position is offered after a reload', async ({ page }) => {
   await page.goto('/surah/1/');
   await page.getByRole('button', { name: 'Play ayah 1', exact: true }).click();

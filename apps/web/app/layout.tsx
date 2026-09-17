@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { PlayerProvider } from '@/components/player/PlayerProvider';
 import { PlayerBar } from '@/components/player/PlayerBar';
+import { FollowPlayingSurah } from '@/components/player/FollowPlayingSurah';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PlayerProvider>
           {children}
           <PlayerBar />
+          <FollowPlayingSurah />
         </PlayerProvider>
       </body>
     </html>

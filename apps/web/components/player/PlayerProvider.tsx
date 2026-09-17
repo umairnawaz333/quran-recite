@@ -121,6 +121,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       error: 'Unable to load this recitation.', isLoading: false,
     }));
     playlist.on('ended', () => {
+      // Recitation runs on into the next surah rather than stopping at the
+      // end of this one — mirrors mobile's PlayerProvider. `playSurah` is
+      // referenced here before its own `const` assignment completes, which
+      // is fine: this closure only runs later, once `ended` actually fires,
+      // by which point the assignment below has long since finished.
+      if (surahId < 114) {
+        void playSurah(surahId + 1);
+        return;
+      }
       paint(null);
       patch({ isPlaying: false });
     });
@@ -248,6 +257,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     patch({ volume });
   }, [patch]);
 
+  // On the last ayah, "next" continues into the next surah rather than
+  // stopping dead, mirroring `ended` above and mobile's own `next`. Falls
+  // back to a bare `playlist.next()` — a no-op past the end — when the
+  // surah/timings refs are for some reason not in sync with the playlist,
+  // which keeps this at least as safe as the previous implementation.
+  const next = useCallback(() => {
+    const playlist = playlistRef.current;
+    if (!playlist) return;
+    const timings = timingsRef.current;
+    const surahId = playingSurahRef.current;
+    if (timings && surahId !== null && playlist.currentAyahIndex >= timings.ayahs.length - 1) {
+      if (surahId < 114) void playSurah(surahId + 1);
+      return;
+    }
+    playlist.next();
+  }, [playSurah]);
+
   // Restore the saved position so the bar can offer it, without playing.
   useEffect(() => {
     const saved = readLastPosition();
@@ -280,12 +306,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({
     ...state,
-    playSurah, playWord, toggle, seek, setVolume,
-    next: () => playlistRef.current?.next(),
+    playSurah, playWord, toggle, seek, setVolume, next,
     prev: () => playlistRef.current?.prev(),
     primeTimings: primeTimingsCache,
     attachRegistry,
-  }), [state, playSurah, playWord, toggle, seek, setVolume, attachRegistry]);
+  }), [state, playSurah, playWord, toggle, seek, setVolume, next, attachRegistry]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }

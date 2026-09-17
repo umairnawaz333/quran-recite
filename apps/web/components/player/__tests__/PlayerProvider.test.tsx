@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import { PlayerProvider } from '../PlayerProvider';
 import { usePlayer } from '../usePlayer';
@@ -214,6 +214,128 @@ describe('registry attachment', () => {
     await act(async () => { detach?.(); });
 
     expect(screen.getByTestId('surah').textContent).toBe('2');
+  });
+});
+
+describe('surah-to-surah continuation', () => {
+  // These tests need to trigger a real ayah-boundary end on the exact
+  // `AyahPlaylist` instance the provider currently owns, without wiring up
+  // real audio playback. `AyahPlaylist.prototype.play()` is called exactly
+  // once per instance, synchronously, as soon as `playSurah` constructs it
+  // (autoplay defaults to true) — spying on it, calling through to the real
+  // implementation, is a reliable hook for capturing that instance the
+  // moment it goes live. `handleEndedForTest()` is the class's own,
+  // purpose-built way to simulate an ayah (and here, a whole surah) ending.
+  let instances: AyahPlaylist[];
+  let playSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    instances = [];
+    const originalPlay = AyahPlaylist.prototype.play;
+    playSpy = vi.spyOn(AyahPlaylist.prototype, 'play').mockImplementation(function (
+      this: AyahPlaylist, ...args: unknown[]
+    ) {
+      if (!instances.includes(this)) instances.push(this);
+      return (originalPlay as (...a: unknown[]) => void).apply(this, args);
+    });
+  });
+
+  afterEach(() => { playSpy.mockRestore(); });
+
+  const live = () => instances[instances.length - 1];
+
+  function ContinuationProbe() {
+    const p = usePlayer();
+    return (
+      <div>
+        <span data-testid="surah">{p.surahId ?? 'none'}</span>
+        <span data-testid="ayah">{p.ayah}</span>
+        <span data-testid="playing">{String(p.isPlaying)}</span>
+        <button onClick={() => { void p.playSurah(2); }}>play2</button>
+        <button onClick={() => { void p.playSurah(113); }}>play113</button>
+        <button onClick={() => { void p.playSurah(114); }}>play114</button>
+        <button onClick={p.next}>next</button>
+      </div>
+    );
+  }
+
+  // Requirement 1: `ended` on the last ayah of surah N (N < 114) starts
+  // surah N+1 from ayah 1 and keeps playing, rather than the previous
+  // behaviour of just patching `isPlaying: false`.
+  it('ended on the last ayah of a surah before 114 starts the next surah playing', async () => {
+    primeTimings(2, timings(2));
+    primeTimings(3, timings(3));
+    render(<PlayerProvider><ContinuationProbe /></PlayerProvider>);
+
+    await act(async () => { screen.getByText('play2').click(); });
+    await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('2'));
+
+    await act(async () => { live().handleEndedForTest(); });
+
+    await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('3'));
+    expect(screen.getByTestId('ayah').textContent).toBe('1');
+    expect(screen.getByTestId('playing').textContent).toBe('true');
+  });
+
+  // Requirement 1's other half: 114 is the last surah, so ending it must
+  // still stop rather than reach for a nonexistent surah 115. Without the
+  // `surahId < 114` guard this would call `loadTimings(115)`, which is not
+  // primed and would surface as a load error instead of a clean stop.
+  it('ended on surah 114 stops instead of continuing past the last surah', async () => {
+    primeTimings(114, timings(114));
+    render(<PlayerProvider><ContinuationProbe /></PlayerProvider>);
+
+    await act(async () => { screen.getByText('play114').click(); });
+    await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('114'));
+
+    await act(async () => { live().handleEndedForTest(); });
+
+    expect(screen.getByTestId('surah').textContent).toBe('114');
+    expect(screen.getByTestId('playing').textContent).toBe('false');
+  });
+
+  // Requirement 2: `next` on the last ayah of surah N (N < 114) moves to
+  // surah N+1's first ayah, rather than the previous bare
+  // `playlist.next()`, which would have nothing to advance to and stay put.
+  it('next on the last ayah of a surah before 114 moves to the next surah', async () => {
+    primeTimings(2, timings(2));
+    primeTimings(3, timings(3));
+    render(<PlayerProvider><ContinuationProbe /></PlayerProvider>);
+
+    await act(async () => { screen.getByText('play2').click(); });
+    await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('2'));
+
+    await act(async () => { screen.getByText('next').click(); });
+
+    await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('3'));
+    expect(screen.getByTestId('ayah').textContent).toBe('1');
+  });
+
+  // `next` mid-surah must be unaffected by the boundary-crossing change
+  // above: with more than one ayah left, it should still just advance
+  // within the current surah rather than jumping ahead to the next one.
+  it('next mid-surah still advances within the surah instead of jumping ahead', async () => {
+    const twoAyahs = (surah: number): SurahTimings => ({
+      surah, reciterId: 'abdulbasit-murattal', surahDurationMs: 8000,
+      ayahs: [
+        { ayah: 1, audioUrl: `/audio/abdulbasit-murattal/${String(surah).padStart(3, '0')}001.mp3`,
+          startOffsetMs: 0, durationMs: 4000,
+          words: [{ id: `${surah}:1:1`, position: 1, startMs: 600, endMs: 970, estimated: false }] },
+        { ayah: 2, audioUrl: `/audio/abdulbasit-murattal/${String(surah).padStart(3, '0')}002.mp3`,
+          startOffsetMs: 4000, durationMs: 4000,
+          words: [{ id: `${surah}:2:1`, position: 1, startMs: 600, endMs: 970, estimated: false }] },
+      ],
+    });
+    primeTimings(2, twoAyahs(2));
+    render(<PlayerProvider><ContinuationProbe /></PlayerProvider>);
+
+    await act(async () => { screen.getByText('play2').click(); });
+    await waitFor(() => expect(screen.getByTestId('surah').textContent).toBe('2'));
+
+    await act(async () => { screen.getByText('next').click(); });
+
+    expect(screen.getByTestId('surah').textContent).toBe('2');
+    await waitFor(() => expect(screen.getByTestId('ayah').textContent).toBe('2'));
   });
 });
 
