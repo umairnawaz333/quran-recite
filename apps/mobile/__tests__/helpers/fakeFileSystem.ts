@@ -1,29 +1,54 @@
-/**
- * An in-memory `expo-file-system`, covering the members `lastPosition.ts`
- * and `ayahCache.ts` call (the same approach as `__tests__/storage.test.ts`,
- * which owns the tests for those modules; here the file system only has to
- * be present and controllable enough for the provider to read a bookmark).
- */
 import { vi } from 'vitest';
 
-export const store = new Map<string, string>();
+/**
+ * A shared in-memory stand-in for expo-file-system's `File`/`Directory`/
+ * `Paths`, used by every mobile test that touches the filesystem
+ * (`storage.test.ts`, `offlineStore.test.ts`, `PlayerProvider.test.tsx`,
+ * `PlayerBar.test.tsx`). The point of those tests is the modules' own
+ * logic — validation, never-throw, naming, completeness, the bookmark race —
+ * not the file system, so this fake only needs to match the real v57 API's
+ * shape closely enough for that code to run unmodified against either one:
+ * `new File(...parts)`, `file.exists`, `file.size`, `file.name`,
+ * `file.create()`, `file.write(string)`, `file.text()`, `file.delete()`,
+ * `file.move(...)`, `File.downloadFileAsync(url, dest)`; `new
+ * Directory(...parts)`, `dir.exists`, `dir.create()`, `dir.delete()`,
+ * `dir.list()`; `Paths.document`, `Paths.cache`.
+ *
+ * `vi.mock` factories are hoisted above every import, so a test file that
+ * wants this fake must reference it through an async factory — either
+ * `vi.mock('expo-file-system', async () => (await import('./helpers/fakeFileSystem')).fakeFileSystemModule)`
+ * or `vi.mock('expo-file-system', async () => { const fs = await import('./helpers/fakeFileSystem'); return { File: fs.FakeFile, Directory: fs.FakeDirectory, Paths: fs.Paths }; })`
+ * — rather than a top-level import.
+ */
+export const store = new Map<string, string>(); // uri -> contents
+const dirs = new Set<string>();
+
+export function join(parts: (string | FakeDirectory | FakeFile)[]) {
+  return parts.map(p => (typeof p === 'string' ? p : p.uri)).join('/');
+}
 
 export class FakeDirectory {
   uri: string;
-  constructor(...parts: (string | FakeDirectory | FakeFile)[]) {
-    this.uri = parts.map(p => (typeof p === 'string' ? p : p.uri)).join('/');
+  constructor(...parts: (string | FakeDirectory | FakeFile)[]) { this.uri = join(parts); }
+  get exists() { return dirs.has(this.uri) || [...store.keys()].some(k => k.startsWith(this.uri + '/')); }
+  create() { dirs.add(this.uri); }
+  delete() { dirs.delete(this.uri); for (const k of [...store.keys()]) if (k.startsWith(this.uri + '/')) store.delete(k); }
+  list(): (FakeDirectory | FakeFile)[] {
+    const names = new Set<string>();
+    for (const k of store.keys()) if (k.startsWith(this.uri + '/')) names.add(k.slice(this.uri.length + 1).split('/')[0]);
+    for (const d of dirs) if (d.startsWith(this.uri + '/')) names.add(d.slice(this.uri.length + 1).split('/')[0]);
+    return [...names].map(n => (store.has(`${this.uri}/${n}`) ? new FakeFile(this.uri, n) : new FakeDirectory(this.uri, n)));
   }
-  get exists() { return true; }
-  create() {}
-  list(): FakeFile[] { return []; }
 }
 
 export class FakeFile {
   uri: string;
-  constructor(...parts: (string | FakeDirectory | FakeFile)[]) {
-    this.uri = parts.map(p => (typeof p === 'string' ? p : p.uri)).join('/');
-  }
+  constructor(...parts: (string | FakeDirectory | FakeFile)[]) { this.uri = join(parts); }
   get exists() { return store.has(this.uri); }
+  get size() { return store.get(this.uri)?.length ?? null; }
+  get name() { return this.uri.split('/').pop()!; }
+  /** Only ever read from in `ayahCache.ts`'s eviction sort; a fresh fake write has none. */
+  get modificationTime(): number { return 0; }
   create() { store.set(this.uri, ''); }
   write(content: string) { store.set(this.uri, content); }
   async text() {
@@ -40,17 +65,21 @@ export class FakeFile {
     return content;
   }
   delete() { store.delete(this.uri); }
-  get modificationTime(): number { return 0; }
-  static downloadFileAsync = vi.fn(async (_url: string, dest: FakeFile) => {
-    store.set(dest.uri, 'mp3-bytes');
-    return dest;
+  move(to: FakeFile | FakeDirectory) {
+    const dest = to instanceof FakeDirectory ? `${to.uri}/${this.name}` : to.uri;
+    store.set(dest, store.get(this.uri) ?? '');
+    store.delete(this.uri);
+    this.uri = dest;
+  }
+  static downloadFileAsync = vi.fn(async (_url: string, dest: FakeFile | FakeDirectory) => {
+    const f = dest instanceof FakeDirectory ? new FakeFile(dest, 'download') : dest;
+    store.set(f.uri, 'mp3-bytes');
+    return f;
   });
 }
 
-export const Paths = {
-  document: new FakeDirectory('file:///doc'),
-  cache: new FakeDirectory('file:///cache'),
-};
+export const Paths = { document: new FakeDirectory('file:///doc'), cache: new FakeDirectory('file:///cache') };
+export const fakeFileSystemModule = { File: FakeFile, Directory: FakeDirectory, Paths };
 
 const LAST_POSITION_URI = 'file:///doc/lastPosition.json';
 
@@ -89,9 +118,13 @@ export function readSavedPosition(): { surahId: number; ayah: number } | null {
   return JSON.parse(raw) as { surahId: number; ayah: number };
 }
 
-export function resetFileSystem(): void {
+export function reset(): void {
   store.clear();
+  dirs.clear();
   holdingPositionRead = false;
   heldReads.length = 0;
   FakeFile.downloadFileAsync.mockClear();
 }
+
+/** Alias kept for the player-provider harness, which was written against this name. */
+export const resetFileSystem = reset;

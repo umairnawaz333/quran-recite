@@ -1,58 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * A minimal in-memory stand-in for expo-file-system's `File`/`Directory`/
- * `Paths`, covering exactly the members `lastPosition.ts` and `ayahCache.ts`
- * call. The point of these tests is the modules' own logic — validation,
- * never-throw, naming — not the file system.
+ * The in-memory stand-in for expo-file-system's `File`/`Directory`/`Paths`
+ * lives in `helpers/fakeFileSystem.ts` and is shared across test files. The
+ * point of these tests is the modules' own logic — validation, never-throw,
+ * naming — not the file system.
+ *
+ * `vi.mock` factories are hoisted above every import, so the fake is pulled
+ * in through an async factory rather than a top-level import.
  */
-// `vi.mock` factories are hoisted above every import, so anything they
-// reference has to be hoisted with them.
-const { store, FakeFile, FakeDirectory } = vi.hoisted(() => {
-  const store = new Map<string, string>();
+vi.mock('expo-file-system', async () => (await import('./helpers/fakeFileSystem')).fakeFileSystemModule);
 
-  class FakeDirectory {
-    uri: string;
-    constructor(...parts: (string | FakeDirectory | FakeFile)[]) {
-      this.uri = parts.map(p => (typeof p === 'string' ? p : p.uri)).join('/');
-    }
-    get exists() { return true; }
-    create() {}
-    list() { return []; }
-  }
-
-  class FakeFile {
-    uri: string;
-    constructor(...parts: (string | FakeDirectory | FakeFile)[]) {
-      this.uri = parts.map(p => (typeof p === 'string' ? p : p.uri)).join('/');
-    }
-    get exists() { return store.has(this.uri); }
-    create() { store.set(this.uri, ''); }
-    write(content: string) { store.set(this.uri, content); }
-    async text() { return store.get(this.uri) ?? ''; }
-    delete() { store.delete(this.uri); }
-    static downloadFileAsync = vi.fn(async (_url: string, dest: FakeFile) => {
-      store.set(dest.uri, 'mp3-bytes');
-      return dest;
-    });
-  }
-
-  return { store, FakeFile, FakeDirectory };
-});
-
-vi.mock('expo-file-system', () => ({
-  File: FakeFile,
-  Directory: FakeDirectory,
-  Paths: { document: new FakeDirectory('file:///doc'), cache: new FakeDirectory('file:///cache') },
-}));
-
+import { store, reset, FakeFile } from './helpers/fakeFileSystem';
 import { readLastPosition, writeLastPosition } from '../src/player/lastPosition';
 import { cacheAyah, cacheFileName, localPathFor } from '../src/audio/ayahCache';
 
-beforeEach(() => {
-  store.clear();
-  FakeFile.downloadFileAsync.mockClear();
-});
+beforeEach(reset);
 
 describe('lastPosition', () => {
   it('round-trips a position and stamps updatedAt', async () => {
