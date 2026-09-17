@@ -78,8 +78,18 @@ export function usePlayer(): PlayerContextValue {
   return value;
 }
 
+// The bar is visible from first launch, offering Al-Fatihah 1:1 with a Play
+// button — asked for from the device: nothing has played yet, but the user
+// should be able to press play and have recitation start, not hunt for a
+// surah first. `surahId` here is the *offered* surah; `playingSurahRef`
+// (still null) is what says whether anything is actually live.
 const INITIAL: PlayerState = {
-  surahId: null, surahName: null, ayah: 1, isPlaying: false, isLoading: false, error: null,
+  surahId: 1,
+  surahName: getSurahMeta(1)?.nameSimple ?? 'Al-Fatihah',
+  ayah: 1,
+  isPlaying: false,
+  isLoading: false,
+  error: null,
   pendingSurahId: null,
 };
 
@@ -338,13 +348,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // written to avoid; it just keeps a ref in sync with the render it read.
   const isPlayingRef = useRef(false);
   isPlayingRef.current = state.isPlaying;
+  /** What the bar is showing, for `toggle` to start when nothing is live yet. */
+  const offeredRef = useRef<{ surahId: number | null; ayah: number }>({ surahId: 1, ayah: 1 });
+  offeredRef.current = { surahId: state.surahId, ayah: state.ayah };
 
   const toggle = useCallback(() => {
     const sequencer = sequencerRef.current;
-    if (!sequencer) return;
+    if (!sequencer) {
+      // Nothing live yet (first launch, or the previous attempt failed):
+      // play starts whatever the bar is offering instead of doing nothing.
+      const { surahId, ayah } = offeredRef.current;
+      if (surahId !== null) void play(surahId, ayah);
+      return;
+    }
     if (isPlayingRef.current) sequencer.pause();
     else void sequencer.play();
-  }, []);
+  }, [play]);
 
   // On the last ayah, "next" continues into the next surah rather than
   // stopping dead — the user asked for exactly this from the device. The
