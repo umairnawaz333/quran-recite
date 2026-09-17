@@ -134,8 +134,11 @@ export function ReaderScreen({
   // given `getItemLayout`, it would trust those over measured frames for
   // every phase, and estimates cannot be exact for a hundred rows.
   const rowHeights = useRef<Record<number, number>>({});
-  /** Rows FlatList currently has rendered — the only ones it can position exactly. */
-  const mountedRows = useRef<Set<number>>(new Set());
+  /** Rows FlatList currently has rendered (index → when it laid out) — the only ones it can position exactly. */
+  const mountedRows = useRef<Map<number, number>>(new Map());
+  /** Content offset as last set by us or reported by the list. */
+  const currentOffset = useRef(0);
+  const lastJumpAt = useRef(0);
   const pendingCentre = useRef<number | null>(null);
   const viewportHeight = useRef(0);
   const retriesLeft = useRef(0);
@@ -183,6 +186,34 @@ export function ReaderScreen({
    * *approximate* frame and reports nothing, which is how earlier versions
    * stopped a few ayahs short and called it done.
    */
+  /**
+   * One approach step for an unmounted target. Steer from what the last
+   * jump actually rendered: if every row laid out since then sits below the
+   * target, move up by the gap times the local row height, and vice versa.
+   * Local heights are accurate where they were measured, so this converges
+   * in a few hops where a global estimate — even re-scaled — wandered by a
+   * dozen ayahs in a 286-ayah surah. The first hop (nothing rendered since
+   * a jump) uses the text-length estimate to get into the neighbourhood.
+   */
+  const approach = (index: number) => {
+    const since = lastJumpAt.current;
+    const fresh = [...mountedRows.current.entries()].filter(([, t]) => t > since).map(([i]) => i).sort((a, b) => a - b);
+    let target: number;
+    if (fresh.length === 0) {
+      target = estimatedTop(index) - viewportHeight.current / 3;
+    } else {
+      const lo = fresh[0];
+      const hi = fresh[fresh.length - 1];
+      const avg = fresh.reduce((sum, i) => sum + (rowHeights.current[i] ?? 0), 0) / fresh.length;
+      if (hi < index) target = currentOffset.current + (index - hi) * avg;
+      else if (lo > index) target = currentOffset.current - (lo - index) * avg;
+      else target = estimatedTop(index) - viewportHeight.current / 3;
+    }
+    target = Math.max(0, target);
+    lastJumpAt.current = Date.now();
+    currentOffset.current = target;
+    listRef.current?.scrollToOffset({ offset: target, animated: false });
+  };
   const snapTo = (index: number, withinRow?: number) => {
     if (mountedRows.current.has(index)) {
       const height = rowHeights.current[index] ?? 0;
@@ -196,11 +227,8 @@ export function ReaderScreen({
       return;
     }
     if (retriesLeft.current-- <= 0) { pendingCentre.current = null; return; }
-    listRef.current?.scrollToOffset({
-      offset: Math.max(0, estimatedTop(index) - viewportHeight.current / 3),
-      animated: false,
-    });
-    setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 250);
+    approach(index);
+    setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 300);
   };
   const centreOnRow = (index: number) => {
     pendingCentre.current = index;
@@ -209,7 +237,7 @@ export function ReaderScreen({
   };
   const onRowLayout = (index: number, height: number) => {
     rowHeights.current[index] = height;
-    mountedRows.current.add(index);
+    mountedRows.current.set(index, Date.now());
     if (pendingCentre.current === index) {
       // Let FlatList record the new frame before centring on it.
       setTimeout(() => { if (pendingCentre.current === index) snapTo(index); }, 60);
@@ -293,6 +321,8 @@ export function ReaderScreen({
           initialNumToRender={8}
           windowSize={5}
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
+          onScroll={e => { currentOffset.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={100}
           onScrollToIndexFailed={() => { /* handled by snapTo's own approach loop */ }}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
