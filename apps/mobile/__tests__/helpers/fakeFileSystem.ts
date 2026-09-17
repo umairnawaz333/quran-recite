@@ -45,7 +45,8 @@ export class FakeFile {
   uri: string;
   constructor(...parts: (string | FakeDirectory | FakeFile)[]) { this.uri = join(parts); }
   get exists() { return store.has(this.uri); }
-  get size() { return store.get(this.uri)?.length ?? null; }
+  /** Real `File.size` is `number` — 0 if the file does not exist. */
+  get size() { return store.get(this.uri)?.length ?? 0; }
   get name() { return this.uri.split('/').pop()!; }
   /** Only ever read from in `ayahCache.ts`'s eviction sort; a fresh fake write has none. */
   get modificationTime(): number { return 0; }
@@ -65,7 +66,8 @@ export class FakeFile {
     return content;
   }
   delete() { store.delete(this.uri); }
-  move(to: FakeFile | FakeDirectory) {
+  /** Real `File.move()` returns `Promise<void>` — an un-awaited call must not appear to have finished. */
+  async move(to: FakeFile | FakeDirectory) {
     const dest = to instanceof FakeDirectory ? `${to.uri}/${this.name}` : to.uri;
     store.set(dest, store.get(this.uri) ?? '');
     store.delete(this.uri);
@@ -79,7 +81,40 @@ export class FakeFile {
 }
 
 export const Paths = { document: new FakeDirectory('file:///doc'), cache: new FakeDirectory('file:///cache') };
-export const fakeFileSystemModule = { File: FakeFile, Directory: FakeDirectory, Paths };
+
+/**
+ * Stand-in for `expo-file-system`'s `DownloadTask` (see `NetworkTasks.d.ts`):
+ * `new DownloadTask(url, destination)`, `downloadAsync(): Promise<File | null>`,
+ * `cancel()`, `release()`, `addListener('progress', ...)`. Every task created
+ * is recorded in `downloads` so tests can assert what was fetched and in what
+ * order. `holdDownloads`/`failDownloads` let a test park or fail a download
+ * matching a URL pattern, to exercise cancellation and error handling.
+ */
+export const downloads: { url: string; dest: FakeFile; task: FakeDownloadTask }[] = [];
+export let holdDownloads: RegExp | null = null;
+export let failDownloads: RegExp | null = null;
+export function setHoldDownloads(r: RegExp | null) { holdDownloads = r; }
+export function setFailDownloads(r: RegExp | null) { failDownloads = r; }
+
+export class FakeDownloadTask {
+  cancelled = false;
+  private release: (() => void) | null = null;
+  constructor(public url: string, public dest: FakeFile) { downloads.push({ url, dest, task: this }); }
+  async downloadAsync(): Promise<FakeFile | null> {
+    if (failDownloads?.test(this.url)) throw new Error(`download failed: ${this.url}`);
+    if (holdDownloads?.test(this.url)) await new Promise<void>(r => { this.release = r; });
+    if (this.cancelled) return null;
+    store.set(this.dest.uri, 'mp3-bytes');
+    return this.dest;
+  }
+  cancel() { this.cancelled = true; this.release?.(); }
+  addListener() { return { remove() {} }; }
+  /** Test-only: lets a held download proceed, as if the network responded. */
+  releaseHeld() { this.release?.(); }
+}
+export function releaseAllHeld() { downloads.forEach(d => d.task.releaseHeld()); }
+
+export const fakeFileSystemModule = { File: FakeFile, Directory: FakeDirectory, Paths, DownloadTask: FakeDownloadTask };
 
 const LAST_POSITION_URI = 'file:///doc/lastPosition.json';
 
@@ -124,6 +159,9 @@ export function reset(): void {
   holdingPositionRead = false;
   heldReads.length = 0;
   FakeFile.downloadFileAsync.mockClear();
+  downloads.length = 0;
+  holdDownloads = null;
+  failDownloads = null;
 }
 
 /** Alias kept for the player-provider harness, which was written against this name. */
