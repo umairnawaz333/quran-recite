@@ -122,6 +122,20 @@ describe('createExpoPlayer', () => {
     expect(fakePlayer.listenerCount()).toBe(0);
   });
 
+  it('release() pauses the player before removing it, so a released player cannot keep sounding', () => {
+    const player = createExpoPlayer();
+    fakePlayer.playing = true;
+
+    player.release();
+
+    expect(fakePlayer.pause).toHaveBeenCalled();
+    // Order matters, not just the call: pausing after the native player has
+    // already been removed is too late to stop anything.
+    const pauseOrder = fakePlayer.pause.mock.invocationCallOrder[0];
+    const removeOrder = fakePlayer.remove.mock.invocationCallOrder[0];
+    expect(pauseOrder).toBeLessThan(removeOrder);
+  });
+
   it('release() clears finished callbacks, independent of the subscription being removed', () => {
     const player = createExpoPlayer();
     const onFinished = vi.fn();

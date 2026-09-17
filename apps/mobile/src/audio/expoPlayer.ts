@@ -108,6 +108,16 @@ export function createExpoPlayer(): PlayerHandle {
     release(): void {
       subscription.remove();
       finishedCbs.clear();
+      // Pause before removing, and never rely on `remove()` alone to stop
+      // the sound. `PlayerProvider`'s `teardown()` releases the old
+      // sequencer while its surah is *still audibly playing* — that is the
+      // whole point of the switch-over — so this is the one place in the
+      // app where a player is discarded mid-recitation. Every other
+      // sound-stopping path (`AyahSequencer.pause`, `seekToAyah`) pauses
+      // explicitly; this one used to leave stopping entirely to
+      // `remove()`'s native teardown, which would overlap the old surah's
+      // recitation with the new one for as long as that took.
+      player.pause();
       player.remove();
     },
   };
