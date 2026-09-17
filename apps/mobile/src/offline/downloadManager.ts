@@ -136,7 +136,13 @@ async function downloadSurah(surahId: number, ctl: { task: DownloadTask | null; 
   // directory ("offline/<id>"), and a plain `create()` only makes the leaf,
   // failing outright the first time any surah is ever downloaded (no
   // "offline" folder yet exists to be its parent).
-  if (!dir.exists) dir.create({ intermediates: true });
+  try {
+    if (!dir.exists) dir.create({ intermediates: true });
+  } catch (err) {
+    if (ctl.cancelled) { set(surahId, { status: 'idle' }); return; }
+    set(surahId, { status: 'error', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
 
   let done = 0;
   for (const ayah of timings.ayahs) {

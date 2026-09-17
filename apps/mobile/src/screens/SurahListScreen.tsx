@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import type { SurahMeta } from '@quran/core';
 import { getSurahList } from '../data/surahs';
 import { SCRIPT_FONTS } from '../reader/fonts';
@@ -20,7 +21,7 @@ let rowHeight = 0;
 // otherwise stretch into unreadably long rows.
 const MAX_CONTENT_WIDTH = 768;
 
-export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) => void; script: Script }) {
+export function SurahListScreen({ onSelect, script, onOpenSettings }: { onSelect: (id: number) => void; script: Script; onOpenSettings: () => void }) {
   const { palette } = useTheme();
   const surahs = getSurahList();
   const { width } = useWindowDimensions();
@@ -57,27 +58,56 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
   );
 
   return (
-    <FlatList
-      ref={listRef}
-      data={surahs}
-      renderItem={renderItem}
-      keyExtractor={item => String(item.id)}
-      contentContainerStyle={[styles.list, { maxWidth: contentWidth, width: '100%', alignSelf: 'center' }]}
-      onScroll={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
-      // The throttled stream can miss the final position of a fling; these
-      // two fire once it has actually come to rest.
-      onMomentumScrollEnd={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
-      onScrollEndDrag={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
-      scrollEventThrottle={100}
-      getItemLayout={rowHeight ? (_, index) => ({ length: rowHeight, offset: rowHeight * index, index }) : undefined}
-      initialScrollIndex={rowHeight && lastOffset > 0 ? Math.min(surahs.length - 1, Math.floor(lastOffset / rowHeight)) : undefined}
-    />
+    <View style={styles.root}>
+      {/*
+        Outside the FlatList (not a `ListHeaderComponent`) so its height
+        never has to be accounted for in `getItemLayout`'s row math — the
+        list still starts its own rows at offset 0.
+      */}
+      <View style={styles.header}>
+        <Text style={[styles.headerTitle, { color: palette.text }]}>Quran</Text>
+        <Pressable
+          onPress={onOpenSettings}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          style={styles.settingsButton}
+        >
+          <Svg width={24} height={24} viewBox="0 0 24 24">
+            <Path
+              d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Zm7.4-2.6a7.6 7.6 0 0 0 .1-.9 7.6 7.6 0 0 0-.1-.9l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.3.9a7 7 0 0 0-1.6-.9l-.4-2.5a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.5a7 7 0 0 0-1.6.9l-2.3-.9a.5.5 0 0 0-.6.2L2.6 9a.5.5 0 0 0 .1.6l2 1.6a7.6 7.6 0 0 0-.1.9 7.6 7.6 0 0 0 .1.9l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3a.5.5 0 0 0 .6.2l2.3-.9a7 7 0 0 0 1.6.9l.4 2.5a.5.5 0 0 0 .5.4h3.8a.5.5 0 0 0 .5-.4l.4-2.5a7 7 0 0 0 1.6-.9l2.3.9a.5.5 0 0 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6Z"
+              fill={palette.text}
+            />
+          </Svg>
+        </Pressable>
+      </View>
+      <FlatList
+        ref={listRef}
+        style={styles.flatList}
+        data={surahs}
+        renderItem={renderItem}
+        keyExtractor={item => String(item.id)}
+        contentContainerStyle={[styles.list, { maxWidth: contentWidth, width: '100%', alignSelf: 'center' }]}
+        onScroll={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
+        // The throttled stream can miss the final position of a fling; these
+        // two fire once it has actually come to rest.
+        onMomentumScrollEnd={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
+        onScrollEndDrag={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={100}
+        getItemLayout={rowHeight ? (_, index) => ({ length: rowHeight, offset: rowHeight * index, index }) : undefined}
+        initialScrollIndex={rowHeight && lastOffset > 0 ? Math.min(surahs.length - 1, Math.floor(lastOffset / rowHeight)) : undefined}
+      />
+    </View>
   );
 }
 
 // Layout only — every colour comes from the palette at the call site, so the
 // list follows the scheme (see `theme.tsx`).
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  flatList: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  headerTitle: { fontSize: 20, fontWeight: '700' },
+  settingsButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   list: { paddingVertical: 8 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, gap: 12 },
   number: { width: 28, textAlign: 'center', fontVariant: ['tabular-nums'] },

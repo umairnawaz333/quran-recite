@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { setAudioModeAsync } from 'expo-audio';
 import { SurahListScreen } from './src/screens/SurahListScreen';
 import { ReaderScreen, type Script } from './src/screens/ReaderScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 import { PlayerProvider, usePlayer } from './src/player/PlayerProvider';
 import { PlayerBar } from './src/player/PlayerBar';
 import { useQuranFonts } from './src/reader/fonts';
@@ -44,12 +45,19 @@ function FollowPlayingSurah({ viewed, onFollow }: { viewed: number | null; onFol
  */
 function AppShell() {
   const [surahId, setSurahId] = useState<number | null>(null);
+  // Which top-level screen is showing. The reader also needs `surahId` set —
+  // `goToSurah` always sets both together — so this and `surahId` never
+  // disagree about whether a surah is open.
+  const [screen, setScreen] = useState<'list' | 'reader' | 'settings'>('list');
   // Tapping the bar while already reading the playing surah re-centres on
   // the recitation instead of doing nothing; a counter the reader watches.
   const [focusRequest, setFocusRequest] = useState(0);
   const goToSurah = (id: number) => {
     if (id === surahId) setFocusRequest(n => n + 1);
     else setSurahId(id);
+    // Opening a surah — from the list, the player bar, or Settings — always
+    // switches to the reader, even one already loaded while Settings was open.
+    setScreen('reader');
   };
   const [script, setScript] = useState<Script>('tajweed');
   const fontsReady = useQuranFonts();
@@ -60,17 +68,19 @@ function AppShell() {
       <View style={styles.content}>
         {!fontsReady
           ? null
-          : surahId === null
-          ? <SurahListScreen onSelect={setSurahId} script={script} />
-          : (
+          : screen === 'settings'
+          ? <SettingsScreen onBack={() => setScreen('list')} onOpenSurah={goToSurah} />
+          : screen === 'reader' && surahId !== null
+          ? (
             <ReaderScreen
               surahId={surahId}
               script={script}
               onScriptChange={setScript}
-              onBack={() => setSurahId(null)}
+              onBack={() => { setSurahId(null); setScreen('list'); }}
               focusRequest={focusRequest}
             />
-          )}
+          )
+          : <SurahListScreen onSelect={goToSurah} script={script} onOpenSettings={() => setScreen('settings')} />}
       </View>
       <PlayerBar onNavigate={goToSurah} />
       <FollowPlayingSurah viewed={surahId} onFollow={setSurahId} />

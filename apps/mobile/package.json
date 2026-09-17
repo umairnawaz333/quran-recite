@@ -7,6 +7,7 @@
     "@quran/core": "*",
     "@quran/data": "*",
     "expo": "~57.0.23",
+    "expo-application": "~57.0.3",
     "expo-audio": "~57.0.5",
     "expo-font": "~57.0.4",
     "expo-status-bar": "~57.0.1",
