@@ -122,7 +122,24 @@ export class AyahSequencer {
     this.listeners[event].delete(cb as never);
   }
 
+  /**
+   * In-surah seek. A load failure here has no caller with a story for it —
+   * the bar's prev/next and a word tap fire and forget — so it is reported
+   * the way a boundary failure is: not-playing, plus `error`. Silently
+   * leaving `playing === true` over a muted player was this class's
+   * historical failure and is what those two emits exist to prevent.
+   */
   async seekToAyah(index: number, localMs = 0): Promise<void> {
+    try {
+      await this.seekInternal(index, localMs);
+    } catch (err) {
+      this.playing = false;
+      this.emit('state', false);
+      this.emit('error', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private async seekInternal(index: number, localMs: number): Promise<void> {
     this.generation += 1;
     const gen = this.generation;
     const clamped = Math.min(Math.max(index, 0), this.ayahs.length - 1);
@@ -131,9 +148,8 @@ export class AyahSequencer {
     // Silence first: whatever is sounding belongs to the ayah being left.
     this.pausePlayer();
 
-    // A load failure propagates to the caller (the provider attributes it
-    // to the surah that was asked for); `advanceInto`, which has no caller,
-    // reports its own failures through `error` instead.
+    // A load failure propagates to the caller: `seekToAyah` reports it,
+    // `switchTo` rolls back and rethrows for the provider to attribute.
     const player = await this.load(clamped);
     // A newer seek may have landed while this load was in flight (a
     // double-tap, a scrub). Without this the stale continuation would seek
@@ -163,14 +179,21 @@ export class AyahSequencer {
     this.ayahs = ayahs;
     // Whatever the player holds is the old surah's.
     this.loadedIndex = null;
+    const before = this.generation;
     try {
-      await this.seekToAyah(index, localMs);
+      await this.seekInternal(index, localMs);
     } catch (err) {
       // Back to the old surah, so a later play() reloads what the caller
-      // still describes rather than the surah that failed.
-      this.ayahs = previous.ayahs;
-      this.index = previous.index;
-      this.loadedIndex = null;
+      // still describes rather than the surah that failed — but only if no
+      // newer call landed meanwhile. `seekInternal` bumped the generation
+      // exactly once; anything beyond that is a later seek/next/prev that
+      // may have loaded and started something else, and rolling back under
+      // it would rewrite the surah beneath a player audibly on another.
+      if (this.generation === before + 1) {
+        this.ayahs = previous.ayahs;
+        this.index = previous.index;
+        this.loadedIndex = null;
+      }
       throw err;
     }
   }
@@ -184,13 +207,7 @@ export class AyahSequencer {
       // The player holds nothing usable (a failed load, or a switch that
       // failed and was rolled back): reload the current ayah first.
       // `seekToAyah` plays it, since `playing` is already set.
-      try {
-        await this.seekToAyah(this.index);
-      } catch (err) {
-        this.playing = false;
-        this.emit('state', false);
-        this.emit('error', err instanceof Error ? err.message : String(err));
-      }
+      await this.seekToAyah(this.index);   // reports its own failure
       return;
     }
     await this.attemptPlay(player, this.generation);

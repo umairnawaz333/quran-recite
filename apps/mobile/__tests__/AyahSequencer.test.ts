@@ -462,3 +462,66 @@ describe('AyahSequencer switchTo (one sequencer across surahs)', () => {
     expect(changes).toEqual([]);
   });
 });
+
+describe('AyahSequencer failure reporting (final review)', () => {
+  it('reports not-playing and an error when an in-surah seek fails to load', async () => {
+    const p = fakePlayer({
+      async load(uri) {
+        if (uri.includes('001003')) throw new Error('offline');
+        p.loaded.push(uri);
+      },
+    });
+    const seq = new AyahSequencer(ayahs, () => p);
+    const states: boolean[] = [];
+    const errors: string[] = [];
+    await seq.seekToAyah(0);
+    await seq.play();
+    seq.on('state', s => states.push(s));
+    seq.on('error', e => errors.push(e));
+
+    // A word tap / prev / next has no caller with a story for a failure, so
+    // the sequencer must tell the bar itself — never a muted player behind
+    // a Pause icon and no message.
+    await seq.seekToAyah(2);
+
+    expect(states).toEqual([false]);
+    expect(errors).toEqual(['offline']);
+    expect(p.playing).toBe(false);
+  });
+
+  it('does not roll a failed switch back over a newer seek that already landed', async () => {
+    const gate: { release: (() => void) | null } = { release: null };
+    const p = fakePlayer({
+      async load(uri) {
+        if (uri.includes('002001')) {
+          await new Promise<void>(r => { gate.release = r; });
+          throw new Error('offline');
+        }
+        p.loaded.push(uri);
+      },
+    });
+    const surahB: AyahTiming[] = [1, 2].map(n => ({
+      ayah: n, audioUrl: `/audio/abdulbasit-murattal/00200${n}.mp3`,
+      startOffsetMs: 0, durationMs: 5000, words: [],
+    }));
+    const seq = new AyahSequencer(ayahs, () => p);
+    await seq.seekToAyah(0);
+    await seq.play();
+
+    const switching = seq.switchTo(surahB, 0);
+    await flush();
+    // While B's first ayah is (slowly) failing, the user taps next: a newer
+    // seek — on surah B's list — that loads and plays fine.
+    await seq.next();
+    expect(p.loaded.at(-1)).toBe(surahB[1].audioUrl);
+    gate.release?.();
+    await expect(switching).rejects.toThrow('offline');
+
+    // The stale failure must not rewrite the surah beneath the ayah that is
+    // audibly playing now.
+    expect(seq.currentIndex).toBe(1);
+    expect(p.playing).toBe(true);
+    await seq.next();                       // clamps within surah B (2 ayahs)
+    expect(seq.currentIndex).toBe(1);
+  });
+});

@@ -70,11 +70,17 @@ export function cacheAyah(ayah: AyahTiming): Promise<void> {
       evictIfNeeded(dir);
     } catch {
       // Offline, or the download was refused — the sequencer streams instead.
-    } finally {
-      inFlight.delete(name);
     }
   })();
+  // Registered before the settle hook, never inside the task: an async
+  // function that returns synchronously (a cache hit) would otherwise run
+  // its `finally` before the `set`, leaving a settled promise registered
+  // forever — and every later call for that ayah "deduped" against it,
+  // never re-downloading a file the eviction or the OS had since removed.
   inFlight.set(name, task);
+  void task.finally(() => {
+    if (inFlight.get(name) === task) inFlight.delete(name);
+  });
   return task;
 }
 

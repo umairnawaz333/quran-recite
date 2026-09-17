@@ -278,6 +278,24 @@ describe('PlayerProvider — switching surahs', () => {
     expect(audio.players.some(p => p.playing)).toBe(false);
   });
 
+  it('reports a failed in-surah seek as paused with an error, not a muted Pause icon', async () => {
+    provideTimings(1, 3);
+    const player = mountPlayer();
+    await playFully(player, 1);
+
+    // A word or ayah tap inside the live surah whose file cannot load
+    // (offline, a dead URL). This used to reject into `void`: the player
+    // was silenced but the bar kept its Pause icon and showed nothing.
+    audio.failLoadsMatching = /001003\.mp3/;
+    await actFlush(() => player.current.play(1, 3));
+
+    expect(player.current.isPlaying).toBe(false);
+    expect(player.current.error).not.toBeNull();
+    expect(player.current.pendingSurahId).toBe(1);
+    expect(player.current.surahId).toBe(1);
+    expect(audio.players.some(p => p.playing)).toBe(false);
+  });
+
   it('seeks within the live surah instead of rebuilding it, clearing stale transient state', async () => {
     provideTimings(1, 3);
     failTimings(2);

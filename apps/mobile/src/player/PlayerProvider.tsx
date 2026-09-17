@@ -136,6 +136,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const ayahIndexRef = useRef(0);
   /** Removes the live surah's sequencer handlers; replaced at each switch-over. */
   const detachHandlersRef = useRef<(() => void) | null>(null);
+  /**
+   * Which `play()` call's handlers may act on sequencer events. Bumped the
+   * moment a call starts mutating the shared sequencer (`switchTo`), not at
+   * its commit: from that moment the sequencer's indices belong to the new
+   * surah, and the previous surah's still-registered handlers must not read
+   * them as their own — or a superseded switch would paint the bar with the
+   * old surah's ayah numbers and word timings over another surah's audio.
+   */
+  const handlerEpochRef = useRef(0);
   /** The native player currently handed to Android as the lock-screen controller. */
   const lockScreenPlayerRef = useRef<AudioPlayer | null>(null);
   /**
@@ -290,6 +299,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // removed at that same moment (and this surah's, instead, if its load
     // fails).
     let live = false;
+    const epoch = ++handlerEpochRef.current;
+    // Until this call owns the sequencer, the previous surah's handlers do.
+    // Ownership passes when `switchTo` begins mutating it (below).
+    const mine = () => live && handlerEpochRef.current === epoch;
 
     /**
      * The native player this playback handed to Android as the lock-screen
@@ -303,26 +316,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const native = sequencer.activePlayer?.nativePlayer as AudioPlayer | undefined;
       if (!native || !meta) return;
 
-      // Deliberately *not* moved to the newly active slot at every ayah.
-      //
-      // Playback alternates between two native players, and Android binds
-      // its media session to one of them, so it is tempting to move the
-      // binding every boundary onto whichever player is audible. That
-      // cannot be done from the background at all (see nowPlaying.ts), and
-      // doing it in the foreground has a cost that is not obvious: expo
-      // gives *every* `AudioPlayer` its own bare `MediaSession`
-      // ("ExpoAudioBasicMediaSession_…", see `AudioUtils
-      // .buildBasicMediaSession`), and registering a player for the lock
-      // screen releases that player's bare session and replaces it with the
-      // service's own. Move the binding back and forth and both players end
-      // up with nothing but a released session, leaving one media session
-      // for the whole app — bound, half the time, to the silent slot.
-      //
-      // Left alone, the *unbound* slot keeps its bare session, and Android
-      // routes transport commands (media keys, `cmd media_session dispatch`,
-      // headsets, the Assistant) to whichever session is actually playing.
-      // Between that and `AyahSequencer`'s external-transport handling for
-      // the bound slot, both players stay controllable at every ayah.
+      // Bound once, for the life of the one native player. Android binds
+      // its media session to a single `AudioPlayer` and refuses to re-bind
+      // while the app is backgrounded (see nowPlaying.ts); with one player
+      // that never needs to happen — the bound player is always the one
+      // making sound, at every ayah and across surahs — so after the first
+      // registration only the metadata is refreshed. (The two-player design
+      // this replaced could not have both a correct notification card and
+      // working background media keys; see AyahSequencer's class doc.)
       if (lockScreenPlayer && isNowPlaying(lockScreenPlayer)) {
         // Still bound to this playback: only the metadata can need a nudge
         // (cheap, and safe while backgrounded).
@@ -340,8 +341,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // The engine is shared; feeding it is safe before `live` (it paints
       // nothing until `playingSurahRef` names this surah), and after the
       // switch-over these are the only handlers left standing.
+      if (!mine()) return;
       engine.setWords(timings.ayahs[index]?.words ?? []);
-      if (!live) return;
       ayahIndexRef.current = index;
       const timing = timings.ayahs[index];
       patch({ ayah: timing?.ayah ?? 1, error: null });
@@ -354,7 +355,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     };
     const onStateChange = (playing: boolean) => {
-      if (!live) return;
+      if (!mine()) return;
       // Run the highlight loop only while sound is actually playing. It is
       // a requestAnimationFrame loop waking the JS thread every frame; left
       // attached it would run for the app's lifetime after the first play —
@@ -367,10 +368,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       patch({ isPlaying: playing });
     };
     const onError = (message: string) => {
-      if (live) patch({ error: message, isPlaying: false, isLoading: false, pendingSurahId: surahId });
+      if (mine()) patch({ error: message, isPlaying: false, isLoading: false, pendingSurahId: surahId });
     };
     const onEnded = () => {
-      if (!live) return;
+      if (!mine()) return;
       engine.detach();
       paint(null);
       patch({ isPlaying: false });
@@ -395,12 +396,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     // Not attached here: the loop starts with the first `state: true`.
 
+    // From here the shared sequencer speaks for the NEW surah: its
+    // `ayahchange` indices are into `timings.ayahs`. Take ownership of its
+    // events now, so the previous surah's handlers cannot misread them.
+    const previousOwner = handlerEpochRef.current;
+    handlerEpochRef.current = epoch;
     try {
       if (reuse) await sequencer.switchTo(timings.ayahs, startIndex, localMsFor(timings, startIndex));
       else await sequencer.seekToAyah(startIndex, localMsFor(timings, startIndex));
     } catch {
       detachHandlers();
       if (!reuse) { engine.detach(); sequencer.release(); }
+      // The sequencer rolled itself back to the previous surah (unless a
+      // newer call has since taken it), so its events belong to the
+      // previous owner again.
+      if (handlerEpochRef.current === epoch) handlerEpochRef.current = previousOwner;
       if (token !== requestRef.current) return;
       // This failure belongs to the surah that was asked for, so it is
       // attributed there. The old surah keeps its name in the bar but is no
@@ -545,14 +555,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
   }, [patch]);
 
-  // Unmount only (this provider is mounted once, for the app's lifetime) —
-  // `teardown()` itself stays purely ref-based on purpose: it is also called
-  // from inside `play()`'s own rebuild, mid-flight, where a newly-set
-  // `pendingSurahId` for the surah being built must survive untouched until
-  // the atomic switch-over patch resolves it. Clearing `pendingSurahId` here
-  // instead, in the one-time unmount cleanup, satisfies the same "nothing is
-  // left pending forever" property without that risk — even though nothing
-  // is left to observe it once the provider is gone.
+  // Unmount only (this provider is mounted once, for the app's lifetime).
+  // `teardown()` is the sole release of the sequencer, engine and player —
+  // surah switches reuse them — so this is also where a stray
+  // `pendingSurahId` is cleared, even though nothing is left to observe it.
   useEffect(() => () => {
     registerRef.current = null;
     teardown();

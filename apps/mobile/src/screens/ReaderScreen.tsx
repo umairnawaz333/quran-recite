@@ -122,7 +122,9 @@ export function ReaderScreen({
     });
   };
   const centreOnRow = (index: number) => {
-    pendingCentre.current = index;
+    // A row already laid out centres exactly right away; only a row FlatList
+    // has yet to render needs the layout-time snap (and the retry path).
+    pendingCentre.current = index in rowHeights.current ? null : index;
     centreRendered(index);
   };
   const retryCentre = (info: { index: number; averageItemLength: number }) => {

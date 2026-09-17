@@ -99,4 +99,15 @@ describe('ayahCache', () => {
     await cacheAyah(ayah);
     expect(FakeFile.downloadFileAsync).toHaveBeenCalledTimes(1);
   });
+
+  it('re-downloads an ayah whose cached file has since been removed', async () => {
+    await cacheAyah(ayah);
+    await cacheAyah(ayah);                                   // cache hit
+    store.delete('file:///cache/ayah-cache/abdulbasit-murattal_001002.mp3');  // evicted / OS purge
+    await cacheAyah(ayah);
+    // Two real downloads: the hit in between must not have left a settled
+    // promise registered as "in flight" that every later call dedupes on.
+    expect(FakeFile.downloadFileAsync).toHaveBeenCalledTimes(2);
+    expect(localPathFor(ayah)).not.toBeNull();
+  });
 });

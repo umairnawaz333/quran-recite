@@ -92,11 +92,13 @@ export function createExpoPlayer(): PlayerHandle {
         // `play()` if the player was playing, and ExoPlayer's `prepare()`
         // starts the new source whenever `playWhenReady` is still set —
         // which it is on a player that reached the end of its ayah, since
-        // finishing never clears it. The sequencer preloads the ayah after
-        // next into exactly such a just-finished slot, so without this
-        // pause the preload started reciting on top of the live ayah: two
-        // voices from the first boundary of every surah with three or more
-        // ayahs. This is what the user heard.
+        // finishing never clears it. When the sequencer alternated two
+        // players, the preload of the ayah after next went into exactly such
+        // a just-finished player and started reciting on top of the live
+        // ayah — two voices from the first boundary of every surah with
+        // three or more ayahs; this is what the user heard. One player now
+        // reloads at each boundary, and the same guard keeps that reload
+        // silent until `play()`.
         player.pause();
         player.replace({ uri });
       });
@@ -150,14 +152,12 @@ export function createExpoPlayer(): PlayerHandle {
       finishedCbs.clear();
       playingCbs.clear();
       // Pause before removing, and never rely on `remove()` alone to stop
-      // the sound. `PlayerProvider`'s `teardown()` releases the old
-      // sequencer while its surah is *still audibly playing* — that is the
-      // whole point of the switch-over — so this is the one place in the
-      // app where a player is discarded mid-recitation. Every other
-      // sound-stopping path (`AyahSequencer.pause`, `seekToAyah`) pauses
-      // explicitly; this one used to leave stopping entirely to
-      // `remove()`'s native teardown, which would overlap the old surah's
-      // recitation with the new one for as long as that took.
+      // the sound. Today the one player is released only when the provider
+      // unmounts, but this once ran mid-recitation (a surah switch used to
+      // release the outgoing player while it was still audible) and left
+      // stopping entirely to `remove()`'s native teardown, which overlapped
+      // two recitations for as long as that took. Every sound-stopping path
+      // in the app pauses explicitly; this one is no exception.
       player.pause();
       player.remove();
     },
