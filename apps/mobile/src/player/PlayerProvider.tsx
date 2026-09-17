@@ -261,31 +261,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const meta = getSurahMeta(surahId);
 
-    // ONE sequencer, one engine, two native players — for the app's whole
+    // ONE sequencer, one engine, ONE native player — for the app's whole
     // life. A surah switch moves the existing sequencer onto the new surah
     // (`switchTo`) rather than building a new one. This is what keeps the
     // lock-screen binding alive across a surah boundary in the background:
     // Android binds its media session to a single native player and refuses
-    // to re-bind while backgrounded, so a fresh pair of players for each
-    // surah left the foreground service to die (and with it the ~3-minute
-    // background protection) at the first boundary crossed hands-free.
-    // With the same players the bound one is simply still there.
+    // to re-bind while backgrounded, so a fresh player for each surah left
+    // the foreground service to die (and with it the ~3-minute background
+    // protection) at the first boundary crossed hands-free. With the same
+    // player the bound one is simply still there — and, there being only
+    // one, it is always the one making sound (see AyahSequencer's doc).
     const reuse = sequencerRef.current !== null && engineRef.current !== null;
     const engine = engineRef.current ?? new SyncEngine();
-    // Recently recited ayahs are served from the warm cache (see
-    // ayahCache.ts) through the sequencer's `localPathFor` seam, so
-    // "previous" and replays do not stream the same file again.
-    const sequencer = sequencerRef.current ?? new AyahSequencer(timings.ayahs, createExpoPlayer, localPathFor);
+    // The next ayah is prefetched to disk while the current one plays
+    // (`cacheAyah`), and every load goes through `localPathFor`, so the
+    // single player's boundary reload — and "previous", and replays — come
+    // from a local file rather than the network.
+    const sequencer = sequencerRef.current
+      ?? new AyahSequencer(timings.ayahs, createExpoPlayer, localPathFor, cacheAyah);
 
-    // Nothing from here until the switch-over touches the live playback.
-    // The old surah keeps sounding, and stays the surah every ref and every
-    // state field describes, until the new one has actually loaded its
-    // first ayah. That is what keeps the bar honest (it never shows a surah
-    // that is not the one making sound) and keeps `toggle`/`next` during the
-    // wait acting on what the user can hear. The handlers below are armed
-    // now but gated on `live`, which flips at the switch-over; the previous
-    // surah's handlers are removed at that same moment (and this surah's,
-    // instead, if its load fails).
+    // Nothing from here until the switch-over touches the visible state.
+    // The old surah stays the surah every ref and every state field
+    // describes until the new one has actually loaded its first ayah — the
+    // bar never names a surah that has not loaded. (With one player the old
+    // surah's sound stops when that load begins; the new one follows within
+    // the load.) The handlers below are armed now but gated on `live`,
+    // which flips at the switch-over; the previous surah's handlers are
+    // removed at that same moment (and this surah's, instead, if its load
+    // fails).
     let live = false;
 
     /**
@@ -399,11 +402,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       detachHandlers();
       if (!reuse) { engine.detach(); sequencer.release(); }
       if (token !== requestRef.current) return;
-      // The old surah was never touched and is still audible; this failure
-      // belongs to the surah that was asked for, so it is attributed there.
+      // This failure belongs to the surah that was asked for, so it is
+      // attributed there. The old surah keeps its name in the bar but is no
+      // longer sounding — one player, and the load replaced its source — so
+      // its `isPlaying` is corrected too; pressing play re-seeks it.
+      engine.detach();
       patch({
         error: 'Could not load this recitation. Please try again.',
         isLoading: false,
+        isPlaying: false,
         pendingSurahId: surahId,
       });
       return;
@@ -415,12 +422,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // The switch-over: the one point where the visible surah changes, and
-    // the first point where the old one stops sounding (`switchTo` paused
-    // its slot as it swapped). Everything above ran off locals, so until
-    // here the old surah was audible and its state accurate. The previous
-    // surah's handlers go now; nothing is pending any more: this call
-    // succeeded, and any later call has already claimed `pendingSurahId`.
+    // The switch-over: the one point where the visible surah changes.
+    // Everything above ran off locals, so until here the old surah's state
+    // was intact. The previous surah's handlers go now; nothing is pending
+    // any more: this call succeeded, and any later call has already claimed
+    // `pendingSurahId`.
     registerLockScreen();
     registerRef.current = registerLockScreen;
     detachHandlersRef.current?.();

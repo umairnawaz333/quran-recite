@@ -2,8 +2,6 @@ import type { AyahTiming } from '@quran/core';
 import { resolveAyahSource } from '@quran/core';
 import type { PlayerHandle, PlayerFactory } from './types';
 
-type Slot = 0 | 1;
-
 type Events = {
   ayahchange: (index: number) => void;
   state: (playing: boolean) => void;
@@ -12,76 +10,70 @@ type Events = {
 };
 
 /**
- * Plays a surah as a sequence of per-ayah audio files with no audible gap
- * between them, despite there being no native queue: `expo-audio` (and the
- * web's `HTMLAudioElement` before it) plays exactly one source at a time.
+ * Plays a surah as a sequence of per-ayah audio files on ONE native player,
+ * for the app's whole life, across surahs.
  *
- * This is a from-scratch port of the web's `AyahPlaylist`
- * (`apps/web/lib/audio/playlist.ts`) onto the device-agnostic `PlayerHandle`
- * seam, carrying over the failure handling that playlist got right only
- * after shipping bugs:
+ * This used to alternate two players so the next ayah could preload into
+ * the idle one (the web's `AyahPlaylist` trick, which is the only way to be
+ * gapless with `HTMLAudioElement`). On Android that design collided with
+ * the lock screen: Android binds its media session to a single native
+ * player, the binding cannot be moved while the app is backgrounded, and
+ * expo destroys a player's own bare session when it becomes the bound one.
+ * So on every other ayah the notification card showed — and its buttons
+ * acted on — the silent player, and media keys reached the audible one
+ * only by luck of session ordering. Two players also produced the two-voice
+ * bugs this file has a history of: a preload starting under the live ayah.
  *
- *  - two player instances alternate, so the next ayah preloads into the idle
- *    one while the current one plays — that overlap is the whole gapless
- *    trick;
+ * One player has none of those failure modes: the bound player is always
+ * the one making sound, its card is always right, and there is nothing else
+ * that could sound. What is given up is the in-memory preload. In its place
+ * the next ayah is *prefetched to disk* (the `prefetch` seam, wired to the
+ * app's warm cache) while the current one plays, so the boundary reload is
+ * a local file: pause, replace, prepare, play — a short gap the reciter's
+ * own pause between ayahs comfortably covers.
+ *
+ * Carried over from the two-player design, because they were paid for:
  *  - a `play()` rejection is always awaited and inspected, never discarded
- *    (`void player.play()` is exactly the bug that once left `isPlaying`
- *    true forever on a rejection no test caught, because the mock always
- *    resolved);
+ *    (`void player.play()` once left `isPlaying` true forever on a rejection
+ *    no test caught, because the mock always resolved);
  *  - a generation token invalidates any completion or settled promise from a
- *    call the caller has since superseded — not just a stale finish, but a
- *    stale *seek* too: every `await` boundary (a `load()`, a `play()`) is a
- *    point where a newer `seekToAyah`/`next`/`prev` can have already landed,
- *    and the resumed continuation must recheck the token before touching
- *    live state or emitting;
- *  - unlike a real `<audio>` element, `PlayerHandle` promises nothing about
- *    a slot recovering from a failed `load()` on its own — a failed preload
- *    is tracked, and a boundary crossing onto an unready slot reloads it
- *    before playing rather than swapping onto silence.
+ *    call the caller has since superseded — a stale finish AND a stale seek:
+ *    every `await` is a point where a newer `seekToAyah`/`next`/`prev`/
+ *    `switchTo` may have landed, and the resumed continuation rechecks
+ *    before touching live state or emitting;
+ *  - recorded *intent*: what this sequencer last told the player to do. A
+ *    reported `playing` transition that disagrees with it came from outside
+ *    the app — the notification, the lock screen, a headset button — and is
+ *    adopted as the user's command, so the bar and the highlight learn of it.
  */
 export class AyahSequencer {
   private ayahs: AyahTiming[];
   private readonly createPlayer: PlayerFactory;
   private readonly localPathFor?: (ayah: AyahTiming) => string | null;
+  private readonly prefetch?: (ayah: AyahTiming) => Promise<void>;
 
-  /** The two alternating player instances, created lazily on first use. */
-  private readonly players: [PlayerHandle | undefined, PlayerHandle | undefined] = [undefined, undefined];
-  /** Unsubscribes the previous `onFinished` registration for each slot. */
-  private readonly slotUnsub: [(() => void) | null, (() => void) | null] = [null, null];
-  /** Unsubscribes each slot's lifetime `onPlayingChanged` registration. */
-  private readonly transportUnsub: [(() => void) | null, (() => void) | null] = [null, null];
+  private player: PlayerHandle | undefined;
+  private unsubFinished: (() => void) | null = null;
+  private unsubTransport: (() => void) | null = null;
   /**
-   * Whether this sequencer last asked each slot's player to be playing.
-   *
-   * Set at every single point where the sequencer issues a `play()` or a
-   * `pause()`, always *before* the call, so that a transition reported back
-   * through `onPlayingChanged` can be classified: one that agrees with the
-   * intent recorded here is the sequencer's own doing, one that contradicts
-   * it came from outside the app — Android's notification / lock-screen
-   * transport acts directly on a native player (see `PlayerHandle
-   * .onPlayingChanged`). `handleExternalTransport` is what that buys.
+   * Which ayah the player holds a *successfully completed* load for, or
+   * `null`: nothing loaded yet, a load in flight (the source is already
+   * being replaced underneath), or the last load rejected.
    */
-  private readonly slotIntent: [boolean, boolean] = [false, false];
-  /**
-   * Which ayah each slot currently holds a *successfully completed* load
-   * for, or `null` if it doesn't — nothing has been loaded into it yet, or
-   * the last attempt rejected. Checked before swapping onto a slot: a
-   * rejected preload leaves this `null` rather than silently claiming the
-   * slot is ready, which is what lets `advanceInto` tell "ready" apart from
-   * "failed and needs a reload" at the boundary.
-   */
-  private readonly slotReady: [number | null, number | null] = [null, null];
+  private loadedIndex: number | null = null;
 
-  private activeSlot: Slot = 0;
   private index = 0;
   private playing = false;
+  /** What this sequencer last asked the player to do; see the class doc. */
+  private intent = false;
 
   /**
-   * Bumped by every `seekToAyah`/`next`/`prev`. Captured by each
-   * `onFinished` registration and by every `play()`/`load()` attempt at the
-   * moment they are issued; a completion or a settled promise that reports
-   * back under a stale generation is a leftover from a call the caller has
-   * since moved past, and must not touch live state.
+   * Bumped by every `seekToAyah`/`next`/`prev`/`switchTo`/`release`.
+   * Captured by each `onFinished` registration and by every `play()`/
+   * `load()` attempt at the moment they are issued; a completion or a
+   * settled promise that reports back under a stale generation is a
+   * leftover from a call the caller has since moved past, and must not
+   * touch live state.
    */
   private generation = 0;
 
@@ -92,33 +84,34 @@ export class AyahSequencer {
     ended: new Set(),
   };
 
-  constructor(ayahs: AyahTiming[], createPlayer: PlayerFactory, localPathFor?: (ayah: AyahTiming) => string | null) {
+  constructor(
+    ayahs: AyahTiming[],
+    createPlayer: PlayerFactory,
+    localPathFor?: (ayah: AyahTiming) => string | null,
+    prefetch?: (ayah: AyahTiming) => Promise<void>,
+  ) {
     this.ayahs = ayahs;
     this.createPlayer = createPlayer;
     this.localPathFor = localPathFor;
+    this.prefetch = prefetch;
   }
 
   get currentIndex(): number {
     return this.index;
   }
 
-  /** The live player's position, fed to `SyncEngine` at frame rate. */
+  /** The player's position, fed to `SyncEngine` at frame rate. */
   get localTimeMs(): number {
-    return this.players[this.activeSlot]?.currentTimeMs ?? 0;
+    return this.player?.currentTimeMs ?? 0;
   }
 
   /**
-   * The `PlayerHandle` currently driving playback (holding the active
-   * ayah), or `undefined` before anything has loaded. Exposed only so code
-   * outside this class — lock-screen wiring in `PlayerProvider` — can reach
-   * the platform player behind whichever slot is active right now: since
-   * playback alternates between two player instances for gapless
-   * transitions, "the" player is only ever meaningful as of this moment.
-   * Nothing inside this class needs this getter; it reads `players[this
-   * .activeSlot]` directly everywhere else instead.
+   * The one `PlayerHandle`, or `undefined` before anything has loaded.
+   * Exposed so `PlayerProvider` can hand the platform player behind it to
+   * the lock screen. With a single player this is always the audible one.
    */
   get activePlayer(): PlayerHandle | undefined {
-    return this.players[this.activeSlot];
+    return this.player;
   }
 
   on<K extends keyof Events>(event: K, cb: Events[K]): void {
@@ -129,173 +122,83 @@ export class AyahSequencer {
     this.listeners[event].delete(cb as never);
   }
 
-  /**
-   * Move this sequencer — and, crucially, its two players — onto another
-   * surah. The alternative, building a new sequencer with new players for
-   * every surah, is what lost the lock-screen binding at every background
-   * surah boundary: Android's media session is bound to ONE native player
-   * and re-binding while backgrounded is refused, so a fresh pair of players
-   * left the foreground service to die. Keeping the same players means the
-   * bound one is simply still there.
-   *
-   * The new surah's first ayah is loaded into the IDLE slot while the active
-   * slot keeps reciting the old surah — the old surah is audible right up to
-   * the swap, which also keeps the provider's state honest for that long. A
-   * finish of the old surah's ayah during the load is dropped as stale (the
-   * generation moved), so the old surah neither advances nor reports
-   * `ended` mid-switch. If the load fails, nothing has been touched: the old
-   * surah plays on.
-   */
-  async switchTo(ayahs: AyahTiming[], index: number, localMs = 0): Promise<void> {
-    this.generation += 1;
-    const gen = this.generation;
-    this.ayahs = ayahs;
-    const clamped = Math.min(Math.max(index, 0), this.ayahs.length - 1);
-    this.index = clamped;
-    // Whatever either slot holds is the OLD surah's — no preload is reusable.
-    this.slotReady[0] = null;
-    this.slotReady[1] = null;
-
-    const active = this.activeSlot;
-    const idle: Slot = active === 0 ? 1 : 0;
-    const player = await this.loadInto(idle, clamped);
-    if (gen !== this.generation) return;
-
-    this.pauseSlot(active);
-    this.activeSlot = idle;
-    player.seekToMs(localMs);
-    this.emit('ayahchange', clamped);
-    this.preloadNext();
-
-    if (this.playing) {
-      await this.attemptPlay(player, gen, idle);
-    }
-  }
-
   async seekToAyah(index: number, localMs = 0): Promise<void> {
     this.generation += 1;
     const gen = this.generation;
     const clamped = Math.min(Math.max(index, 0), this.ayahs.length - 1);
-    const slot = this.activeSlot;
     this.index = clamped;
 
-    // The two-slot design exists only for gapless transitions between
-    // adjacent ayahs; it does not mean "the active slot" and "the slot
-    // making noise" are the same thing. `handleFinished` swaps `activeSlot`
-    // on every advance, so by the time a seek lands, the *other* slot may be
-    // the one still sounding from before the swap. Pause both before loading
-    // — loading into `slot` alone would leave that leftover sound playing
-    // underneath the newly-seeked ayah. This is exactly the bug the user hit:
-    // tapping several ayah play buttons stacked overlapping recitations.
-    this.pauseAll();
+    // Silence first: whatever is sounding belongs to the ayah being left.
+    this.pausePlayer();
 
-    // If the idle slot already holds exactly the ayah being asked for — the
-    // ordinary case for `next()` while playing, because `preloadNext` put it
-    // there — swap onto that slot instead of re-downloading the same file
-    // into the active one. Reloading was the user-visible lag on "next":
-    // every tap threw away a finished preload and streamed the ayah again
-    // from the network. The preload's finish subscription was registered
-    // under an older generation, so it must be re-armed under this one or
-    // `handleFinished` would (correctly) drop the completion as stale and
-    // playback would stall at the boundary.
-    const idleSlot: Slot = slot === 0 ? 1 : 0;
-    const preloaded = this.players[idleSlot];
-    let player: PlayerHandle;
-    if (preloaded && this.slotReady[idleSlot] === clamped) {
-      this.activeSlot = idleSlot;
-      player = preloaded;
-      this.subscribeFinished(idleSlot, player, gen, clamped);
-    } else {
-      player = await this.loadInto(slot, clamped);
-
-      // A newer seekToAyah/next/prev may have already landed while this
-      // one's load() was in flight (a double-tap, a scrub before the
-      // previous seek's load settled). Without this check the stale
-      // continuation below would still run — seeking the player to its own
-      // (now-wrong) localMs and emitting ayahchange for its own
-      // (now-superseded) index, after the live call already emitted the
-      // correct one.
-      if (gen !== this.generation) return;
-    }
+    // A load failure propagates to the caller (the provider attributes it
+    // to the surah that was asked for); `advanceInto`, which has no caller,
+    // reports its own failures through `error` instead.
+    const player = await this.load(clamped);
+    // A newer seek may have landed while this load was in flight (a
+    // double-tap, a scrub). Without this the stale continuation would seek
+    // the player to its own now-wrong position and emit its own superseded
+    // index after the live call already emitted the correct one.
+    if (gen !== this.generation) return;
 
     player.seekToMs(localMs);
     this.emit('ayahchange', clamped);
-    this.preloadNext();
+    this.prefetchNext();
 
     if (this.playing) {
-      await this.attemptPlay(player, gen, this.activeSlot);
+      await this.attemptPlay(player, gen);
+    }
+  }
+
+  /**
+   * Move onto another surah on the same player. The old surah stops the
+   * moment the new first ayah starts loading (one player cannot do both);
+   * the caller keeps its visible state on the old surah until this resolves,
+   * so the bar never names a surah that has not loaded. Anything the old
+   * surah does during the load — finishing its ayah, say — is dropped as
+   * stale, so it neither advances nor reports `ended` mid-switch.
+   */
+  async switchTo(ayahs: AyahTiming[], index: number, localMs = 0): Promise<void> {
+    const previous = { ayahs: this.ayahs, index: this.index };
+    this.ayahs = ayahs;
+    // Whatever the player holds is the old surah's.
+    this.loadedIndex = null;
+    try {
+      await this.seekToAyah(index, localMs);
+    } catch (err) {
+      // Back to the old surah, so a later play() reloads what the caller
+      // still describes rather than the surah that failed.
+      this.ayahs = previous.ayahs;
+      this.index = previous.index;
+      this.loadedIndex = null;
+      throw err;
     }
   }
 
   async play(): Promise<void> {
     this.playing = true;
     this.emit('state', true);
-    const player = this.players[this.activeSlot];
+    const player = this.player;
     if (!player) return;
-    await this.attemptPlay(player, this.generation, this.activeSlot);
-  }
-
-  /**
-   * Pauses one slot's player, recording that the sequencer asked for it.
-   *
-   * Every pause the sequencer issues goes through here (or `pauseAll`), and
-   * the recording happens before the call, so that the resulting
-   * `onPlayingChanged(false)` is recognisable as self-inflicted rather than
-   * as someone pressing pause on the lock screen.
-   */
-  private pauseSlot(slot: Slot): void {
-    this.slotIntent[slot] = false;
-    this.players[slot]?.pause();
-  }
-
-  private pauseAll(): void {
-    this.pauseSlot(0);
-    this.pauseSlot(1);
-  }
-
-  /**
-   * Applies a play/pause that came from outside the app to whatever is
-   * actually audible.
-   *
-   * Android binds its media session — the notification buttons, the lock
-   * screen, headset keys — to *one* native player, and its transport
-   * commands go straight to that player's native object without passing
-   * through this app at all. Because playback alternates between two
-   * players, the bound one is only the audible one every other ayah; the
-   * rest of the time a "play" would start the *preloaded next* ayah
-   * underneath the live one (two voices) and a "pause" would silence a
-   * player that was not making sound. Translating the command onto the
-   * sequencer is what makes those buttons mean what they say.
-   */
-  private handleExternalTransport(slot: Slot, playing: boolean): void {
-    // Agreeing with the recorded intent means this is the sequencer's own
-    // play()/pause() being reported back, not a command from outside.
-    if (playing === this.slotIntent[slot]) return;
-
-    if (playing) {
-      if (slot === this.activeSlot) {
-        // The bound player happens to be the audible one: it is already
-        // doing the right thing, so just adopt it as intended...
-        this.slotIntent[slot] = true;
-      } else {
-        // ...otherwise it is the idle slot, holding the ayah *after* the
-        // live one. Silence it before it can be heard over the recitation.
-        this.pauseSlot(slot);
+    if (this.loadedIndex === null) {
+      // The player holds nothing usable (a failed load, or a switch that
+      // failed and was rolled back): reload the current ayah first.
+      // `seekToAyah` plays it, since `playing` is already set.
+      try {
+        await this.seekToAyah(this.index);
+      } catch (err) {
+        this.playing = false;
+        this.emit('state', false);
+        this.emit('error', err instanceof Error ? err.message : String(err));
       }
-      if (!this.playing) void this.play();
-    } else {
-      this.slotIntent[slot] = false;
-      if (this.playing) this.pause();
+      return;
     }
+    await this.attemptPlay(player, this.generation);
   }
 
   pause(): void {
     this.playing = false;
-    // Pause both slots, not just the active one — see the comment in
-    // seekToAyah: "the active slot" is not the same as "the slot making
-    // noise" once a boundary crossing has swapped `activeSlot` out from
-    // under a still-sounding player.
-    this.pauseAll();
+    this.pausePlayer();
     this.emit('state', false);
   }
 
@@ -308,207 +211,207 @@ export class AyahSequencer {
   }
 
   release(): void {
-    // Invalidate every in-flight continuation the same way a seek does: an
-    // `advanceInto` or `attemptPlay` that resumes after this point sees a
-    // stale generation and drops out, instead of seeking or playing a
-    // player that has just been released.
+    // Invalidate every in-flight continuation the same way a seek does: a
+    // boundary advance or a play attempt that resumes after this sees a
+    // stale generation and drops out instead of touching a released player.
     this.generation += 1;
-    this.slotUnsub.forEach(unsub => unsub?.());
-    this.transportUnsub.forEach(unsub => unsub?.());
-    this.players.forEach(p => p?.release());
+    this.unsubFinished?.();
+    this.unsubTransport?.();
+    this.unsubFinished = null;
+    this.unsubTransport = null;
+    this.player?.release();
+    this.player = undefined;
+    this.loadedIndex = null;
     (Object.keys(this.listeners) as (keyof Events)[]).forEach(k => this.listeners[k].clear());
   }
 
-  /**
-   * (Re)arms `slot`'s finish subscription for `ayahIndex` under `gen`.
-   * Replace, don't stack: a real player would otherwise accumulate one
-   * listener per ayah over a 6,236-ayah corpus.
-   */
-  private subscribeFinished(slot: Slot, player: PlayerHandle, gen: number, ayahIndex: number): void {
-    this.slotUnsub[slot]?.();
-    this.slotUnsub[slot] = player.onFinished(() => this.handleFinished(slot, gen, ayahIndex));
+  private ensurePlayer(): PlayerHandle {
+    if (!this.player) {
+      this.player = this.createPlayer();
+      // For the player's whole life, not per ayah: what this watches for is
+      // a transport command from outside the app.
+      this.unsubTransport = this.player.onPlayingChanged(playing => this.handleExternalTransport(playing));
+    }
+    return this.player;
   }
 
-  /** Loads `ayahIndex` into `slot`, (re)subscribing that slot's completion. */
-  private async loadInto(slot: Slot, ayahIndex: number): Promise<PlayerHandle> {
-    if (!this.players[slot]) {
-      this.players[slot] = this.createPlayer();
-      // For the player's whole life, not per ayah: what this watches for is
-      // a transport command from outside the app, which can land on either
-      // slot at any moment regardless of which ayah it holds.
-      this.transportUnsub[slot] = this.players[slot]!.onPlayingChanged(
-        playing => this.handleExternalTransport(slot, playing),
-      );
-    }
-    const player = this.players[slot]!;
+  /**
+   * (Re)arms the finish subscription for `ayahIndex` under `gen`. Replace,
+   * don't stack: a real player would otherwise accumulate one listener per
+   * ayah over a 6,236-ayah corpus.
+   */
+  private subscribeFinished(player: PlayerHandle, gen: number, ayahIndex: number): void {
+    this.unsubFinished?.();
+    this.unsubFinished = player.onFinished(() => this.handleFinished(gen, ayahIndex));
+  }
 
+  /** Gets the player holding `ayahIndex`, loading it if it does not already. */
+  private async load(ayahIndex: number): Promise<PlayerHandle> {
+    const player = this.ensurePlayer();
     const gen = this.generation;
-    this.subscribeFinished(slot, player, gen, ayahIndex);
+    if (this.loadedIndex === ayahIndex) {
+      this.subscribeFinished(player, gen, ayahIndex);
+      return player;
+    }
+
+    // Nothing may be listening for a finish while the source is replaced:
+    // the old file reaching its end mid-load (or the platform reporting a
+    // finish as it tears the old source down) would otherwise be read as
+    // the NEW ayah finishing, and the sequencer would advance past an ayah
+    // that never played. The subscription is armed once the load settles.
+    this.unsubFinished?.();
+    this.unsubFinished = null;
 
     const ayah = this.ayahs[ayahIndex];
     const localPath = this.localPathFor ? this.localPathFor(ayah) : null;
     const { uri } = resolveAyahSource(ayah, localPath);
     // Invalidate before the load starts, not after it settles: the platform
-    // player swaps its source synchronously inside `load()`, so from here
-    // until the promise resolves this slot holds neither its old ayah nor,
-    // yet, the new one. `seekToAyah`'s swap path trusts `slotReady`; a stale
-    // value here would let it swap onto this slot and play whatever the
-    // in-flight load brings while announcing the old index.
-    this.slotReady[slot] = null;
+    // player swaps its source synchronously inside `load()`.
+    this.loadedIndex = null;
     // A load is never meant to make sound (`expoPlayer.load` pauses first,
-    // for exactly that reason), so record the intent alongside `slotReady`:
-    // a player that came out of a load playing did not do so on this
-    // sequencer's orders.
-    this.slotIntent[slot] = false;
+    // for exactly that reason), so record the intent alongside: a player
+    // that came out of a load playing did not do so on this sequencer's
+    // orders.
+    this.intent = false;
     await player.load(uri);
 
-    // Only record the slot as ready if no newer seek/next/prev superseded
-    // this specific load while it was in flight — otherwise a late-resolving
-    // stale load could overwrite `slotReady` with its own (wrong) index
-    // after a newer load already set the correct one.
+    // Only record the load as complete if no newer call superseded it while
+    // it was in flight — otherwise a late-resolving stale load could claim
+    // the player holds an ayah it has since been told to replace.
     if (gen === this.generation) {
-      this.slotReady[slot] = ayahIndex;
+      this.loadedIndex = ayahIndex;
+      this.subscribeFinished(player, gen, ayahIndex);
     }
     return player;
   }
 
-  /** Preloads the ayah after the current one into the now-idle slot. */
-  private preloadNext(): void {
+  /** Warm the disk cache with the ayah after the current one. */
+  private prefetchNext(): void {
     const nextIndex = this.index + 1;
-    if (nextIndex >= this.ayahs.length) return;
-    const idleSlot: Slot = this.activeSlot === 0 ? 1 : 0;
-    // Fire-and-forget: preloading must not block the caller. A rejected
-    // load() here is not silently forgotten forever, though — `slotReady`
-    // is left unset for this ayah, so `advanceInto` notices at the boundary
-    // and reloads before playing instead of swapping onto silence.
-    void this.loadInto(idleSlot, nextIndex).catch(() => {});
+    if (nextIndex >= this.ayahs.length || !this.prefetch) return;
+    void this.prefetch(this.ayahs[nextIndex]).catch(() => {});
   }
 
   /**
-   * Fires when the player loaded into `slot` for `ayahIndex` under
-   * generation `gen` finishes. All three are captured at load time, not
-   * read live, so a completion that arrives after the caller has moved on
-   * (a newer generation, or this slot is no longer the active one) is
-   * recognisable as stale and is dropped before it can touch live state —
-   * even though the underlying player object may be reused across slots and
-   * fire its stored callbacks unconditionally.
+   * Fires when the player, loaded for `ayahIndex` under generation `gen`,
+   * reaches the end of its file. Both are captured at load time, not read
+   * live, so a completion that arrives after the caller has moved on is
+   * recognisable as stale and dropped before it can touch live state.
    */
-  private handleFinished(slot: Slot, gen: number, ayahIndex: number): void {
+  private handleFinished(gen: number, ayahIndex: number): void {
     if (gen !== this.generation) return;
-    if (slot !== this.activeSlot) return;
 
     if (ayahIndex >= this.ayahs.length - 1) {
       this.playing = false;
-      // Reaching the end of the surah stops this slot as surely as a pause
-      // would; recording that keeps a later, genuinely external start on
-      // this same player recognisable as external.
-      this.pauseSlot(slot);
+      // Reaching the end of the surah stops the player as surely as a
+      // pause would; recording that keeps a later, genuinely external start
+      // recognisable as external.
+      this.pausePlayer();
       this.emit('state', false);
       this.emit('ended');
       return;
     }
 
-    // The finished slot reached the end of its file on its own; nothing ever
-    // told it to stop. Pause it explicitly before it becomes the preload
-    // target below — a platform player that keeps "play when ready" armed
-    // across the end of a track would otherwise start reciting the preload
-    // the instant it loads. `expoPlayer.load()` defends against the same
-    // thing at its own layer; this keeps the sequencer's invariant true for
-    // any `PlayerHandle`, not just that one.
-    this.pauseSlot(slot);
+    // The player reached the end of its file on its own; nothing ever told
+    // it to stop. Record that before loading the next ayah into it — a
+    // platform player that keeps "play when ready" armed across the end of
+    // a track would otherwise start the new source the instant it loads.
+    // `expoPlayer.load()` defends against the same thing at its own layer.
+    this.pausePlayer();
 
     const nextIndex = ayahIndex + 1;
-    const nextSlot: Slot = slot === 0 ? 1 : 0;
-    this.activeSlot = nextSlot;
     this.index = nextIndex;
-
     this.emit('ayahchange', nextIndex);
-    this.preloadNext();
+    this.prefetchNext();
 
-    void this.advanceInto(nextSlot, nextIndex, gen);
+    void this.advanceInto(nextIndex, gen);
   }
 
   /**
-   * Gets `slot` actually playing `ayahIndex` after a boundary crossing.
-   *
-   * The ordinary path is that `preloadNext` already loaded `ayahIndex` into
-   * `slot` while the previous ayah was playing, so this is a same-tick
-   * no-op past the `slotReady` check. But `PlayerHandle` promises nothing
-   * like a real `<audio>` element's habit of resuming buffering on `.play()`
-   * — a rejected preload just leaves the slot empty — so if `slotReady`
-   * shows this slot never finished loading `ayahIndex`, this reloads it
-   * before seeking/playing rather than swapping onto silence. If that
-   * reload also fails, it surfaces `error` instead of leaving playback
-   * silently stalled at the boundary.
+   * Gets the player actually playing `ayahIndex` after a boundary. Loads it
+   * (from the disk cache when the prefetch landed, else streaming) and
+   * plays. If the load fails, that surfaces as `error` rather than leaving
+   * playback silently stalled at the boundary.
    */
-  private async advanceInto(slot: Slot, ayahIndex: number, gen: number): Promise<void> {
-    let player = this.players[slot];
-    if (this.slotReady[slot] !== ayahIndex) {
-      try {
-        player = await this.loadInto(slot, ayahIndex);
-      } catch (err) {
-        if (gen !== this.generation || slot !== this.activeSlot) return;
-        const message = err instanceof Error ? err.message : String(err);
-        this.emit('error', message);
-        return;
-      }
+  private async advanceInto(ayahIndex: number, gen: number): Promise<void> {
+    let player: PlayerHandle;
+    try {
+      player = await this.load(ayahIndex);
+    } catch (err) {
+      if (gen !== this.generation) return;
+      this.playing = false;
+      this.emit('state', false);
+      this.emit('error', err instanceof Error ? err.message : String(err));
+      return;
     }
-
-    if (gen !== this.generation || slot !== this.activeSlot || !player) return;
+    if (gen !== this.generation) return;
 
     player.seekToMs(0);
     if (this.playing) {
       // Fire-and-forget: this runs from handleFinished, itself invoked by
       // onFinished's `() => void` callback, so there is nothing here that
       // could await it. That's fine — attemptPlay never rejects; every
-      // play() failure is caught and handled inside its own try/catch. Do
-      // not "fix" this into an `await` — there's no caller to propagate a
-      // rejection to, and attemptPlay produces none.
-      void this.attemptPlay(player, gen, slot);
+      // play() failure is caught and handled inside its own try/catch.
+      void this.attemptPlay(player, gen);
     }
   }
 
   /**
-   * Calls `play()` on `player` and always awaits the result — never
-   * `void player.play()`, which is the exact bug the web app shipped: a
-   * rejection with the promise discarded left `isPlaying` true forever.
+   * Calls `play()` and always awaits the result — never `void player.play()`,
+   * which is the exact bug the web app shipped: a rejection with the promise
+   * discarded left `isPlaying` true forever.
    *
    * `play()` rejects for two distinct reasons in practice:
    *  - `AbortError`: a concurrent load/seek interrupted this attempt. This
-   *    is transient; retrying once on the same player is legitimate.
-   *  - anything else (e.g. an autoplay-policy block): terminal. The
-   *    sequencer must not keep claiming to play — it flips to paused and
-   *    surfaces `error` so the caller can offer retry.
-   *
-   * `gen`/`slotAtCall` guard against a stale rejection or resolution
-   * landing after the sequencer has already moved on (seek/next/prev, or a
-   * natural advance) by the time the promise settles.
+   *    is transient; retrying once is legitimate.
+   *  - anything else (`NotAllowedError`, a decode failure): terminal. The
+   *    sequencer reports not-playing and surfaces the error.
    */
-  private async attemptPlay(player: PlayerHandle, gen: number, slotAtCall: Slot, allowRetry = true): Promise<void> {
+  private async attemptPlay(player: PlayerHandle, gen: number, allowRetry = true): Promise<void> {
     try {
-      this.slotIntent[slotAtCall] = true;
+      this.intent = true;
       await player.play();
-      if (gen !== this.generation || slotAtCall !== this.activeSlot) return;
     } catch (err) {
-      if (gen !== this.generation || slotAtCall !== this.activeSlot) return;
+      if (gen !== this.generation) return;
 
       const name = (err as { name?: string } | null | undefined)?.name;
       if (name === 'AbortError' && allowRetry) {
-        return this.attemptPlay(player, gen, slotAtCall, false);
+        return this.attemptPlay(player, gen, false);
       }
 
       this.playing = false;
-      // This play never took: the slot is not playing and is not meant to
+      // This play never took: the player is not playing and is not meant to
       // be, so leaving the intent set would make its *next* genuine start
-      // look self-inflicted and its absence look like nothing at all.
-      this.slotIntent[slotAtCall] = false;
+      // look self-inflicted.
+      this.intent = false;
       this.emit('state', false);
-      const message = err instanceof Error ? err.message : String(err);
-      this.emit('error', message);
+      this.emit('error', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private pausePlayer(): void {
+    this.intent = false;
+    this.player?.pause();
+  }
+
+  /**
+   * A `playing` transition reported by the player. One that agrees with the
+   * recorded intent is this sequencer's own command being reported back;
+   * one that disagrees came from outside the app and is adopted as the
+   * user's — so the bar and the word highlight learn of it.
+   */
+  private handleExternalTransport(playing: boolean): void {
+    if (playing === this.intent) return;
+    if (playing) {
+      this.intent = true;
+      if (!this.playing) void this.play();
+    } else {
+      this.intent = false;
+      if (this.playing) this.pause();
     }
   }
 
   private emit<K extends keyof Events>(event: K, ...args: Parameters<Events[K]>): void {
-    this.listeners[event].forEach(cb => (cb as (...a: unknown[]) => void)(...args));
+    this.listeners[event].forEach(cb => (cb as (...a: Parameters<Events[K]>) => void)(...args));
   }
 }

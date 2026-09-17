@@ -198,8 +198,10 @@ describe('PlayerProvider — switching surahs', () => {
     expect(player.current.isPlaying).toBe(true);
     expect(player.current.isLoading).toBe(true);
     expect(player.current.pendingSurahId).toBe(2);
-    expect(surahAPlayers.some(p => p.playing)).toBe(true);
+    // One native player: surah 1's sound stops as surah 2's load begins,
+    // but the player is neither released nor replaced.
     expect(surahAPlayers.some(p => p.released)).toBe(false);
+    expect(audio.players.length).toBe(surahAPlayers.length);
 
     await actFlush(async () => {
       releaseHeldLoads();
@@ -252,25 +254,28 @@ describe('PlayerProvider — switching surahs', () => {
     expect(audio.players).toHaveLength(surahAPlayers.length);
   });
 
-  it('attributes a failed first-ayah load to the surah that failed, leaving the live one playing', async () => {
+  it('attributes a failed first-ayah load to the surah that failed, and reports the live one paused', async () => {
     provideTimings(1, 3);
     provideTimings(2, 3);
 
     const player = mountPlayer();
     await playFully(player, 1);
     const surahAPlayers = [...audio.players];
-    const soundingBefore = sounding();
+    expect(sounding()).toBeDefined();
 
     audio.failLoadsMatching = /audio-002/;
     await actFlush(() => player.current.play(2));
 
     expect(player.current.error).toMatch(/could not load/i);
     expect(player.current.pendingSurahId).toBe(2);
+    // Surah 1 keeps its name in the bar, but with one native player its
+    // sound stopped when surah 2's load began — so it is reported paused,
+    // not left claiming to play over silence.
     expect(player.current.surahId).toBe(1);
-    expect(player.current.isPlaying).toBe(true);
+    expect(player.current.isPlaying).toBe(false);
     expect(player.current.isLoading).toBe(false);
     expect(surahAPlayers.every(p => !p.released)).toBe(true);
-    expect(sounding()).toBe(soundingBefore);
+    expect(audio.players.some(p => p.playing)).toBe(false);
   });
 
   it('seeks within the live surah instead of rebuilding it, clearing stale transient state', async () => {
