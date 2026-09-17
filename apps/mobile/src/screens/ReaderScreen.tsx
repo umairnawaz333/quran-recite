@@ -8,6 +8,7 @@ import { SCRIPT_FONTS } from '../reader/fonts';
 import { usePlayer } from '../player/PlayerProvider';
 import { getSurahMeta } from '../data/surahs';
 import { PlayIcon } from '../components/PlayerIcons';
+import { DownloadControl } from '../components/DownloadControl';
 import { useTheme } from '../theme/theme';
 
 export type Script = 'tajweed' | 'indopak';
@@ -249,6 +250,7 @@ export function ReaderScreen({
             <Text style={[styles.back, { color: palette.textMuted }]}>All surahs</Text>
           </Pressable>
           <Text style={[styles.title, { color: palette.text }]}>{meta?.nameSimple ?? `Surah ${surahId}`}</Text>
+          <DownloadControl surahId={surahId} />
           <Pressable
             style={[styles.toggle, { backgroundColor: palette.surface }]}
             onPress={() => onScriptChange(script === 'tajweed' ? 'indopak' : 'tajweed')}

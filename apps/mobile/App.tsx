@@ -9,6 +9,7 @@ import { PlayerProvider, usePlayer } from './src/player/PlayerProvider';
 import { PlayerBar } from './src/player/PlayerBar';
 import { useQuranFonts } from './src/reader/fonts';
 import { ThemeProvider, useTheme } from './src/theme/theme';
+import { refreshFromDisk } from './src/offline/downloadManager';
 
 // app.json's `expo-audio` plugin is configured with `enableBackgroundPlayback`,
 // which only changes the Android manifest (a foreground service + the
@@ -86,6 +87,11 @@ function AppShell() {
 }
 
 export default function App() {
+  // Once, at launch: makes "done" reflect what is actually on disk before
+  // anything is tapped (a surah downloaded in a previous session, or one
+  // whose files were removed outside the app).
+  useEffect(() => { refreshFromDisk(); }, []);
+
   return (
     <SafeAreaProvider>
       {/*

@@ -11,6 +11,7 @@
  */
 import { createElement, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { vi } from 'vitest';
 
 type HostProps = Record<string, unknown> & { children?: ReactNode };
 
@@ -60,6 +61,13 @@ export const Easing = {
   linear: (t: number) => t,
   inOut: (fn: (t: number) => number) => fn,
 };
+
+/**
+ * `Alert.alert` as a spy: `DownloadControl`'s delete confirmation calls it
+ * with a button list rather than a native dialog, so a test presses the
+ * destructive button by invoking `Alert.alert.mock.calls`' last `onPress`.
+ */
+export const Alert = { alert: vi.fn() };
 
 export const Platform = {
   OS: 'android' as const,
@@ -132,4 +140,5 @@ export function resetReactNative(): void {
   appStateListeners.clear();
   AppState.currentState = 'active';
   colorScheme = 'light';
+  Alert.alert.mockClear();
 }

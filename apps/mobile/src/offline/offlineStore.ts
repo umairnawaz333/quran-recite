@@ -77,7 +77,10 @@ export async function readOfflineTimings(surahId: number): Promise<SurahTimings 
 /** Makes the surah's folder self-contained. Called by the download manager only. */
 export function writeOfflineTimings(surahId: number, timings: SurahTimings): void {
   const dir = offlineDir(surahId);
-  if (!dir.exists) dir.create();
+  // See the matching comment in `downloadManager.ts`: two levels below the
+  // document directory, so the leaf-only default fails when "offline" itself
+  // doesn't exist yet.
+  if (!dir.exists) dir.create({ intermediates: true });
   const file = new File(dir, TIMINGS_FILE);
   if (!file.exists) file.create();
   file.write(JSON.stringify(timings));

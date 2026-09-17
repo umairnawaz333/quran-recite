@@ -28,8 +28,15 @@ function emit() { listeners.forEach(cb => cb()); }
 function set(surahId: number, state: DownloadState) { states.set(surahId, state); emit(); }
 function expectedFiles(surahId: number): number { return getSurahList().find(s => s.id === surahId)?.ayahCount ?? 0; }
 
+// The default for a surah `states` has never touched. A single shared
+// reference — not a fresh literal per call — because `useDownloadState`
+// reads this through `useSyncExternalStore`, which compares snapshots by
+// `Object.is`: a new object on every call reads as "changed" on every
+// render and forces an infinite re-render loop for any surah still idle.
+const IDLE_STATE: DownloadState = { status: 'idle' };
+
 export const downloads = {
-  getState(surahId: number): DownloadState { return states.get(surahId) ?? { status: 'idle' }; },
+  getState(surahId: number): DownloadState { return states.get(surahId) ?? IDLE_STATE; },
   subscribe(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; },
   /** The snapshot backing `useDownloadedSurahs` — same array reference across a no-op `refreshFromDisk()`. */
   downloaded(): number[] { return downloadedSnapshot; },
@@ -125,7 +132,11 @@ async function downloadSurah(surahId: number, ctl: { task: DownloadTask | null; 
     return;
   }
   const dir = offlineDir(surahId);
-  if (!dir.exists) dir.create();
+  // `intermediates: true` — `offlineDir` is two levels below the document
+  // directory ("offline/<id>"), and a plain `create()` only makes the leaf,
+  // failing outright the first time any surah is ever downloaded (no
+  // "offline" folder yet exists to be its parent).
+  if (!dir.exists) dir.create({ intermediates: true });
 
   let done = 0;
   for (const ayah of timings.ayahs) {
