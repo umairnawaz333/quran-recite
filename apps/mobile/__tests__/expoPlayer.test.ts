@@ -180,4 +180,81 @@ describe('createExpoPlayer', () => {
 
     expect(onFinished).toHaveBeenCalledTimes(1);
   });
+  // `onPlayingChanged` is the app's only window onto Android's media
+  // session: the notification's buttons, the lock screen and media keys
+  // act on the native player directly, so a status update is all that is
+  // left of such a command by the time JS hears about it.
+
+  it('onPlayingChanged reports a play nothing in this app asked for', () => {
+    const player = createExpoPlayer();
+    const changed = vi.fn();
+    player.onPlayingChanged(changed);
+
+    fakePlayer.emit({ playing: true });
+
+    expect(changed).toHaveBeenCalledWith(true);
+  });
+
+  it('onPlayingChanged reports transitions only, not every status', () => {
+    const player = createExpoPlayer();
+    const changed = vi.fn();
+    player.onPlayingChanged(changed);
+
+    // expo-audio re-sends the status on a timer for as long as a player
+    // runs. Repeating `playing: true` as a fresh event would look like a
+    // stream of play commands from outside the app.
+    fakePlayer.emit({ playing: true });
+    fakePlayer.emit({ playing: true, currentTime: 1 });
+    fakePlayer.emit({ playing: true, currentTime: 2 });
+    fakePlayer.emit({ playing: false });
+
+    expect(changed.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('onPlayingChanged does not report the end of a track as a pause', () => {
+    const player = createExpoPlayer();
+    const changed = vi.fn();
+    const onFinished = vi.fn();
+    player.onPlayingChanged(changed);
+    player.onFinished(onFinished);
+
+    fakePlayer.emit({ playing: true });
+    changed.mockClear();
+    // Running out of audio arrives as one status carrying both facts.
+    // Reported as a pause it would be indistinguishable from someone
+    // pressing pause at the exact ayah boundary — which would stop the
+    // recitation instead of advancing it.
+    fakePlayer.emit({ didJustFinish: true, playing: false });
+
+    expect(onFinished).toHaveBeenCalledTimes(1);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('onPlayingChanged reports the next start after a track ended', () => {
+    const player = createExpoPlayer();
+    const changed = vi.fn();
+    player.onPlayingChanged(changed);
+
+    fakePlayer.emit({ playing: true });
+    fakePlayer.emit({ didJustFinish: true, playing: false });
+    changed.mockClear();
+    fakePlayer.emit({ playing: true });
+
+    // The swallowed end-of-track still has to leave "not playing" behind as
+    // the remembered state, or this genuine start looks like a repeat and
+    // goes unreported.
+    expect(changed).toHaveBeenCalledWith(true);
+  });
+
+  it('release() clears playing-change callbacks', () => {
+    const player = createExpoPlayer();
+    const changed = vi.fn();
+    player.onPlayingChanged(changed);
+
+    const persistentListener = fakePlayer.firstListener();
+    player.release();
+    persistentListener!({ playing: true });
+
+    expect(changed).not.toHaveBeenCalled();
+  });
 });

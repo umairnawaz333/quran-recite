@@ -11,15 +11,30 @@ const ayahs: AyahTiming[] = [1, 2, 3].map(n => ({
   words: [],
 }));
 
+/**
+ * `playing` moves only through `setPlaying`, which also announces the
+ * change on `onPlayingChanged` exactly as a real player does — so every
+ * `play()`/`pause()` the sequencer issues comes back to it as a transition,
+ * and the sequencer's own commands and a command from outside the app
+ * arrive through the same channel, indistinguishable except by what the
+ * sequencer knows it asked for. That is the whole point: a fake that only
+ * announced the outside ones would never catch the sequencer mistaking a
+ * seek's own pause for someone pressing pause on the lock screen.
+ */
 function fakePlayer(overrides: Partial<PlayerHandle> = {}) {
   const finishers: (() => void)[] = [];
   const transport: ((playing: boolean) => void)[] = [];
+  const setPlaying = (playing: boolean) => {
+    if (p.playing === playing) return;
+    (p as { playing: boolean }).playing = playing;
+    transport.forEach(cb => cb(playing));
+  };
   const p: PlayerHandle & {
     finish(): void;
     /**
-     * Reports a play/pause that this player underwent without the sequencer
-     * asking — what a real `PlayerHandle` emits when Android's notification
-     * or a media key acts straight on the native player.
+     * This player really did start or stop, with nothing in this app
+     * asking it to — what Android's notification buttons, lock screen and
+     * media keys do, acting straight on the native player.
      */
     transportChanged(playing: boolean): void;
     loaded: string[];
@@ -28,18 +43,21 @@ function fakePlayer(overrides: Partial<PlayerHandle> = {}) {
     playing: false,
     loaded: [],
     async load(uri) { p.loaded.push(uri); },
-    async play() { (p as { playing: boolean }).playing = true; },
-    pause() { (p as { playing: boolean }).playing = false; },
+    async play() { setPlaying(true); },
+    pause() { setPlaying(false); },
     seekToMs() {},
     onFinished(cb) { finishers.push(cb); return () => {}; },
     onPlayingChanged(cb) { transport.push(cb); return () => {}; },
     release() {},
     finish() { finishers.forEach(cb => cb()); },
-    transportChanged(playing) { transport.forEach(cb => cb(playing)); },
+    transportChanged(playing) { setPlaying(playing); },
     ...overrides,
   };
   return p;
 }
+
+/** Lets `void`-ed work the sequencer starts from a callback settle. */
+const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('AyahSequencer', () => {
   it('advances to the next ayah when one finishes', async () => {
@@ -332,5 +350,116 @@ describe('AyahSequencer keeps exactly one slot sounding', () => {
     gate.release?.();
     await seekBack;
     expect(changes.at(-1)).toBe(0);
+  });
+  // Android binds its media session — the notification's buttons, the lock
+  // screen, media keys — to ONE of the two native players, and its
+  // commands reach that player without passing through this app. Half the
+  // time that is not the player making sound, so what the sequencer does
+  // with such a command decides whether those buttons work at all.
+
+  it('silences a play that landed on the idle slot and keeps the live ayah going', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    await flush();               // slot 1 finishes preloading ayah 2
+
+    // The notification's play button, aimed at the idle slot, starts the
+    // ayah *after* the live one. Left alone that is two recitations at
+    // once — the thing the user actually hears go wrong.
+    players[1].transportChanged(true);
+    await flush();
+
+    expect(players[1].playing).toBe(false);
+    expect(players[0].playing).toBe(true);
+  });
+
+  it('stops the recitation, and says so, when a pause lands on the audible slot', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+    const states: boolean[] = [];
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    await flush();
+    seq.on('state', s => states.push(s));
+
+    players[0].transportChanged(false);
+    await flush();
+
+    expect(players.map(p => p.playing)).toEqual([false, false]);
+    // Reported, not just done: nothing else tells the app's own bar and
+    // word highlight that the recitation has stopped.
+    expect(states).toEqual([false]);
+  });
+
+  it('resumes the ayah that was live, not the one the idle slot holds', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    await flush();
+    seq.pause();
+
+    // Play pressed while the binding sits on the idle slot: what must
+    // resume is ayah 1 on the slot that was live, not ayah 2 on this one.
+    players[1].transportChanged(true);
+    await flush();
+
+    expect(players[0].playing).toBe(true);
+    expect(players[1].playing).toBe(false);
+    expect(seq.currentIndex).toBe(0);
+  });
+
+  it('does not mistake its own pauses for an outside command', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    await flush();
+    const states: boolean[] = [];
+    seq.on('state', s => states.push(s));
+
+    // A seek pauses both slots on its way to the new ayah, and a boundary
+    // crossing pauses the slot that just finished. Every one of those is
+    // an honest "this player stopped" report; reading any of them as a
+    // pause from the lock screen would stop the recitation mid-surah.
+    await seq.seekToAyah(1);
+    await flush();
+    players[seq.currentIndex % 2 === 0 ? 0 : 1].finish();
+    await flush();
+
+    expect(states).not.toContain(false);
+    expect(players.some(p => p.playing)).toBe(true);
+  });
+
+  it('still recognises a play pressed after the surah has ended', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+    const states: boolean[] = [];
+
+    await seq.seekToAyah(ayahs.length - 1);
+    await seq.play();
+    await flush();
+    const last = players.find(p => p.playing)!;
+    last.finish();               // the final ayah runs out; 'ended' fires
+    await flush();
+    seq.on('state', s => states.push(s));
+
+    // The end of the surah stops a player without anyone pausing it. If
+    // that left the sequencer believing the slot was meant to be playing,
+    // this press would look like its own doing and be ignored.
+    last.transportChanged(true);
+    await flush();
+
+    expect(states).toContain(true);
   });
 });
