@@ -138,18 +138,44 @@ export function ReaderScreen({
   };
   const centreOnRow = (index: number) => {
     pendingCentre.current = index;
-    retriesLeft.current = 12;
+    retriesLeft.current = 25;
     snapTo(index);
   };
-  const retryCentre = (info: { index: number; averageItemLength: number }) => {
+  /**
+   * Where row `index` is expected to start, from every row height measured
+   * so far plus, for rows never laid out, an estimate from their own text
+   * length (lines × line height) calibrated against the measured rows. Used
+   * ONLY to jump close enough for the target to render — never handed to
+   * FlatList — and it sharpens with every hop, since each hop lays out the
+   * rows around where it landed. FlatList's own `averageItemLength` jump
+   * did not converge: one running average lands in the same place each
+   * time when the rows between are much taller than it.
+   */
+  const ROW_CHROME = 72;
+  const charCount = (i: number) => text.ayahs[i]?.words.reduce((n, w) => n + w.indopak.length + 1, 0) ?? 0;
+  const charsPerLine = () => {
+    const samples = Object.entries(rowHeights.current)
+      .map(([i, h]) => charCount(Number(i)) / Math.max(1, Math.round((h - ROW_CHROME) / arabicLineHeight)))
+      .filter(v => Number.isFinite(v) && v > 0)
+      .sort((a, b) => a - b);
+    return samples.length >= 3 ? samples[Math.floor(samples.length / 2)] : Math.max(8, Math.floor(contentWidth / (arabicFontSize * 0.55)));
+  };
+  const estimatedTop = (index: number) => {
+    const cpl = charsPerLine();
+    let offset = 0;
+    for (let i = 0; i < index; i++) {
+      offset += rowHeights.current[i] ?? (ROW_CHROME + Math.max(1, Math.ceil(charCount(i) / cpl)) * arabicLineHeight);
+    }
+    return offset;
+  };
+  const retryCentre = (info: { index: number }) => {
     failed.current = true;
     if (pendingCentre.current !== info.index || retriesLeft.current-- <= 0) return;
-    // Jump near FlatList's estimate so the target row gets rendered, then
-    // try again once rows there have laid out.
-    listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+    const jump = Math.max(0, estimatedTop(info.index) - viewportHeight.current / 3);
+    listRef.current?.scrollToOffset({ offset: jump, animated: false });
     setTimeout(() => {
       if (pendingCentre.current === info.index) snapTo(info.index);
-    }, 300);
+    }, 250);
   };
   const onRowLayout = (index: number, height: number) => {
     rowHeights.current[index] = height;

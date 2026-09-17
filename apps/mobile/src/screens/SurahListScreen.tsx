@@ -5,10 +5,13 @@ import { getSurahList } from '../data/surahs';
 import { SCRIPT_FONTS } from '../reader/fonts';
 import type { Script } from './ReaderScreen';
 
-// Where the list was scrolled to when the user last left it. The screen
-// unmounts while a surah is open, so this lives at module scope: coming back
-// from a surah lands where you left, not at Al-Fatihah again.
+// Where the list was scrolled to when the user last left it, and how tall
+// its (uniform) rows are. The screen unmounts while a surah is open, so
+// these live at module scope: coming back from a surah lands where you
+// left, not at Al-Fatihah again. Uniform rows let `getItemLayout` place
+// `initialScrollIndex` exactly, before any row has rendered.
 let lastOffset = 0;
+let rowHeight = 0;
 
 // Mirrors the web's `max-w-3xl` (48rem = 768px) cap on the home page's list
 // column (apps/web/app/page.tsx) — on a tablet-width screen the list would
@@ -20,10 +23,14 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
   const { width } = useWindowDimensions();
   const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
   const listRef = useRef<FlatList<SurahMeta>>(null);
-  const restored = useRef(false);
 
   const renderItem = ({ item }: { item: SurahMeta }) => (
-    <Pressable style={styles.row} onPress={() => onSelect(item.id)} accessibilityRole="button">
+    <Pressable
+      style={styles.row}
+      onPress={() => onSelect(item.id)}
+      accessibilityRole="button"
+      onLayout={e => { rowHeight = e.nativeEvent.layout.height; }}
+    >
       <Text style={styles.number}>{item.id}</Text>
       <View style={styles.names}>
         <Text style={styles.simple}>{item.nameSimple}</Text>
@@ -51,14 +58,8 @@ export function SurahListScreen({ onSelect, script }: { onSelect: (id: number) =
       contentContainerStyle={[styles.list, { maxWidth: contentWidth, width: '100%', alignSelf: 'center' }]}
       onScroll={e => { lastOffset = e.nativeEvent.contentOffset.y; }}
       scrollEventThrottle={100}
-      // Restore once the content exists — on layout the list is still empty
-      // and a scroll would clamp to the top.
-      onContentSizeChange={() => {
-        if (!restored.current && lastOffset > 0) {
-          restored.current = true;
-          listRef.current?.scrollToOffset({ offset: lastOffset, animated: false });
-        }
-      }}
+      getItemLayout={rowHeight ? (_, index) => ({ length: rowHeight, offset: rowHeight * index, index }) : undefined}
+      initialScrollIndex={rowHeight && lastOffset > 0 ? Math.min(surahs.length - 1, Math.floor(lastOffset / rowHeight)) : undefined}
     />
   );
 }
