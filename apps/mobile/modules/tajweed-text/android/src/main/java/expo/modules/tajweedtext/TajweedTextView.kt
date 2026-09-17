@@ -71,8 +71,10 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
     // bounds, so the last word of a line lost its outer edge ("وَمِمَّا"
     // in 2:3 showed as "وَمِمَّ"). The inset keeps the overhang inside the
     // view; the text is laid out `2 × pad` narrower and wraps a touch
-    // earlier, which is the correct trade.
-    val pad = (8 * context.resources.displayMetrics.density).toInt()
+    // earlier, which is the correct trade. 20 dp: Amiri's final letters
+    // (the meem of "ثُمَّ", a final alif's tail) draw up to a glyph's width
+    // behind the pen position, and 8 dp still lost most of "ثُمَّ" in 2:29.
+    val pad = (20 * context.resources.displayMetrics.density).toInt()
     setPadding(pad, 0, pad, 0)
     includeFontPadding = true
   }
