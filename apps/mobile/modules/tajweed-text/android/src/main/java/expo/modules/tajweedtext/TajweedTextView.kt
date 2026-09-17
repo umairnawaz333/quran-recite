@@ -77,6 +77,7 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
   var textColor: String = "#000000"
 
   private val onCharacterPress by EventDispatcher()
+  private val onHighlightLayout by EventDispatcher()
 
   // A single tap reports the character under the finger. The web lets the
   // user start recitation from any word by clicking it; here the words are
@@ -156,6 +157,23 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
       }
     }
     textView.text = spannable
+
+    // Tell JS which laid-out line the highlight starts on, so the reader can
+    // keep the recited line — not merely the ayah — in the middle of the
+    // screen through a fifteen-line ayah. Posted, because the Layout does
+    // not exist until this text has been measured and laid out.
+    highlight?.let { h ->
+      val start = h.start.coerceIn(0, length)
+      textView.post {
+        val layout = textView.layout ?: return@post
+        val line = layout.getLineForOffset(start)
+        val density = resources.displayMetrics.density
+        onHighlightLayout(mapOf(
+          "top" to layout.getLineTop(line) / density,
+          "bottom" to layout.getLineBottom(line) / density,
+        ))
+      }
+    }
 
     // Text just changed, but Yoga's box for this node did not (it has no
     // idea "text" is even a layout-affecting prop) — so Fabric will not call

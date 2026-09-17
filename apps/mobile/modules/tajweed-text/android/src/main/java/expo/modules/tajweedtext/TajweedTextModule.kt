@@ -13,7 +13,7 @@ class TajweedTextModule : Module() {
       // Fired with `{ offset }` — a character index into `text` — when the
       // user taps the line. JS maps it back to a word (see `TajweedLine`),
       // because only JS knows the word boundaries it built the string from.
-      Events("onCharacterPress")
+      Events("onCharacterPress", "onHighlightLayout")
 
       Prop("text") { view: TajweedTextView, value: String -> view.text = value }
       Prop("ranges") { view: TajweedTextView, value: List<ColorRange> -> view.ranges = value }

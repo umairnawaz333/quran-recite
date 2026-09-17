@@ -82,12 +82,62 @@ export function ReaderScreen({
   // something else recites is never yanked around.
   const listRef = useRef<FlatList<SurahText['ayahs'][number]>>(null);
   const playingAyah = player.surahId === surahId ? player.ayah : null;
+
+  // Precise, centred following. FlatList's own `scrollToIndex` estimates
+  // unmeasured rows from an average, and ayah rows vary from one line to
+  // fifteen — which is why it used to land five or seven ayahs early in a
+  // long surah. Instead every row reports its real height on layout, the
+  // target offset is summed from those (falling back to the running average
+  // only for rows that have never been laid out), and the playing ayah — or,
+  // on Android's tajweed path, the very LINE being recited — is put in the
+  // middle of the viewport. A second pass a moment later corrects the few
+  // cases where the target row was still unmeasured on the first.
+  const rowHeights = useRef<Record<number, number>>({});
+  const viewportHeight = useRef(0);
+  const scrollY = useRef(0);
+  const averageRowHeight = () => {
+    const seen = Object.values(rowHeights.current);
+    return seen.length ? seen.reduce((a, b) => a + b, 0) / seen.length : 220;
+  };
+  const rowTop = (index: number) => {
+    let offset = 0;
+    for (let i = 0; i < index; i++) offset += rowHeights.current[i] ?? averageRowHeight();
+    return offset;
+  };
+  /** Scroll so that `focusY` (a content-space y) sits at the viewport's centre. */
+  const centreOn = (focusY: number, animated = true) => {
+    const target = Math.max(0, focusY - viewportHeight.current / 2);
+    listRef.current?.scrollToOffset({ offset: target, animated });
+    scrollY.current = target;
+  };
+  const centreOnRow = (index: number) => {
+    const wasMeasured = index in rowHeights.current;
+    centreOn(rowTop(index) + (rowHeights.current[index] ?? averageRowHeight()) / 2);
+    if (!wasMeasured) {
+      // The row was estimated; once it has laid out, land exactly on it.
+      setTimeout(() => {
+        if (index in rowHeights.current) centreOn(rowTop(index) + rowHeights.current[index] / 2);
+      }, 350);
+    }
+  };
   useEffect(() => {
     if (playingAyah === null) return;
     const index = text.ayahs.findIndex(a => a.ayah === playingAyah);
-    if (index < 0) return;
-    listRef.current?.scrollToIndex({ index, viewPosition: 0.2, animated: true });
+    if (index >= 0) centreOnRow(index);
+    // `centreOnRow` reads only refs; re-running on the two values that
+    // actually change the target is the whole point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playingAyah, text]);
+  /**
+   * Follow the recited line within a long ayah. Re-centres only when the
+   * highlight has drifted well away from the middle, so the page does not
+   * twitch on every word and a reader who nudges it is not fought.
+   */
+  const followHighlight = (index: number, line: { top: number; bottom: number }) => {
+    const focusY = rowTop(index) + (line.top + line.bottom) / 2;
+    const centre = scrollY.current + viewportHeight.current / 2;
+    if (Math.abs(focusY - centre) > viewportHeight.current * 0.2) centreOn(focusY);
+  };
 
   // `error` is attributed via `pendingSurahId`, not `surahId`: while a
   // *different* surah is still live, failing to load this one leaves
@@ -152,17 +202,14 @@ export function ReaderScreen({
           keyExtractor={a => String(a.ayah)}
           initialNumToRender={8}
           windowSize={5}
-          // Rows are variable-height and unmeasured until rendered, so a jump
-          // deep into a long surah can land outside what FlatList has laid
-          // out. Scroll near the estimate first, then retry once it has.
-          onScrollToIndexFailed={info => {
-            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-            setTimeout(() => {
-              listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.2, animated: true });
-            }, 250);
-          }}
-          renderItem={({ item }) => (
-            <View style={styles.ayah}>
+          onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
+          onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={100}
+          renderItem={({ item, index }) => (
+            <View
+              style={styles.ayah}
+              onLayout={e => { rowHeights.current[index] = e.nativeEvent.layout.height; }}
+            >
               {script === 'tajweed' ? (
                 <TajweedLine
                   words={item.words}
@@ -172,6 +219,7 @@ export function ReaderScreen({
                   lineHeight={arabicLineHeight}
                   color={ARABIC_COLOR}
                   onWordPress={wordId => void play(surahId, item.ayah, wordId)}
+                  onHighlightLayout={item.ayah === playingAyah ? line => followHighlight(index, line) : undefined}
                 />
               ) : (
                 <Text

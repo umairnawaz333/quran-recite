@@ -49,5 +49,11 @@ export interface TajweedTextViewProps {
    * so mapping offset → word happens in JS (`TajweedLine`), not here.
    */
   onCharacterPress?: (event: { nativeEvent: { offset: number } }) => void;
+  /**
+   * Fired after each render that carries a `highlight`, with the laid-out
+   * line the highlight starts on: its top and bottom in dp from the top of
+   * this view. The reader uses it to keep the recited line centred.
+   */
+  onHighlightLayout?: (event: { nativeEvent: { top: number; bottom: number } }) => void;
   style?: StyleProp<ViewStyle>;
 }

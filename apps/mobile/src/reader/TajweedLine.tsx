@@ -36,6 +36,12 @@ export function TajweedLine({
   color: string;
   /** Tapping a word — start reciting from it, as clicking a word does on the web. */
   onWordPress?: (wordId: string) => void;
+  /**
+   * Android only: where the highlighted word's line sits within this view,
+   * in dp from its top, whenever the highlight moves. Lets the reader keep
+   * the recited LINE — not just the ayah — centred in a long ayah.
+   */
+  onHighlightLayout?: (line: { top: number; bottom: number }) => void;
 }) {
   const activeWordId = useActiveWordId();
 
@@ -72,6 +78,7 @@ export function TajweedLine({
           const wordId = wordAtOffset(line.words, e.nativeEvent.offset);
           if (wordId) onWordPress(wordId);
         } : undefined}
+        onHighlightLayout={onHighlightLayout ? (e) => onHighlightLayout(e.nativeEvent) : undefined}
       />
     );
   }
