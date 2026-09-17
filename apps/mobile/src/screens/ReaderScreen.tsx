@@ -83,6 +83,11 @@ export function ReaderScreen({
   // See PlayerProvider's `PlayerState`.
   const isPending = player.pendingSurahId === surahId;
   const error = isPending ? player.error : null;
+  // Loading is attributed the same way. This matters most when a *different*
+  // surah is still live: the bar keeps (correctly) showing that surah, so
+  // without this strip a tap on one of this screen's ayah buttons would give
+  // no visible feedback at all until the switch-over lands or fails.
+  const isLoading = isPending && player.isLoading;
 
   // `useWindowDimensions()` re-renders this component on every dimension
   // change (fold, unfold, rotation) — exactly what's wanted here, since
@@ -120,6 +125,11 @@ export function ReaderScreen({
         {error && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+        {!error && isLoading && (
+          <View style={styles.loadingBanner} accessibilityLiveRegion="polite">
+            <Text style={styles.loadingText}>Loading recitation…</Text>
           </View>
         )}
 
@@ -193,5 +203,7 @@ const styles = StyleSheet.create({
   // only, never a text-colour change, so tajweed colours stay visible.
   highlight: { backgroundColor: '#fde68a' },
   errorBanner: { backgroundColor: '#fee2e2', paddingVertical: 8, paddingHorizontal: 16 },
+  loadingBanner: { backgroundColor: '#f3f4f6', paddingVertical: 6, paddingHorizontal: 16 },
+  loadingText: { color: '#555', fontSize: 13, textAlign: 'center' },
   errorText: { color: '#991b1b', fontSize: 13, textAlign: 'center' },
 });

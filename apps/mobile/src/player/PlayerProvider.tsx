@@ -110,6 +110,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
    * checks it is still current before mutating anything.
    */
   const requestRef = useRef(0);
+  /** Index into the live surah's `ayahs` that the sequencer is on. */
+  const ayahIndexRef = useRef(0);
 
   const patch = useCallback((next: Partial<PlayerState>) => {
     setState(prev => ({ ...prev, ...next }));
@@ -237,6 +239,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     engine.onChange(paint);
 
     sequencer.on('ayahchange', index => {
+      ayahIndexRef.current = index;
       engine.setWords(timings.ayahs[index]?.words ?? []);
       patch({ ayah: timings.ayahs[index]?.ayah ?? 1, error: null });
 
@@ -327,7 +330,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     else void sequencer.play();
   }, []);
 
-  const next = useCallback(() => sequencerRef.current?.next() ?? Promise.resolve(), []);
+  // On the last ayah, "next" continues into the next surah rather than
+  // stopping dead — the user asked for exactly this from the device. The
+  // web's bar does not do it (its `next` is a bare `playlist.next()`), so
+  // this is a deliberate mobile divergence, not a port. `play` is a stable
+  // callback, so `next` stays stable too.
+  const next = useCallback(async () => {
+    const sequencer = sequencerRef.current;
+    const timings = timingsRef.current;
+    const surahId = playingSurahRef.current;
+    if (!sequencer || !timings || surahId === null) return;
+    if (ayahIndexRef.current >= timings.ayahs.length - 1) {
+      if (surahId < 114) await play(surahId + 1);
+      return;
+    }
+    await sequencer.next();
+  }, [play]);
   const prev = useCallback(() => sequencerRef.current?.prev() ?? Promise.resolve(), []);
 
   const attachViewer = useCallback((surahId: number) => {
