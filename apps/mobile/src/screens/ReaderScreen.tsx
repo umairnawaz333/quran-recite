@@ -115,8 +115,14 @@ export function ReaderScreen({
   // derived from it is allowed into an effect/memo dependency array that
   // also depends on player actions (see PlayerProvider.tsx) — it isn't
   // here; it only ever feeds render output.
-  const { width } = useWindowDimensions();
-  const { fontSize: arabicFontSize, lineHeight: arabicLineHeight } = arabicTypeForWidth(width);
+  const { width, height } = useWindowDimensions();
+  // Type size follows the SHORTER side of the screen, not the width: the
+  // web's `5vw` scales with viewport width, but on a phone turned sideways
+  // that made the letters jump a size while the user wanted the same type
+  // with more words per line. The shorter side is the same in both
+  // orientations, so rotating only changes how the lines wrap; a tablet
+  // still gets larger type than a phone.
+  const { fontSize: arabicFontSize, lineHeight: arabicLineHeight } = arabicTypeForWidth(Math.min(width, height));
   const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
 
   // Precise, centred following.
