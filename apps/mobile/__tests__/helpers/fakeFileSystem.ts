@@ -51,7 +51,13 @@ export class FakeFile {
   /** Only ever read from in `ayahCache.ts`'s eviction sort; a fresh fake write has none. */
   get modificationTime(): number { return 0; }
   create() { store.set(this.uri, ''); }
-  write(content: string) { store.set(this.uri, content); }
+  /** `failWrites`, when it matches this file, throws as a full disk (or a
+   * missing document directory) would — the callers here must never let that
+   * reach the app. */
+  write(content: string) {
+    if (failWrites?.test(this.uri)) throw new Error(`write failed: ${this.uri}`);
+    store.set(this.uri, content);
+  }
   async text() {
     // The bytes are taken when the read is issued, not when it completes:
     // playback bookmarks the position it is on as it goes, and a read that
@@ -97,6 +103,10 @@ export const Paths = { document: new FakeDirectory('file:///doc'), cache: new Fa
 /** A `move()` whose destination matches this pattern resolves without renaming — see `FakeFile.move`. */
 export let failMoves: RegExp | null = null;
 export function setFailMovesMatching(r: RegExp | null) { failMoves = r; }
+
+/** A `write()` to a file matching this pattern throws — see `FakeFile.write`. */
+export let failWrites: RegExp | null = null;
+export function setFailWritesMatching(r: RegExp | null) { failWrites = r; }
 
 /**
  * Stand-in for `expo-file-system`'s `DownloadTask` (see `NetworkTasks.d.ts`):
@@ -179,6 +189,7 @@ export function reset(): void {
   holdDownloads = null;
   failDownloads = null;
   failMoves = null;
+  failWrites = null;
 }
 
 /** Alias kept for the player-provider harness, which was written against this name. */

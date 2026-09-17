@@ -4,13 +4,6 @@ import { colourFor } from './tajweedColours';
 // why: this local Expo module has no package.json to resolve by name.
 import type { ColorRange, HighlightRange } from '../../modules/tajweed-text/src';
 
-/** Matches the web's `.word--active` tint and `ReaderScreen.tsx`'s
- * `styles.highlight` — see `TajweedTextView.kt`'s `HIGHLIGHT_COLOR`, which
- * this mirrors for anyone reading the JS side only. Not passed to the
- * native view: the highlight colour is fixed there, non-configurable, on
- * purpose (see its class doc). */
-const AYAH_NUMBER_COLOR = '#999999';
-
 export interface TajweedLineWord {
   id: string;
   tajweed: string;
@@ -46,6 +39,15 @@ export function buildTajweedLine(
   words: TajweedLineWord[],
   ayahNumber: number,
   activeWordId: string | null,
+  /**
+   * The trailing ﴿n﴾ marker's colour — the theme's `palette.textMuted`,
+   * passed in rather than named here, because the marker is drawn as an
+   * ordinary `ForegroundColorSpan` in this line's ranges and so has to
+   * follow the light/dark scheme like every other colour (see `theme.tsx`:
+   * colours live only there). Required on purpose: a default would let a
+   * fixed grey survive a scheme change unnoticed.
+   */
+  ayahNumberColor: string,
 ): TajweedLineContent {
   let text = '';
   const ranges: ColorRange[] = [];
@@ -69,7 +71,7 @@ export function buildTajweedLine(
 
   const numberStart = text.length;
   text += `  ﴿${ayahNumber}﴾`;
-  ranges.push({ start: numberStart, end: text.length, color: AYAH_NUMBER_COLOR });
+  ranges.push({ start: numberStart, end: text.length, color: ayahNumberColor });
 
   return { text, ranges, highlight, words: wordRanges };
 }

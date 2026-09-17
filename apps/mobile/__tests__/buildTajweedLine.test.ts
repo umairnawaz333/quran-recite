@@ -37,9 +37,14 @@ const WORD_3 = BISMILLAH[2]; // 1:1:3 — ٱلرَّحْمَـٰنِ
  * independently of it. */
 const plainTextOf = (tajweed: string) => tajweed.replace(/<\/?rule[^>]*>/g, '');
 
+/** The ayah-number marker's colour comes from the theme's `palette.textMuted`
+ * (see `theme.tsx`); these tests pass their own so a hard-coded grey cannot
+ * pass for it. */
+const MUTED = '#777777';
+
 describe('buildTajweedLine', () => {
   it('concatenates every word into one string, space-joined, with the ﴿n﴾ marker last', () => {
-    const { text } = buildTajweedLine(BISMILLAH, 1, null);
+    const { text } = buildTajweedLine(BISMILLAH, 1, null, MUTED);
     const expected = `${BISMILLAH.map(w => plainTextOf(w.tajweed)).join(' ')}  ﴿1﴾`;
     expect(text).toBe(expected);
   });
@@ -48,7 +53,7 @@ describe('buildTajweedLine', () => {
     // The join this task exists to fix breaks exactly here: a space (or any
     // other character) between "ٱل" and "رَّحْمَـٰنِ" would be exactly the kind
     // of gap a nested-<Text> boundary used to leave on Android.
-    const { text } = buildTajweedLine(BISMILLAH, 1, null);
+    const { text } = buildTajweedLine(BISMILLAH, 1, null, MUTED);
     const word3 = plainTextOf(WORD_3.tajweed);
     expect(text).toContain(word3);
     // The word's first two characters (ٱ, ل) are each their own coloured
@@ -65,7 +70,7 @@ describe('buildTajweedLine', () => {
     // plain text between them. This is the hardest case for offset
     // arithmetic (see the fix report for this round) and the one the
     // previous version of this fixture accidentally dropped.
-    const { text, ranges } = buildTajweedLine(BISMILLAH, 1, null);
+    const { text, ranges } = buildTajweedLine(BISMILLAH, 1, null, MUTED);
     const word3 = plainTextOf(WORD_3.tajweed);
     const wordStart = text.indexOf(word3);
     expect(wordStart).toBeGreaterThanOrEqual(0);
@@ -86,7 +91,7 @@ describe('buildTajweedLine', () => {
   });
 
   it('every range points at the substring it claims to colour', () => {
-    const { text, ranges } = buildTajweedLine(BISMILLAH, 1, null);
+    const { text, ranges } = buildTajweedLine(BISMILLAH, 1, null, MUTED);
     for (const range of ranges) {
       expect(range.start).toBeLessThan(range.end);
       expect(range.end).toBeLessThanOrEqual(text.length);
@@ -99,21 +104,28 @@ describe('buildTajweedLine', () => {
     expect(hamWaslRuns).toHaveLength(3);
   });
 
-  it('colours the trailing ayah-number marker, appended after the last word', () => {
-    const { text, ranges } = buildTajweedLine(BISMILLAH, 1, null);
+  it('colours the trailing ayah-number marker with the colour it is GIVEN, not a constant', () => {
+    const { text, ranges } = buildTajweedLine(BISMILLAH, 1, null, MUTED);
     const last = ranges[ranges.length - 1];
     expect(text.slice(last.start, last.end)).toBe('  ﴿1﴾');
-    expect(last.color).toBe('#999999');
+    expect(last.color).toBe(MUTED);
+
+    // The dark scheme's muted grey: the marker follows the theme, so the
+    // same ayah built under the other scheme carries the other colour.
+    const dark = buildTajweedLine(BISMILLAH, 1, null, '#9ca3af');
+    const darkLast = dark.ranges[dark.ranges.length - 1];
+    expect(darkLast.color).toBe('#9ca3af');
+    expect(darkLast).toEqual({ ...last, color: '#9ca3af' });
   });
 
   it('computes the highlight from the active word\'s own offsets, not a fixed position', () => {
-    const { text, highlight } = buildTajweedLine(BISMILLAH, 1, WORD_3.id);
+    const { text, highlight } = buildTajweedLine(BISMILLAH, 1, WORD_3.id, MUTED);
     expect(highlight).not.toBeNull();
     expect(text.slice(highlight!.start, highlight!.end)).toBe(plainTextOf(WORD_3.tajweed));
   });
 
   it('has no highlight when the active word belongs to a different ayah', () => {
-    const { highlight } = buildTajweedLine(BISMILLAH, 1, '2:5:1');
+    const { highlight } = buildTajweedLine(BISMILLAH, 1, '2:5:1', MUTED);
     expect(highlight).toBeNull();
   });
 });

@@ -65,11 +65,14 @@ export function TajweedLine({
   // Only Android needs the single-string form — iOS renders straight from
   // `words` below — so skip building it there rather than doing the work on
   // every recite tick for a platform that never reads the result.
+  // Depends on the muted colour as a PRIMITIVE, not on `palette`: the line
+  // is rebuilt on every word tick, and a dependency on the palette object
+  // would be one more thing for that path to compare.
   const line = useMemo(
     () => (Platform.OS === 'android'
-      ? buildTajweedLine(words, ayahNumber, ownActiveWordId)
+      ? buildTajweedLine(words, ayahNumber, ownActiveWordId, palette.textMuted)
       : EMPTY_LINE),
-    [words, ayahNumber, ownActiveWordId],
+    [words, ayahNumber, ownActiveWordId, palette.textMuted],
   );
 
   if (Platform.OS === 'android') {

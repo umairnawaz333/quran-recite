@@ -8,7 +8,7 @@ vi.mock('react-native', async () => await import('./helpers/reactNativeMock'));
 vi.mock('expo-file-system', async () => (await import('./helpers/fakeFileSystem')).fakeFileSystemModule);
 import { createElement } from 'react';
 import { act, create } from 'react-test-renderer';
-import { store, reset } from './helpers/fakeFileSystem';
+import { store, reset, setFailWritesMatching } from './helpers/fakeFileSystem';
 import { resetReactNative, setColorScheme } from './helpers/reactNativeMock';
 import {
   resolveScheme, readThemePreference, writeThemePreference, LIGHT, DARK,
@@ -35,6 +35,14 @@ describe('theme', () => {
     writeThemePreference('dark');
     expect(await readThemePreference()).toBe('dark');
     store.set('file:///doc/theme.json', '"purple"');
+    expect(await readThemePreference()).toBe('system');
+  });
+
+  it('never throws when the preference cannot be written', async () => {
+    // A full disk, or a document directory that is not there: losing the
+    // preference is acceptable, taking the app down with it is not.
+    setFailWritesMatching(/theme\.json$/);
+    expect(() => writeThemePreference('dark')).not.toThrow();
     expect(await readThemePreference()).toBe('system');
   });
 
