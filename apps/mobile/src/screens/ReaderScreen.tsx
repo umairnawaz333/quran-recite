@@ -113,6 +113,9 @@ export function ReaderScreen({
   const rowRefs = useRef<Record<number, View | null>>({});
   const pendingCentre = useRef<number | null>(null);
   const viewportHeight = useRef(0);
+  /** Current scroll offset; `measureLayout` against the scroll view yields
+   * on-screen coordinates, so the content offset must be added back. */
+  const scrollY = useRef(0);
   const retriesLeft = useRef(0);
   /**
    * Put `withinRow` (a y inside row `index`; its middle when omitted) at the
@@ -133,8 +136,13 @@ export function ReaderScreen({
       row.measureLayout(
         scrollNode as unknown as number,
         (_x, y, _w, h) => {
-          const focus = y + (withinRow ?? h / 2);
-          list.scrollToOffset({ offset: Math.max(0, focus - viewportHeight.current / 2), animated: true });
+          // `y` is where the row sits within the scroll view's frame right
+          // now — a screen position, not a content position — so the
+          // current offset is added to get the content y being centred.
+          const focus = scrollY.current + y + (withinRow ?? h / 2);
+          const target = Math.max(0, focus - viewportHeight.current / 2);
+          list.scrollToOffset({ offset: target, animated: true });
+          scrollY.current = target;
           if (pendingCentre.current === index) pendingCentre.current = null;
         },
         () => list.scrollToIndex({ index, viewPosition: 0.5, animated: true }),
@@ -152,7 +160,9 @@ export function ReaderScreen({
   };
   const retryCentre = (info: { index: number; averageItemLength: number }) => {
     if (pendingCentre.current !== info.index || retriesLeft.current-- <= 0) return;
-    listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+    const estimate = info.averageItemLength * info.index;
+    listRef.current?.scrollToOffset({ offset: estimate, animated: false });
+    scrollY.current = estimate;
     setTimeout(() => {
       if (pendingCentre.current === info.index) snapTo(info.index);
     }, 300);
@@ -241,6 +251,8 @@ export function ReaderScreen({
           initialNumToRender={8}
           windowSize={5}
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
+          onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={50}
           onScrollToIndexFailed={retryCentre}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
