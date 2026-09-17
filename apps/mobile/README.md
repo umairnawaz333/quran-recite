@@ -119,7 +119,7 @@ IndoPak on both platforms, which has no colour runs to fragment on).
 ## Tests
 
 ```bash
-npm test          # from the repo root, or `npm test` inside apps/mobile — 38 vitest tests
+npm test          # from the repo root, or `npm test` inside apps/mobile — 87 vitest tests
 ```
 
 Covers the timing sequencer (`AyahSequencer`), the `expo-audio` player
