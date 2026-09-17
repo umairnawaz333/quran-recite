@@ -193,6 +193,11 @@ export class AyahSequencer {
   }
 
   release(): void {
+    // Invalidate every in-flight continuation the same way a seek does: an
+    // `advanceInto` or `attemptPlay` that resumes after this point sees a
+    // stale generation and drops out, instead of seeking or playing a
+    // player that has just been released.
+    this.generation += 1;
     this.slotUnsub.forEach(unsub => unsub?.());
     this.players.forEach(p => p?.release());
     (Object.keys(this.listeners) as (keyof Events)[]).forEach(k => this.listeners[k].clear());

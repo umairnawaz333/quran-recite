@@ -9,13 +9,16 @@ import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.util.TypedValue
+import android.view.GestureDetector
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.View.MeasureSpec
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.widget.TextViewCompat
 import com.facebook.react.common.assets.ReactFontManager
 import expo.modules.kotlin.AppContext
+import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import kotlin.math.roundToInt
 
@@ -72,6 +75,28 @@ class TajweedTextView(context: Context, appContext: AppContext) : ExpoView(conte
   /** In dp, same unit as `fontSize` — converted to px below. */
   var lineHeightDp: Float = 0f
   var textColor: String = "#000000"
+
+  private val onCharacterPress by EventDispatcher()
+
+  // A single tap reports the character under the finger. The web lets the
+  // user start recitation from any word by clicking it; here the words are
+  // one string inside one native view, so the view reports the character
+  // offset and JS — which built the string and knows where each word
+  // starts and ends — resolves it to a word. `getOffsetForPosition` works
+  // off the laid-out `Layout`, so it is correct for wrapped and RTL lines.
+  private val tapDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+    override fun onDown(e: MotionEvent): Boolean = true
+    override fun onSingleTapUp(e: MotionEvent): Boolean {
+      if (textView.layout == null) return false
+      val offset = textView.getOffsetForPosition(e.x, e.y)
+      onCharacterPress(mapOf("offset" to offset))
+      return true
+    }
+  })
+
+  override fun onTouchEvent(event: MotionEvent): Boolean {
+    return tapDetector.onTouchEvent(event) || super.onTouchEvent(event)
+  }
 
   init {
     addView(textView)

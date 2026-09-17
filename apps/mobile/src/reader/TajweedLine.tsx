@@ -11,9 +11,9 @@ import { useActiveWordId } from './activeWordStore';
 import { buildTajweedLine, type TajweedLineWord } from './buildTajweedLine';
 import { colourFor } from './tajweedColours';
 import { parseTajweed } from '@quran/core';
-import type { TajweedLineContent } from './buildTajweedLine';
+import type { TajweedLineContent, WordRange } from './buildTajweedLine';
 
-const EMPTY_LINE: TajweedLineContent = { text: '', ranges: [], highlight: null };
+const EMPTY_LINE: TajweedLineContent = { text: '', ranges: [], highlight: null, words: [] };
 
 /**
  * Renders one ayah's tajweed text. Android and iOS take genuinely different
@@ -26,7 +26,7 @@ const EMPTY_LINE: TajweedLineContent = { text: '', ranges: [], highlight: null }
  * `TajweedTextView.kt`'s class doc for the full mechanism.
  */
 export function TajweedLine({
-  words, ayahNumber, fontFamily, fontSize, lineHeight, color,
+  words, ayahNumber, fontFamily, fontSize, lineHeight, color, onWordPress,
 }: {
   words: TajweedLineWord[];
   ayahNumber: number;
@@ -34,29 +34,44 @@ export function TajweedLine({
   fontSize: number;
   lineHeight: number;
   color: string;
+  /** Tapping a word — start reciting from it, as clicking a word does on the web. */
+  onWordPress?: (wordId: string) => void;
 }) {
   const activeWordId = useActiveWordId();
+
+  // The active word is global. Depending on it directly would rebuild every
+  // mounted ayah's line on every word change — parsing every word's markup
+  // again for ayahs that do not even contain the active word. Collapse it
+  // to "this ayah's active word or null" so only the ayah that actually
+  // changed rebuilds (spec §8: a word change re-renders what it touches).
+  const ownActiveWordId = activeWordId !== null && words.some(w => w.id === activeWordId)
+    ? activeWordId
+    : null;
 
   // Only Android needs the single-string form — iOS renders straight from
   // `words` below — so skip building it there rather than doing the work on
   // every recite tick for a platform that never reads the result.
-  const { text, ranges, highlight } = useMemo(
+  const line = useMemo(
     () => (Platform.OS === 'android'
-      ? buildTajweedLine(words, ayahNumber, activeWordId)
+      ? buildTajweedLine(words, ayahNumber, ownActiveWordId)
       : EMPTY_LINE),
-    [words, ayahNumber, activeWordId],
+    [words, ayahNumber, ownActiveWordId],
   );
 
   if (Platform.OS === 'android') {
     return (
       <TajweedTextView
-        text={text}
-        ranges={ranges}
-        highlight={highlight}
+        text={line.text}
+        ranges={line.ranges}
+        highlight={line.highlight}
         fontFamily={fontFamily}
         fontSize={fontSize}
         lineHeight={lineHeight}
         color={color}
+        onCharacterPress={onWordPress ? (e) => {
+          const wordId = wordAtOffset(line.words, e.nativeEvent.offset);
+          if (wordId) onWordPress(wordId);
+        } : undefined}
       />
     );
   }
@@ -67,7 +82,10 @@ export function TajweedLine({
     <Text style={[styles.arabic, { fontFamily, fontSize, lineHeight, color }]}>
       {words.map((w, i) => (
         <Text key={w.id}>
-          <Text style={activeWordId === w.id ? styles.highlight : undefined}>
+          <Text
+            style={activeWordId === w.id ? styles.highlight : undefined}
+            onPress={onWordPress ? () => onWordPress(w.id) : undefined}
+          >
             {parseTajweed(w.tajweed).map((run, j) => {
               const runColour = colourFor(run.rules);
               return (
@@ -83,6 +101,18 @@ export function TajweedLine({
       <Text style={styles.ayahNumber}>  ﴿{ayahNumber}﴾</Text>
     </Text>
   );
+}
+
+/**
+ * Resolves a tapped character offset to the word it falls in. A tap on the
+ * space between two words, or on the trailing ayah marker, belongs to no
+ * word and returns null rather than guessing.
+ */
+export function wordAtOffset(words: WordRange[], offset: number): string | null {
+  for (const w of words) {
+    if (offset >= w.start && offset < w.end) return w.id;
+  }
+  return null;
 }
 
 const styles = StyleSheet.create({

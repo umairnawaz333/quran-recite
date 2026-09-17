@@ -16,10 +16,19 @@ export interface TajweedLineWord {
   tajweed: string;
 }
 
+/** Where one word landed in `text`, so a tapped character offset can be
+ * resolved back to the word it belongs to. */
+export interface WordRange {
+  id: string;
+  start: number;
+  end: number;
+}
+
 export interface TajweedLineContent {
   text: string;
   ranges: ColorRange[];
   highlight: HighlightRange | null;
+  words: WordRange[];
 }
 
 /**
@@ -40,6 +49,7 @@ export function buildTajweedLine(
 ): TajweedLineContent {
   let text = '';
   const ranges: ColorRange[] = [];
+  const wordRanges: WordRange[] = [];
   let highlight: HighlightRange | null = null;
 
   words.forEach((word, i) => {
@@ -50,6 +60,7 @@ export function buildTajweedLine(
       const colour = colourFor(run.rules);
       if (colour) ranges.push({ start: runStart, end: text.length, color: colour });
     }
+    wordRanges.push({ id: word.id, start: wordStart, end: text.length });
     if (word.id === activeWordId) {
       highlight = { start: wordStart, end: text.length };
     }
@@ -60,5 +71,5 @@ export function buildTajweedLine(
   text += `  ﴿${ayahNumber}﴾`;
   ranges.push({ start: numberStart, end: text.length, color: AYAH_NUMBER_COLOR });
 
-  return { text, ranges, highlight };
+  return { text, ranges, highlight, words: wordRanges };
 }

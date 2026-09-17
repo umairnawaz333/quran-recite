@@ -43,5 +43,11 @@ export interface TajweedTextViewProps {
   lineHeight: number;
   /** The base text colour for any character `ranges` doesn't cover. */
   color: string;
+  /**
+   * A tap on the line, reported as the character offset into `text` under
+   * the finger. The word boundaries are only known to whoever built `text`,
+   * so mapping offset → word happens in JS (`TajweedLine`), not here.
+   */
+  onCharacterPress?: (event: { nativeEvent: { offset: number } }) => void;
   style?: StyleProp<ViewStyle>;
 }

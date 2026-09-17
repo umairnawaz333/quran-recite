@@ -288,12 +288,12 @@ describe('AyahSequencer keeps exactly one slot sounding', () => {
   });
 
   it('does not swap onto a slot whose preload is still in flight', async () => {
-    let releaseLoad: (() => void) | null = null;
+    const gate: { release: (() => void) | null } = { release: null };
     const slow = fakePlayer({
       async load(uri) {
         slow.loaded.push(uri);
         // Second load (the preload of ayah 3) hangs until released.
-        if (slow.loaded.length === 2) await new Promise<void>(r => { releaseLoad = r; });
+        if (slow.loaded.length === 2) await new Promise<void>(r => { gate.release = r; });
       },
     });
     const fast = fakePlayer();
@@ -316,7 +316,7 @@ describe('AyahSequencer keeps exactly one slot sounding', () => {
     // A fresh load of ayah 1 must have been issued into the ACTIVE slot
     // (fast) rather than swapping onto slow's half-replaced source.
     expect(fast.loaded.at(-1)).toBe(ayahs[0].audioUrl);
-    releaseLoad?.();
+    gate.release?.();
     await seekBack;
     expect(changes.at(-1)).toBe(0);
   });

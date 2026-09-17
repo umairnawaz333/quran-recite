@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { SurahText } from '@quran/core';
 import { textLoaders } from '../data/textIndex.generated';
@@ -45,9 +45,9 @@ const MAX_CONTENT_WIDTH = 768;
  * `ReaderScreen` itself — the latter would violate the rules of hooks.
  * Tajweed words get the equivalent treatment inside `TajweedLine`.
  */
-function IndopakWord({ wordId, text }: { wordId: string; text: string }) {
+function IndopakWord({ wordId, text, onPress }: { wordId: string; text: string; onPress: () => void }) {
   const isActive = useIsActiveWord(wordId);
-  return <Text style={isActive ? styles.highlight : undefined}>{text}</Text>;
+  return <Text style={isActive ? styles.highlight : undefined} onPress={onPress}>{text}</Text>;
 }
 
 export function ReaderScreen({
@@ -75,6 +75,19 @@ export function ReaderScreen({
   // browsing to a different surah while another plays would highlight text
   // here that belongs to that other surah.
   useEffect(() => attachViewer(surahId), [surahId, attachViewer]);
+
+  // Follow the recitation: keep the playing ayah in view while this surah
+  // is the one playing, as the web's auto-scroll does. `playingAyah` is null
+  // whenever another surah (or nothing) is playing, so browsing here while
+  // something else recites is never yanked around.
+  const listRef = useRef<FlatList<SurahText['ayahs'][number]>>(null);
+  const playingAyah = player.surahId === surahId ? player.ayah : null;
+  useEffect(() => {
+    if (playingAyah === null) return;
+    const index = text.ayahs.findIndex(a => a.ayah === playingAyah);
+    if (index < 0) return;
+    listRef.current?.scrollToIndex({ index, viewPosition: 0.2, animated: true });
+  }, [playingAyah, text]);
 
   // `error` is attributed via `pendingSurahId`, not `surahId`: while a
   // *different* surah is still live, failing to load this one leaves
@@ -134,10 +147,20 @@ export function ReaderScreen({
         )}
 
         <FlatList
+          ref={listRef}
           data={text.ayahs}
           keyExtractor={a => String(a.ayah)}
           initialNumToRender={8}
           windowSize={5}
+          // Rows are variable-height and unmeasured until rendered, so a jump
+          // deep into a long surah can land outside what FlatList has laid
+          // out. Scroll near the estimate first, then retry once it has.
+          onScrollToIndexFailed={info => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => {
+              listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.2, animated: true });
+            }, 250);
+          }}
           renderItem={({ item }) => (
             <View style={styles.ayah}>
               {script === 'tajweed' ? (
@@ -148,6 +171,7 @@ export function ReaderScreen({
                   fontSize={arabicFontSize}
                   lineHeight={arabicLineHeight}
                   color={ARABIC_COLOR}
+                  onWordPress={wordId => void play(surahId, item.ayah, wordId)}
                 />
               ) : (
                 <Text
@@ -158,7 +182,11 @@ export function ReaderScreen({
                 >
                   {item.words.map((w, i) => (
                     <Text key={w.id}>
-                      <IndopakWord wordId={w.id} text={w.indopak} />
+                      <IndopakWord
+                        wordId={w.id}
+                        text={w.indopak}
+                        onPress={() => void play(surahId, item.ayah, w.id)}
+                      />
                       {i < item.words.length - 1 ? <Text> </Text> : null}
                     </Text>
                   ))}

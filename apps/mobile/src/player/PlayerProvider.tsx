@@ -41,16 +41,17 @@ export interface PlayerState {
    * either misrepresent the surah that's actually still playing (an error
    * loading B rendered as if it were an error on A, which is still fine),
    * or — once a screen keys off `surahId === screen's surahId` — surface on
-   * the wrong screen entirely. Consumers should treat `isLoading`/`error`
-   * as being about `pendingSurahId` whenever it is set, and about `surahId`
-   * otherwise (e.g. a mid-playback failure on the surah that's already
-   * live, which has nothing "pending").
+   * the wrong screen entirely. Every patch that sets `isLoading` or `error`
+   * also sets `pendingSurahId`, so consumers read both strictly through it:
+   * `pendingSurahId === mySurah && isLoading`. When it is null there is
+   * nothing transient to show, whatever `isLoading` happens to hold.
    */
   pendingSurahId: number | null;
 }
 
 export interface PlayerActions {
-  play(surahId: number, ayah?: number): Promise<void>;
+  /** Start (or jump within) a surah; `wordId` recites from that word, as clicking a word does on the web. */
+  play(surahId: number, ayah?: number, wordId?: string): Promise<void>;
   toggle(): void;
   next(): Promise<void>;
   prev(): Promise<void>;
@@ -137,41 +138,41 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     activeWordStore.set(null);
   }, []);
 
-  const play = useCallback(async (surahId: number, ayah?: number) => {
+  const play = useCallback(async (surahId: number, ayah?: number, wordId?: string) => {
     const token = ++requestRef.current;
+
+    // Word taps recite from that word, as clicking a word does on the web.
+    // Word times are ayah-local, which is exactly what `seekToAyah` takes.
+    const localMsFor = (timings: SurahTimings, index: number): number => {
+      if (!wordId) return 0;
+      return timings.ayahs[index]?.words.find(w => w.id === wordId)?.startMs ?? 0;
+    };
 
     // Fast path: this surah is already the live one — seek/play in place
     // rather than tearing down a working sequencer and rebuilding it.
     if (playingSurahRef.current === surahId && sequencerRef.current && timingsRef.current) {
       const sequencer = sequencerRef.current;
       const timings = timingsRef.current;
-      patch({ error: null, pendingSurahId: null });
+      // Clears any transient state left by a superseded load of some other
+      // surah — including `isLoading`, or a consumer could be left showing a
+      // spinner for a load that stale-bailed and will never resolve it.
+      patch({ error: null, isLoading: false, pendingSurahId: null });
       if (ayah !== undefined) {
         const index = timings.ayahs.findIndex(a => a.ayah === ayah);
-        if (index !== -1) await sequencer.seekToAyah(index);
+        if (index !== -1) await sequencer.seekToAyah(index, localMsFor(timings, index));
       }
       if (token !== requestRef.current) return;
       await sequencer.play();
       return;
     }
 
-    // Give instant feedback either way, but attribute it correctly.
-    //
-    // Nothing else is playing yet: there is no "live" surah whose state this
-    // would misrepresent, so this surah becomes the live one immediately
-    // (optimistically) and `pendingSurahId` mirrors `surahId`.
-    //
-    // A *different* surah is genuinely still playing: its `surahId`/
-    // `surahName`/`ayah`/`isPlaying` are left alone here on purpose — they
-    // stay accurate (and audible) for the whole `loadTimings` round trip,
-    // and only flip over to the new surah in the single, atomic patch below
-    // once that surah is actually ready. But `isLoading`/`error` are still
-    // patched (unconditionally), attributed to the new surah via
-    // `pendingSurahId` rather than to `surahId` — so the *new* surah's own
-    // screen can show a loading state via `pendingSurahId`, while the bar
-    // and the *old* surah's screen (which key their own loading/error
-    // display off `pendingSurahId === <their surah>`) correctly see this
-    // isLoading as not about them and keep showing the old surah as live.
+    // Instant feedback, attributed correctly. Nothing else playing: this
+    // surah becomes the visible one immediately and `pendingSurahId` mirrors
+    // it. A different surah still playing: its `surahId`/`surahName`/`ayah`/
+    // `isPlaying` are left alone — it stays the thing actually making sound
+    // until the switch-over below — while `isLoading` is attributed to the
+    // new surah through `pendingSurahId`, so the new surah's own screen can
+    // show a loading state without the bar misrepresenting the live one.
     if (playingSurahRef.current === null) {
       patch({
         surahId,
@@ -209,11 +210,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // to a surah the user has already moved past, so it must not surface
       // as an error for whatever is live now.
       if (token !== requestRef.current) return;
-      // Attributed to `surahId` (the surah that failed to load) via
-      // `pendingSurahId`, not folded into `surahId`/`surahName` — those
-      // still correctly name whatever surah is actually live (or stay
-      // `null` if nothing was), so this error can never render on a screen
-      // showing a *different*, perfectly-fine-and-still-playing surah.
+      // Attributed to the surah that failed via `pendingSurahId`; `surahId`/
+      // `surahName` still name whatever is actually live (or stay null).
       patch({
         error: 'Could not load this surah. Please try again.',
         isLoading: false,
@@ -221,28 +219,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       });
       return;
     }
-    // Bail before any state mutation or teardown: a faster later call may
-    // already be the live playback, and this stale one must not touch it.
     if (token !== requestRef.current) return;
-
-    teardown();
 
     const meta = getSurahMeta(surahId);
     const engine = new SyncEngine();
     const sequencer = new AyahSequencer(timings.ayahs, createExpoPlayer);
 
-    engineRef.current = engine;
-    sequencerRef.current = sequencer;
-    timingsRef.current = timings;
-    playingSurahRef.current = surahId;
+    // Nothing from here until the switch-over touches the live playback.
+    // The old surah keeps sounding, and stays the surah every ref and every
+    // state field describes, until the new one has actually loaded its
+    // first ayah. That is what keeps the bar honest (it never shows a surah
+    // that is not the one making sound) and keeps `toggle`/`next` during the
+    // wait acting on what the user can hear. The handlers below are armed
+    // now but gated on `live`, which flips at the switch-over.
+    let live = false;
 
-    engine.onChange(paint);
-
-    sequencer.on('ayahchange', index => {
-      ayahIndexRef.current = index;
-      engine.setWords(timings.ayahs[index]?.words ?? []);
-      patch({ ayah: timings.ayahs[index]?.ayah ?? 1, error: null });
-
+    const registerLockScreen = () => {
       // Re-activate lock-screen controls on whichever native player is now
       // actually driving playback, but only while the app is in the
       // foreground — re-issuing this for a *different* native player asks
@@ -250,24 +242,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // which Android refuses once truly backgrounded
       // ("Service.startForeground() not allowed"), freezing playback. See
       // nowPlaying.ts.
-      if (AppState.currentState === 'active') {
-        const native = sequencer.activePlayer?.nativePlayer as AudioPlayer | undefined;
-        if (native && meta) {
-          setNowPlaying(native, {
-            title: meta.nameSimple,
-            artist: 'AbdulBaset AbdulSamad',
-            albumTitle: 'Murattal',
-          });
-        }
+      if (AppState.currentState !== 'active') return;
+      const native = sequencer.activePlayer?.nativePlayer as AudioPlayer | undefined;
+      if (native && meta) {
+        setNowPlaying(native, {
+          title: meta.nameSimple,
+          artist: 'AbdulBaset AbdulSamad',
+          albumTitle: 'Murattal',
+        });
       }
+    };
+
+    engine.onChange(paint);
+
+    sequencer.on('ayahchange', index => {
+      // The engine is this sequencer's own; feeding it is safe before `live`
+      // (it paints nothing until `playingSurahRef` names this surah).
+      engine.setWords(timings.ayahs[index]?.words ?? []);
+      if (!live) return;
+      ayahIndexRef.current = index;
+      patch({ ayah: timings.ayahs[index]?.ayah ?? 1, error: null });
+      registerLockScreen();
     });
-    sequencer.on('state', playing => patch({ isPlaying: playing }));
-    sequencer.on('error', message => patch({
-      error: message, isPlaying: false, isLoading: false, pendingSurahId: surahId,
-    }));
+    sequencer.on('state', playing => { if (live) patch({ isPlaying: playing }); });
+    sequencer.on('error', message => {
+      if (live) patch({ error: message, isPlaying: false, isLoading: false, pendingSurahId: surahId });
+    });
     sequencer.on('ended', () => {
+      if (!live) return;
       paint(null);
       patch({ isPlaying: false });
+      // Recitation runs on into the next surah rather than stopping at the
+      // end of this one — asked for from the device. The web stops here.
+      if (surahId < 114) void play(surahId + 1);
     });
 
     const startIndex = ayah
@@ -277,32 +284,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     engine.attach(() => sequencer.localTimeMs, timings.ayahs[startIndex]?.words ?? []);
 
     try {
-      await sequencer.seekToAyah(startIndex);
+      await sequencer.seekToAyah(startIndex, localMsFor(timings, startIndex));
     } catch {
+      engine.detach();
+      sequencer.release();
       if (token !== requestRef.current) return;
-      // Unlike the loadTimings failure above, `teardown()` has already run
-      // and `playingSurahRef` already points at `surahId` by this point —
-      // whatever was playing before is gone, not merely superseded. So this
-      // must still surface `surahId`/`surahName`, or the bar would keep
-      // showing the old (now-destroyed) surah as if it were still live.
+      // The old surah was never touched and is still audible; this failure
+      // belongs to the surah that was asked for, so it is attributed there.
       patch({
-        surahId,
-        surahName: meta?.nameSimple ?? null,
-        isPlaying: false,
         error: 'Could not load this recitation. Please try again.',
         isLoading: false,
         pendingSurahId: surahId,
       });
       return;
     }
-    if (token !== requestRef.current) return;
+    if (token !== requestRef.current) {
+      // A faster later call became the live playback while this loaded.
+      engine.detach();
+      sequencer.release();
+      return;
+    }
 
-    // The one atomic switch-over: everything above ran off local variables
-    // and refs, not state, so this is the only point where the *visible*
-    // surah actually changes — the old one (if any) was audibly playing
-    // right up until this patch lands. Nothing is pending any more: either
-    // this succeeded (and is now simply the live surah) or a later call
-    // already claimed `pendingSurahId` for itself.
+    // The switch-over: the one point where the visible surah changes, and
+    // the first point where the old one stops sounding. Everything above
+    // ran off locals, so until here the old surah was audible and its state
+    // accurate. Nothing is pending any more: this call succeeded, and any
+    // later call has already claimed `pendingSurahId` for itself.
+    teardown();
+    engineRef.current = engine;
+    sequencerRef.current = sequencer;
+    timingsRef.current = timings;
+    playingSurahRef.current = surahId;
+    ayahIndexRef.current = startIndex;
+    live = true;
     patch({
       surahId,
       surahName: meta?.nameSimple ?? null,
@@ -311,6 +325,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       error: null,
       pendingSurahId: null,
     });
+    // The first ayah's `ayahchange` fired before `live`; register now.
+    registerLockScreen();
 
     await sequencer.play();
   }, [patch, paint, teardown]);
