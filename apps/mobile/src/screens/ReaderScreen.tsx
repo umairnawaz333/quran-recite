@@ -83,25 +83,60 @@ export function ReaderScreen({
   const listRef = useRef<FlatList<SurahText['ayahs'][number]>>(null);
   const playingAyah = player.surahId === surahId ? player.ayah : null;
 
-  // Precise, centred following. FlatList's own `scrollToIndex` estimates
-  // unmeasured rows from an average, and ayah rows vary from one line to
-  // fifteen — which is why it used to land five or seven ayahs early in a
-  // long surah. Instead every row reports its real height on layout, the
-  // target offset is summed from those (falling back to the running average
-  // only for rows that have never been laid out), and the playing ayah — or,
-  // on Android's tajweed path, the very LINE being recited — is put in the
-  // middle of the viewport. A second pass a moment later corrects the few
-  // cases where the target row was still unmeasured on the first.
+  // `useWindowDimensions()` re-renders this component on every dimension
+  // change (fold, unfold, rotation) — exactly what's wanted here, since
+  // both derived values below are pure functions of `width` alone. Nothing
+  // derived from it is allowed into an effect/memo dependency array that
+  // also depends on player actions (see PlayerProvider.tsx) — it isn't
+  // here; it only ever feeds render output.
+  const { width } = useWindowDimensions();
+  const { fontSize: arabicFontSize, lineHeight: arabicLineHeight } = arabicTypeForWidth(width);
+  const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
+
+  // Precise, centred following.
+  //
+  // FlatList's own `scrollToIndex` estimates every unmeasured row from one
+  // running average, and ayah rows run from one line to fifteen — which is
+  // why it used to land five or seven ayahs early in a long surah, and why
+  // a jump that did land drifted afterwards: as rows above were measured for
+  // real, the estimated space above shrank and the content slid under a
+  // fixed scroll offset. Three things fix that together:
+  //  - every row reports its real height on layout, and rows never laid out
+  //    are estimated from their own text length (lines × line height),
+  //    calibrated against the rows that have been measured;
+  //  - those heights are handed to FlatList through `getItemLayout`, so its
+  //    idea of where each row sits agrees with ours;
+  //  - `maintainVisibleContentPosition` keeps the row on screen anchored
+  //    while rows above it change size.
+  // The playing ayah — or, on Android's tajweed path, the very LINE being
+  // recited — is put in the middle of the viewport.
   const rowHeights = useRef<Record<number, number>>({});
   const viewportHeight = useRef(0);
   const scrollY = useRef(0);
-  const averageRowHeight = () => {
-    const seen = Object.values(rowHeights.current);
-    return seen.length ? seen.reduce((a, b) => a + b, 0) / seen.length : 220;
+  const ROW_CHROME = 72; // footer row + vertical padding, independent of text
+  const charCount = (index: number) =>
+    text.ayahs[index]?.words.reduce((n, w) => n + w.indopak.length + 1, 0) ?? 0;
+  /** Characters per rendered line, from measured rows when there are enough, else from the type size. */
+  const charsPerLine = () => {
+    const samples = Object.entries(rowHeights.current)
+      .map(([i, h]) => {
+        const lines = Math.max(1, Math.round((h - ROW_CHROME) / arabicLineHeight));
+        return charCount(Number(i)) / lines;
+      })
+      .filter(v => Number.isFinite(v) && v > 0)
+      .sort((a, b) => a - b);
+    if (samples.length >= 3) return samples[Math.floor(samples.length / 2)];
+    return Math.max(8, Math.floor(contentWidth / (arabicFontSize * 0.55)));
+  };
+  const rowHeight = (index: number) => {
+    const measured = rowHeights.current[index];
+    if (measured !== undefined) return measured;
+    const lines = Math.max(1, Math.ceil(charCount(index) / charsPerLine()));
+    return ROW_CHROME + lines * arabicLineHeight;
   };
   const rowTop = (index: number) => {
     let offset = 0;
-    for (let i = 0; i < index; i++) offset += rowHeights.current[i] ?? averageRowHeight();
+    for (let i = 0; i < index; i++) offset += rowHeight(i);
     return offset;
   };
   /** Scroll so that `focusY` (a content-space y) sits at the viewport's centre. */
@@ -111,21 +146,17 @@ export function ReaderScreen({
     scrollY.current = target;
   };
   const centreOnRow = (index: number) => {
-    const wasMeasured = index in rowHeights.current;
-    centreOn(rowTop(index) + (rowHeights.current[index] ?? averageRowHeight()) / 2);
-    if (!wasMeasured) {
-      // The row was estimated; once it has laid out, land exactly on it.
-      setTimeout(() => {
-        if (index in rowHeights.current) centreOn(rowTop(index) + rowHeights.current[index] / 2);
-      }, 350);
-    }
+    centreOn(rowTop(index) + rowHeight(index) / 2);
+    // Rows around the target lay out over the next few frames; re-centre
+    // once they have, so an estimate is replaced by the measured position.
+    setTimeout(() => centreOn(rowTop(index) + rowHeight(index) / 2), 400);
   };
   useEffect(() => {
     if (playingAyah === null) return;
     const index = text.ayahs.findIndex(a => a.ayah === playingAyah);
     if (index >= 0) centreOnRow(index);
-    // `centreOnRow` reads only refs; re-running on the two values that
-    // actually change the target is the whole point.
+    // `centreOnRow` reads only refs and render-time constants; the two
+    // values that change the target are the deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playingAyah, text]);
   /**
@@ -152,15 +183,6 @@ export function ReaderScreen({
   // no visible feedback at all until the switch-over lands or fails.
   const isLoading = isPending && player.isLoading;
 
-  // `useWindowDimensions()` re-renders this component on every dimension
-  // change (fold, unfold, rotation) — exactly what's wanted here, since
-  // both derived values below are pure functions of `width` alone. Nothing
-  // derived from it is allowed into an effect/memo dependency array that
-  // also depends on player actions (see PlayerProvider.tsx) — it isn't
-  // here; it only ever feeds render output.
-  const { width } = useWindowDimensions();
-  const { fontSize: arabicFontSize, lineHeight: arabicLineHeight } = arabicTypeForWidth(width);
-  const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
 
   return (
     <View style={styles.root}>
@@ -205,6 +227,8 @@ export function ReaderScreen({
           onLayout={e => { viewportHeight.current = e.nativeEvent.layout.height; }}
           onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={100}
+          getItemLayout={(_, index) => ({ length: rowHeight(index), offset: rowTop(index), index })}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           renderItem={({ item, index }) => (
             <View
               style={styles.ayah}
