@@ -11,6 +11,8 @@ import type { AudioPlayer, AudioMetadata } from 'expo-audio';
 import { AyahSequencer } from '../audio/AyahSequencer';
 import { createExpoPlayer } from '../audio/expoPlayer';
 import { setNowPlaying, isNowPlaying } from '../audio/nowPlaying';
+import { cacheAyah, localPathFor } from '../audio/ayahCache';
+import { readLastPosition, writeLastPosition } from './lastPosition';
 import { activeWordStore } from '../reader/activeWordStore';
 import { getSurahMeta } from '../data/surahs';
 
@@ -252,7 +254,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const meta = getSurahMeta(surahId);
     const engine = new SyncEngine();
-    const sequencer = new AyahSequencer(timings.ayahs, createExpoPlayer);
+    // Recently recited ayahs are served from the warm cache (see
+    // ayahCache.ts) through the sequencer's `localPathFor` seam, so
+    // "previous" and replays do not stream the same file again.
+    const sequencer = new AyahSequencer(timings.ayahs, createExpoPlayer, n => {
+      const timing = timings.ayahs.find(a => a.ayah === n);
+      return timing ? localPathFor(timing) : null;
+    });
 
     // Nothing from here until the switch-over touches the live playback.
     // The old surah keeps sounding, and stays the surah every ref and every
@@ -313,8 +321,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       engine.setWords(timings.ayahs[index]?.words ?? []);
       if (!live) return;
       ayahIndexRef.current = index;
-      patch({ ayah: timings.ayahs[index]?.ayah ?? 1, error: null });
+      const timing = timings.ayahs[index];
+      patch({ ayah: timing?.ayah ?? 1, error: null });
       registerLockScreen();
+      if (timing) {
+        // Bookmark for the next launch, and warm the cache with the ayah now
+        // reciting so "previous" and replays come from disk.
+        writeLastPosition({ surahId, ayah: timing.ayah, localMs: 0 });
+        void cacheAyah(timing);
+      }
     });
     sequencer.on('state', playing => {
       // Run the highlight loop only while sound is actually playing. It is
@@ -475,6 +490,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
     return () => sub.remove();
   }, []);
+
+  // Offer "continue where you left off" instead of Al-Fatihah 1:1 — but
+  // only if nothing has started by the time the bookmark is read; a user
+  // who tapped play before the file loaded must not have the bar yanked
+  // back to yesterday's position.
+  useEffect(() => {
+    void readLastPosition().then(pos => {
+      if (!pos || requestRef.current !== 0) return;
+      patch({ surahId: pos.surahId, surahName: getSurahMeta(pos.surahId)?.nameSimple ?? null, ayah: pos.ayah });
+    });
+  }, [patch]);
 
   // Unmount only (this provider is mounted once, for the app's lifetime) —
   // `teardown()` itself stays purely ref-based on purpose: it is also called
