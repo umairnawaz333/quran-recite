@@ -221,6 +221,13 @@ export class AyahSequencer {
     const ayah = this.ayahs[ayahIndex];
     const localPath = this.localPathFor ? this.localPathFor(ayah.ayah) : null;
     const { uri } = resolveAyahSource(ayah, localPath);
+    // Invalidate before the load starts, not after it settles: the platform
+    // player swaps its source synchronously inside `load()`, so from here
+    // until the promise resolves this slot holds neither its old ayah nor,
+    // yet, the new one. `seekToAyah`'s swap path trusts `slotReady`; a stale
+    // value here would let it swap onto this slot and play whatever the
+    // in-flight load brings while announcing the old index.
+    this.slotReady[slot] = null;
     await player.load(uri);
 
     // Only record the slot as ready if no newer seek/next/prev superseded
@@ -264,6 +271,15 @@ export class AyahSequencer {
       this.emit('ended');
       return;
     }
+
+    // The finished slot reached the end of its file on its own; nothing ever
+    // told it to stop. Pause it explicitly before it becomes the preload
+    // target below — a platform player that keeps "play when ready" armed
+    // across the end of a track would otherwise start reciting the preload
+    // the instant it loads. `expoPlayer.load()` defends against the same
+    // thing at its own layer; this keeps the sequencer's invariant true for
+    // any `PlayerHandle`, not just that one.
+    this.players[slot]?.pause();
 
     const nextIndex = ayahIndex + 1;
     const nextSlot: Slot = slot === 0 ? 1 : 0;

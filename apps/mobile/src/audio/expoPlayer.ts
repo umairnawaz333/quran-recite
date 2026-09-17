@@ -63,6 +63,17 @@ export function createExpoPlayer(): PlayerHandle {
             resolve();
           }
         });
+        // `load()` must never make sound; only `play()` may. expo-audio's
+        // Android `replace()` does not honour that on its own: it re-issues
+        // `play()` if the player was playing, and ExoPlayer's `prepare()`
+        // starts the new source whenever `playWhenReady` is still set —
+        // which it is on a player that reached the end of its ayah, since
+        // finishing never clears it. The sequencer preloads the ayah after
+        // next into exactly such a just-finished slot, so without this
+        // pause the preload started reciting on top of the live ayah: two
+        // voices from the first boundary of every surah with three or more
+        // ayahs. This is what the user heard.
+        player.pause();
         player.replace({ uri });
       });
     },

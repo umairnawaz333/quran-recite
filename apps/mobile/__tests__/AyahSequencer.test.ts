@@ -266,3 +266,58 @@ describe('AyahSequencer next() reuses the preloaded slot', () => {
     expect(changes).toEqual([0, 1, 2]);
   });
 });
+
+describe('AyahSequencer keeps exactly one slot sounding', () => {
+  it('pauses the slot that finished before preloading into it', async () => {
+    const players = [fakePlayer(), fakePlayer()];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+
+    await seq.seekToAyah(0);
+    await seq.play();
+    await new Promise(r => setTimeout(r, 0));
+    // The fake never clears `playing` on finish — like a platform player
+    // whose play-when-ready stays armed past the end of a track.
+    players[0].finish();
+    await new Promise(r => setTimeout(r, 0));
+
+    // Slot 1 now recites ayah 2; slot 0, which just finished and is the
+    // preload target for ayah 3, must have been told to stop.
+    expect(players[1].playing).toBe(true);
+    expect(players[0].playing).toBe(false);
+  });
+
+  it('does not swap onto a slot whose preload is still in flight', async () => {
+    let releaseLoad: (() => void) | null = null;
+    const slow = fakePlayer({
+      async load(uri) {
+        slow.loaded.push(uri);
+        // Second load (the preload of ayah 3) hangs until released.
+        if (slow.loaded.length === 2) await new Promise<void>(r => { releaseLoad = r; });
+      },
+    });
+    const fast = fakePlayer();
+    const players = [slow, fast];
+    let i = 0;
+    const seq = new AyahSequencer(ayahs, () => players[i++ % 2]);
+    const changes: number[] = [];
+    seq.on('ayahchange', n => changes.push(n));
+
+    await seq.seekToAyah(0);          // slot 0 (slow) holds ayah 1
+    await seq.play();
+    await new Promise(r => setTimeout(r, 0));   // slot 1 (fast) preloads ayah 2
+    await seq.next();                  // swap onto slot 1; slot 0 begins loading ayah 3 (hangs)
+
+    // While that load is in flight, ask for ayah 1 again. slotReady[0] must
+    // not still claim ayah 1: the source underneath has already been swapped
+    // for ayah 3, so a swap here would recite ayah 3 while announcing ayah 1.
+    const seekBack = seq.seekToAyah(0);
+    await new Promise(r => setTimeout(r, 0));
+    // A fresh load of ayah 1 must have been issued into the ACTIVE slot
+    // (fast) rather than swapping onto slow's half-replaced source.
+    expect(fast.loaded.at(-1)).toBe(ayahs[0].audioUrl);
+    releaseLoad?.();
+    await seekBack;
+    expect(changes.at(-1)).toBe(0);
+  });
+});

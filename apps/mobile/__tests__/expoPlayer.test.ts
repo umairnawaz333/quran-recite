@@ -122,6 +122,21 @@ describe('createExpoPlayer', () => {
     expect(fakePlayer.listenerCount()).toBe(0);
   });
 
+  it('load() pauses before replacing the source, so loading can never start sound', async () => {
+    const player = createExpoPlayer();
+    fakePlayer.playing = true;
+
+    const loading = player.load('file:///ayah.mp3');
+    fakePlayer.emit({ isLoaded: true });
+    await loading;
+
+    expect(fakePlayer.pause).toHaveBeenCalled();
+    // Order is the point: pausing after replace() has already re-issued
+    // play() on the new source would be too late.
+    expect(fakePlayer.pause.mock.invocationCallOrder[0])
+      .toBeLessThan(fakePlayer.replace.mock.invocationCallOrder[0]);
+  });
+
   it('release() pauses the player before removing it, so a released player cannot keep sounding', () => {
     const player = createExpoPlayer();
     fakePlayer.playing = true;
