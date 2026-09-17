@@ -23,6 +23,8 @@ const ARABIC_COLOR = '#000000';
 // used for the "vw" term, since CSS `vw` is always relative to the full
 // viewport, not to a `max-width` container inside it.
 const NARROW_BREAKPOINT = 640;
+/** `styles.ayah`'s horizontal padding, which the native line's explicit width must exclude. */
+const ROW_PADDING = 16;
 function clampSize(min: number, preferred: number, max: number): number {
   return Math.max(min, Math.min(preferred, max));
 }
@@ -287,6 +289,7 @@ export function ReaderScreen({
                   fontSize={arabicFontSize}
                   lineHeight={arabicLineHeight}
                   color={ARABIC_COLOR}
+                  width={contentWidth - 2 * ROW_PADDING}
                   onWordPress={wordId => void play(surahId, item.ayah, wordId)}
                   onHighlightLayout={item.ayah === playingAyah ? line => followHighlight(index, line) : undefined}
                 />

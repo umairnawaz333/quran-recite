@@ -26,7 +26,7 @@ const EMPTY_LINE: TajweedLineContent = { text: '', ranges: [], highlight: null, 
  * `TajweedTextView.kt`'s class doc for the full mechanism.
  */
 export function TajweedLine({
-  words, ayahNumber, fontFamily, fontSize, lineHeight, color, onWordPress, onHighlightLayout,
+  words, ayahNumber, fontFamily, fontSize, lineHeight, color, width, onWordPress, onHighlightLayout,
 }: {
   words: TajweedLineWord[];
   ayahNumber: number;
@@ -34,6 +34,8 @@ export function TajweedLine({
   fontSize: number;
   lineHeight: number;
   color: string;
+  /** The line's width in dp — the reader's column minus its row padding. Android only; iOS lays out from the row. */
+  width: number;
   /** Tapping a word — start reciting from it, as clicking a word does on the web. */
   onWordPress?: (wordId: string) => void;
   /**
@@ -64,6 +66,14 @@ export function TajweedLine({
   if (Platform.OS === 'android') {
     return (
       <TajweedTextView
+        // An explicit width, in dp, from the reader's current column. The
+        // native view reports its measured size (width AND height) into the
+        // shadow tree so Yoga can size a self-measuring view; without an
+        // explicit width that report pinned the width to whatever it was
+        // first measured at, so after a rotation the text kept its portrait
+        // width and sat left of a wider column. (A percentage width did
+        // not work here — it resolved to a one-word column.)
+        style={{ width }}
         text={line.text}
         ranges={line.ranges}
         highlight={line.highlight}
