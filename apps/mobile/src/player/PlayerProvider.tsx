@@ -417,6 +417,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       error: null,
       pendingSurahId: null,
     });
+    // The first ayah's `ayahchange` fired before `live`, so do here what
+    // that handler does for every later ayah: bookmark it and warm the
+    // cache. Without this, a surah paused or closed inside its first ayah
+    // left no bookmark and the next launch offered the previous one.
+    const first = timings.ayahs[startIndex];
+    if (first) {
+      writeLastPosition({ surahId, ayah: first.ayah, localMs: 0 });
+      void cacheAyah(first);
+    }
 
     await sequencer.play();
   }, [patch, paint, teardown]);
