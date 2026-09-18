@@ -107,6 +107,39 @@ export function setColorScheme(next: ColorSchemeName): void {
   colorSchemeListeners.forEach(listener => listener(next));
 }
 
+/**
+ * Android's hardware back button. The real `BackHandler` calls the most
+ * recently added subscription first and stops at the first one returning
+ * `true`; a run in which every listener returns `false` is the case where
+ * the OS itself handles the press — by leaving the app.
+ */
+type BackListener = () => boolean;
+
+const backListeners: BackListener[] = [];
+
+export const BackHandler = {
+  addEventListener(_event: 'hardwareBackPress', listener: BackListener) {
+    backListeners.push(listener);
+    return {
+      remove() {
+        const at = backListeners.indexOf(listener);
+        if (at !== -1) backListeners.splice(at, 1);
+      },
+    };
+  },
+};
+
+/** Presses back. `false` is "nothing handled it" — the app would exit. */
+export function pressBack(): boolean {
+  for (const listener of [...backListeners].reverse()) if (listener()) return true;
+  return false;
+}
+
+/** How many live back subscriptions exist — a leak check. */
+export function backListenerCount(): number {
+  return backListeners.length;
+}
+
 export type AppStateStatus = 'active' | 'background' | 'inactive';
 
 type AppStateListener = (status: AppStateStatus) => void;
@@ -138,6 +171,7 @@ export function appStateListenerCount(): number {
 
 export function resetReactNative(): void {
   appStateListeners.clear();
+  backListeners.length = 0;
   AppState.currentState = 'active';
   colorScheme = 'light';
   Alert.alert.mockClear();

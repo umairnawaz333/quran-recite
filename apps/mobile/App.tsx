@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { setAudioModeAsync } from 'expo-audio';
@@ -62,6 +62,28 @@ function AppShell() {
   const [script, setScript] = useState<Script>('tajweed');
   const fontsReady = useQuranFonts();
   const { palette, scheme } = useTheme();
+
+  /**
+   * Android's hardware back button. Without this every press went to the
+   * OS, which closed the app — from Settings, and from the reader, where
+   * back plainly means "the screen I came from". Returning `false` on the
+   * list is deliberate: there is nowhere further back to go, so the OS
+   * should do what it does at the top of an app's stack and leave it.
+   *
+   * The reader also forgets its surah, exactly as its own "All surahs"
+   * button does, so nothing later reopens a reader nobody asked for.
+   *
+   * Depends on `screen` alone — one live subscription, re-armed only when
+   * the screen it has to decide about actually changes.
+   */
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (screen === 'settings') { setScreen('list'); return true; }
+      if (screen === 'reader') { setSurahId(null); setScreen('list'); return true; }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [screen]);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: palette.background }]}>
