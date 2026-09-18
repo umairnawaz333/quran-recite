@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { SettingsIcon } from '../components/NavIcons';
 import type { SurahMeta } from '@quran/core';
 import { getSurahList } from '../data/surahs';
 import { SCRIPT_FONTS } from '../reader/fonts';
@@ -72,12 +72,7 @@ export function SurahListScreen({ onSelect, script, onOpenSettings }: { onSelect
           accessibilityLabel="Settings"
           style={styles.settingsButton}
         >
-          <Svg width={24} height={24} viewBox="0 0 24 24">
-            <Path
-              d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Zm7.4-2.6a7.6 7.6 0 0 0 .1-.9 7.6 7.6 0 0 0-.1-.9l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.3.9a7 7 0 0 0-1.6-.9l-.4-2.5a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.5a7 7 0 0 0-1.6.9l-2.3-.9a.5.5 0 0 0-.6.2L2.6 9a.5.5 0 0 0 .1.6l2 1.6a7.6 7.6 0 0 0-.1.9 7.6 7.6 0 0 0 .1.9l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3a.5.5 0 0 0 .6.2l2.3-.9a7 7 0 0 0 1.6.9l.4 2.5a.5.5 0 0 0 .5.4h3.8a.5.5 0 0 0 .5-.4l.4-2.5a7 7 0 0 0 1.6-.9l2.3.9a.5.5 0 0 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6Z"
-              fill={palette.text}
-            />
-          </Svg>
+          <SettingsIcon size={24} color={palette.text} />
         </Pressable>
       </View>
       <FlatList

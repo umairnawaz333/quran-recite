@@ -8,6 +8,7 @@ import { SCRIPT_FONTS } from '../reader/fonts';
 import { usePlayer } from '../player/PlayerProvider';
 import { getSurahMeta } from '../data/surahs';
 import { PlayIcon } from '../components/PlayerIcons';
+import { BackIcon } from '../components/NavIcons';
 import { DownloadControl } from '../components/DownloadControl';
 import { useTheme } from '../theme/theme';
 
@@ -246,8 +247,8 @@ export function ReaderScreen({
       */}
       <View style={[styles.content, { maxWidth: contentWidth }]}>
         <View style={styles.header}>
-          <Pressable onPress={onBack} accessibilityRole="button">
-            <Text style={[styles.back, { color: palette.textMuted }]}>All surahs</Text>
+          <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" style={styles.back} hitSlop={8}>
+            <BackIcon size={26} color={palette.text} />
           </Pressable>
           <Text style={[styles.title, { color: palette.text }]}>{meta?.nameSimple ?? `Surah ${surahId}`}</Text>
           {/*
@@ -359,7 +360,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flex: 1, width: '100%', alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, paddingVertical: 12 },
-  back: { fontSize: 14 },
+  back: { marginLeft: -6 },
   title: { fontSize: 16, fontWeight: '600', flex: 1 },
   toggle: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
   toggleText: { fontSize: 13, fontWeight: '500' },

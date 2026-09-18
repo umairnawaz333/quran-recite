@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackIcon } from '../components/NavIcons';
 import { nativeApplicationVersion } from 'expo-application';
 import { getSurahList, getSurahMeta } from '../data/surahs';
 import { cancelDownload, deleteAllDownloads, downloadAll, removeDownload, removeDownloads, useDownloadedSurahs, useDownloadState, useIncompleteDownloads } from '../offline/downloadManager';
@@ -148,8 +149,8 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
   return (
     <ScrollView style={[styles.root, { backgroundColor: palette.background }]} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
-          <Text style={[styles.back, { color: palette.textMuted }]}>Back</Text>
+        <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" style={styles.back} hitSlop={8}>
+          <BackIcon size={26} color={palette.text} />
         </Pressable>
         <Text style={[styles.title, { color: palette.text }]}>Settings</Text>
       </View>
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingBottom: 32 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, gap: 12 },
-  back: { fontSize: 15 },
+  back: { marginLeft: -6 },
   title: { fontSize: 18, fontWeight: '600' },
   section: { paddingHorizontal: 16, paddingTop: 20 },
   sectionTitle: { fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
