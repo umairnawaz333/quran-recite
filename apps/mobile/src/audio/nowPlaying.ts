@@ -52,7 +52,7 @@ let boundPlayer: AudioPlayer | null = null;
  *   ActivityManager: Background started FGS: Disallowed [... uidState: SVC;
  *     BFGS denied: true; code:DENIED ...]
  *   ActivityManager: Service.startForeground() not allowed: service
- *     com.quran.mobile/expo.modules.audio.service.AudioControlsService
+ *     com.umairnawaz.quran/expo.modules.audio.service.AudioControlsService
  *
  * which leaves the service running but no longer in the foreground
  * (`dumpsys activity services` → `isForeground=false`) — i.e. it throws
