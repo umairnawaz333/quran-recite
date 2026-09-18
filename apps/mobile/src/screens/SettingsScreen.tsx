@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BackIcon } from '../components/NavIcons';
+import logo from '../../assets/logo.png';
 import { nativeApplicationVersion } from 'expo-application';
 import { getSurahList, getSurahMeta } from '../data/surahs';
 import { cancelDownload, deleteAllDownloads, downloadAll, removeDownload, removeDownloads, useDownloadedSurahs, useDownloadState, useIncompleteDownloads } from '../offline/downloadManager';
@@ -232,6 +233,7 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
 
       {/* No heading: a small centred footer, not a section. */}
       <View style={[styles.section, styles.aboutBlock]}>
+        <Image source={logo} style={styles.logo} accessibilityLabel="Quran Recite logo" />
         <Text style={[styles.about, { color: palette.text }]}>Version {nativeApplicationVersion ?? '—'}</Text>
         <Text style={[styles.about, { color: palette.textMuted }]}>© 2026 — Umair Nawaz</Text>
       </View>
@@ -263,5 +265,6 @@ const styles = StyleSheet.create({
   themeLabel: { fontSize: 14, fontWeight: '500' },
   list: { height: 260, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12 },
   aboutBlock: { alignItems: 'center', marginTop: 32 },
+  logo: { width: 56, height: 56, marginBottom: 8 },
   about: { fontSize: 12, paddingVertical: 2, textAlign: 'center' },
 });
