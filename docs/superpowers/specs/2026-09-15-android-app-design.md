@@ -285,7 +285,7 @@ system value, so the app follows the device when the device changes.
 
 **About** — the app version, read from the native application version rather
 than hardcoded so it cannot drift from what was built, and the credit
-`Umair Nawaz 2026`.
+`© 2026 — Umair Nawaz`.
 
 ---
 
@@ -392,7 +392,7 @@ playing with the screen locked and offers lock-screen controls, downloads a
 surah with visible progress and plays it with the network disabled, and has a
 settings page that manages downloaded surahs and their storage, switches
 between system, light and dark themes, and shows the app version above
-`Umair Nawaz 2026`.
+`© 2026 — Umair Nawaz`.
 
 `packages/core` still has no runtime dependencies and no platform imports, and
 the web app's behaviour is unchanged.

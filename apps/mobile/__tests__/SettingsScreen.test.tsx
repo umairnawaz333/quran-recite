@@ -293,7 +293,7 @@ describe('SettingsScreen — about', () => {
 
     const text = renderedText(tree);
     expect(text).toContain('Version 1.2.3');
-    expect(text).toContain('Umair Nawaz 2026');
+    expect(text).toContain('© 2026 — Umair Nawaz');
   });
 });
 

@@ -188,7 +188,7 @@ Reached from the home screen's gear icon (`SettingsScreen.tsx`):
 - **About**: the app version, read from the native app info via
   `expo-application` (so it reflects `app.json`'s `version` as it was built
   into that binary, not the source tree you happen to have checked out), and
-  a fixed credit line, "Umair Nawaz 2026".
+  a fixed credit line, "© 2026 — Umair Nawaz".
 
 ## Tests
 

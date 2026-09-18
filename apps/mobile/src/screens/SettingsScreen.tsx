@@ -218,7 +218,7 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: palette.textMuted }]}>About</Text>
         <Text style={[styles.about, { color: palette.text }]}>Version {nativeApplicationVersion ?? '—'}</Text>
-        <Text style={[styles.about, { color: palette.textMuted }]}>Umair Nawaz 2026</Text>
+        <Text style={[styles.about, { color: palette.textMuted }]}>© 2026 — Umair Nawaz</Text>
       </View>
     </ScrollView>
   );
