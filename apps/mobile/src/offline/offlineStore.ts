@@ -47,7 +47,11 @@ export function downloadedSurahs(expectedFilesFor: (surahId: number) => number):
   try {
     for (const entry of root.list()) {
       if (!(entry instanceof Directory)) continue;
-      const id = Number(entry.uri.split('/').pop());
+      // `name`, never `uri.split('/').pop()`: a real `Directory.uri` ends
+      // with a slash, so popping its last segment yields the empty string —
+      // `Number('')` is 0, and every folder was silently discarded, which on
+      // a device meant nothing was ever "downloaded" after a restart.
+      const id = Number(entry.name);
       if (Number.isInteger(id) && isSurahDownloaded(id, expectedFilesFor(id))) ids.push(id);
     }
   } catch { /* an unreadable root reads as nothing downloaded */ }

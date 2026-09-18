@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('expo-file-system', async () => (await import('./helpers/fakeFileSystem')).fakeFileSystemModule);
-import { store, reset, FakeFile, Paths } from './helpers/fakeFileSystem';
+import { store, reset, FakeDirectory, Paths } from './helpers/fakeFileSystem';
 import {
   isSurahDownloaded, downloadedSurahs, surahBytesOnDisk, deleteSurah, offlinePathFor,
   offlineTimingsStore, writeOfflineTimings, offlineDir,
@@ -34,6 +34,13 @@ describe('offlineStore', () => {
     writeOfflineTimings(1, timings(1, 7)); for (let n = 1; n <= 7; n++) putFile(1, `00100${n}.mp3`);
     writeOfflineTimings(112, timings(112, 4)); putFile(112, '112001.mp3');     // incomplete
     expect(downloadedSurahs(id => ({ 1: 7, 112: 4 } as Record<number, number>)[id] ?? 0)).toEqual([1]);
+  });
+
+  it('takes a surah id from its folder name, which a trailing slash must not hide', () => {
+    writeOfflineTimings(5, timings(5, 2)); putFile(5, '005001.mp3'); putFile(5, '005002.mp3');
+    const [folder] = new FakeDirectory(Paths.document, 'offline').list();
+    expect(folder.uri.endsWith('/')).toBe(true);     // the real API's shape
+    expect(downloadedSurahs(() => 2)).toEqual([5]);
   });
 
   it('reports bytes on disk and deletes a whole surah', () => {
