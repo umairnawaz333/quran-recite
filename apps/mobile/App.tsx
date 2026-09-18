@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { setAudioModeAsync } from 'expo-audio';
 import { SurahListScreen } from './src/screens/SurahListScreen';
 import { ReaderScreen, type Script } from './src/screens/ReaderScreen';
@@ -11,6 +12,14 @@ import { PlayerBar } from './src/player/PlayerBar';
 import { useQuranFonts } from './src/reader/fonts';
 import { ThemeProvider, useTheme } from './src/theme/theme';
 import { refreshFromDisk } from './src/offline/downloadManager';
+
+// The splash is hidden by us, not by the library's "first frame" heuristic:
+// on a Galaxy A51 the auto-hide never fired and the splash covered a fully
+// working app indefinitely, while the emulator hid it fine. Holding it until
+// the fonts are in also means the first frame the user sees is the real
+// list, not an unstyled flash — see the effect in `AppShell`.
+SplashScreen.preventAutoHideAsync().catch(() => { /* already hidden or never shown */ });
+SplashScreen.setOptions({ fade: true, duration: 250 });
 
 // app.json's `expo-audio` plugin is configured with `enableBackgroundPlayback`,
 // which only changes the Android manifest (a foreground service + the
@@ -62,6 +71,9 @@ function AppShell() {
   const [script, setScript] = useState<Script>('tajweed');
   const fontsReady = useQuranFonts();
   const { palette, scheme } = useTheme();
+  useEffect(() => {
+    if (fontsReady) SplashScreen.hideAsync().catch(() => { /* nothing to hide */ });
+  }, [fontsReady]);
 
   /**
    * Android's hardware back button. Without this every press went to the

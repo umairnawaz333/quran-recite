@@ -25,6 +25,7 @@ vi.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children?: unknown }) => children,
   SafeAreaView: (props: Record<string, unknown>) => createElement('SafeAreaView', props),
 }));
+vi.mock('expo-splash-screen', () => ({ preventAutoHideAsync: async () => true, hideAsync: async () => true, setOptions: () => {} }));
 vi.mock('expo-status-bar', () => ({ StatusBar: (props: Record<string, unknown>) => createElement('StatusBar', props) }));
 /** The real hook loads bundled `.ttf` assets, which vitest cannot resolve. */
 vi.mock('../src/reader/fonts', () => ({ useQuranFonts: () => true }));

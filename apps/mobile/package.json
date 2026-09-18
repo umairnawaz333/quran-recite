@@ -31,5 +31,12 @@
     "web": "expo start --web",
     "generate:text": "node scripts/generate-text-index.mjs",
     "test": "vitest run"
+  },
+  "expo": {
+    "autolinking": {
+      "buildFromSource": [
+        "expo-audio"
+      ]
+    }
   }
 }
