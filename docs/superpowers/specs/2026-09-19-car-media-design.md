@@ -134,8 +134,8 @@ Same layout as `modules/tajweed-text`. Contents:
   headless (`HeadlessJsTaskService` subclass `CarEngineService`, foreground with the media
   notification channel, `foregroundServiceType="mediaPlayback"`), queues commands until
   `engineReady()` (timeout 10 s → session error "Open Quran on your phone").
-- The spike files (`CarProbeService`, `src/car/probeTask.ts`, the `index.ts` import) are
-  **removed** by the first implementation task; `CarEngineService` replaces them.
+- The spike that proved cold-start (`CarProbeService` + a `CarProbe` headless task) was
+  deleted after the measurement; `CarEngineService` is its production form.
 
 ### 5.2 expo-audio patch (`patches/expo-audio+57.0.5.patch`, compiled from source)
 
