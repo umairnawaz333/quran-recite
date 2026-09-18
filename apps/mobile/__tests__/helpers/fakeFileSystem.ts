@@ -11,8 +11,15 @@ import { vi } from 'vitest';
  * `new File(...parts)`, `file.exists`, `file.size`, `file.name`,
  * `file.create()`, `file.write(string)`, `file.text()`, `file.delete()`,
  * `file.move(...)`, `File.downloadFileAsync(url, dest)`; `new
- * Directory(...parts)`, `dir.exists`, `dir.create()`, `dir.delete()`,
- * `dir.list()`; `Paths.document`, `Paths.cache`.
+ * Directory(...parts)`, `dir.exists`, `dir.name`, `dir.uri`,
+ * `dir.create(options)`, `dir.delete()`, `dir.list()`; `Paths.document`,
+ * `Paths.cache`.
+ *
+ * Where it used to be *lenient*, it is now literal, because every gap hid a
+ * bug that only showed up on a device (see the Stage 2 review): a
+ * `Directory.uri` really does end with a slash, `create()` really does throw
+ * when the parent folder is missing, `list()` really does throw on a folder
+ * that is not there, and a cancelled `DownloadTask` really does reject.
  *
  * `vi.mock` factories are hoisted above every import, so a test file that
  * wants this fake must reference it through an async factory — either
@@ -21,23 +28,83 @@ import { vi } from 'vitest';
  * — rather than a top-level import.
  */
 export const store = new Map<string, string>(); // uri -> contents
+/** Directories that have been created, as normalised paths (no trailing slash). */
 const dirs = new Set<string>();
 
+/** The roots the OS hands the app: always present, like the real ones. */
+const SEEDED_DIRS = ['file:///doc', 'file:///cache'];
+SEEDED_DIRS.forEach(d => dirs.add(d));
+
+/**
+ * Real `Paths.join` normalises a directory's trailing slash away, so a path
+ * built from `Paths.document` and two names has exactly one slash between
+ * each part. Every key in `store`/`dirs` is normalised this way.
+ */
+function normalise(part: string): string {
+  return part.replace(/\/+$/, '');
+}
+
 export function join(parts: (string | FakeDirectory | FakeFile)[]) {
-  return parts.map(p => (typeof p === 'string' ? p : p.uri)).join('/');
+  return parts
+    .map(p => (typeof p === 'string' ? p : p.uri))
+    .map(normalise)
+    .filter(part => part !== '')
+    .join('/');
+}
+
+/**
+ * The containing directory's path, or `null` at the top of the scheme —
+ * `file:///doc` has no parent worth checking, the way the real document
+ * directory's does not have to be created.
+ */
+function parentOf(path: string): string | null {
+  const cut = path.lastIndexOf('/');
+  if (cut <= 'file://'.length) return null;
+  return path.slice(0, cut);
 }
 
 export class FakeDirectory {
-  uri: string;
-  constructor(...parts: (string | FakeDirectory | FakeFile)[]) { this.uri = join(parts); }
-  get exists() { return dirs.has(this.uri) || [...store.keys()].some(k => k.startsWith(this.uri + '/')); }
-  create() { dirs.add(this.uri); }
-  delete() { dirs.delete(this.uri); for (const k of [...store.keys()]) if (k.startsWith(this.uri + '/')) store.delete(k); }
+  /** The normalised path — no trailing slash, which is what `store`/`dirs` key on. */
+  readonly path: string;
+  constructor(...parts: (string | FakeDirectory | FakeFile)[]) { this.path = join(parts); }
+  /**
+   * Real `Directory.uri` ALWAYS ends with a slash (`FileSystemDirectory`'s
+   * `asString()` appends one, and `list()` builds its entries from URIs that
+   * carry it), so `uri.split('/').pop()` on a directory is `''` — never its
+   * name. Code that wants the name must ask for `name`.
+   */
+  get uri() { return `${this.path}/`; }
+  /** Real `Directory.name` is `Paths.basename(uri)`, which ignores the trailing slash. */
+  get name() { return this.path.slice(this.path.lastIndexOf('/') + 1); }
+  get exists() {
+    return dirs.has(this.path) || [...store.keys()].some(k => k.startsWith(this.path + '/'));
+  }
+  /**
+   * Real `create()` throws when the parent directory does not exist unless
+   * `intermediates: true` is passed — the failure the app hits the very first
+   * time it writes into `offline/<id>/`, whose `offline` parent is not there
+   * yet.
+   */
+  create(options?: { intermediates?: boolean }) {
+    const parent = parentOf(this.path);
+    if (parent && !new FakeDirectory(parent).exists) {
+      if (!options?.intermediates) throw new Error(`Directory does not exist: ${parent}/`);
+      new FakeDirectory(parent).create(options);
+    }
+    dirs.add(this.path);
+  }
+  delete() {
+    dirs.delete(this.path);
+    for (const d of [...dirs]) if (d.startsWith(this.path + '/')) dirs.delete(d);
+    for (const k of [...store.keys()]) if (k.startsWith(this.path + '/')) store.delete(k);
+  }
+  /** Real `list()` throws when the directory does not exist; it does not read as empty. */
   list(): (FakeDirectory | FakeFile)[] {
+    if (!this.exists) throw new Error(`Directory does not exist: ${this.uri}`);
     const names = new Set<string>();
-    for (const k of store.keys()) if (k.startsWith(this.uri + '/')) names.add(k.slice(this.uri.length + 1).split('/')[0]);
-    for (const d of dirs) if (d.startsWith(this.uri + '/')) names.add(d.slice(this.uri.length + 1).split('/')[0]);
-    return [...names].map(n => (store.has(`${this.uri}/${n}`) ? new FakeFile(this.uri, n) : new FakeDirectory(this.uri, n)));
+    for (const k of store.keys()) if (k.startsWith(this.path + '/')) names.add(k.slice(this.path.length + 1).split('/')[0]);
+    for (const d of dirs) if (d.startsWith(this.path + '/')) names.add(d.slice(this.path.length + 1).split('/')[0]);
+    return [...names].map(n => (store.has(`${this.path}/${n}`) ? new FakeFile(this.path, n) : new FakeDirectory(this.path, n)));
   }
 }
 
@@ -50,7 +117,12 @@ export class FakeFile {
   get name() { return this.uri.split('/').pop()!; }
   /** Only ever read from in `ayahCache.ts`'s eviction sort; a fresh fake write has none. */
   get modificationTime(): number { return 0; }
-  create() { store.set(this.uri, ''); }
+  /** Real `create()` throws when the containing directory does not exist. */
+  create() {
+    const parent = parentOf(this.uri);
+    if (parent && !new FakeDirectory(parent).exists) throw new Error(`Directory does not exist: ${parent}/`);
+    store.set(this.uri, '');
+  }
   /** `failWrites`, when it matches this file, throws as a full disk (or a
    * missing document directory) would — the callers here must never let that
    * reach the app. */
@@ -84,7 +156,7 @@ export class FakeFile {
    * exactly as it was, exercising the caller's post-move `exists` check.
    */
   async move(to: FakeFile | FakeDirectory) {
-    const dest = to instanceof FakeDirectory ? `${to.uri}/${this.name}` : to.uri;
+    const dest = to instanceof FakeDirectory ? `${to.path}/${this.name}` : to.uri;
     await new Promise<void>(r => setTimeout(r, 0));
     if (failMoves?.test(dest)) return;
     store.set(dest, store.get(this.uri) ?? '');
@@ -124,19 +196,25 @@ export function setFailDownloads(r: RegExp | null) { failDownloads = r; }
 
 export class FakeDownloadTask {
   cancelled = false;
-  private release: (() => void) | null = null;
+  released = false;
+  private resolveHeld: (() => void) | null = null;
   constructor(public url: string, public dest: FakeFile) { downloads.push({ url, dest, task: this }); }
   async downloadAsync(): Promise<FakeFile | null> {
     if (failDownloads?.test(this.url)) throw new Error(`download failed: ${this.url}`);
-    if (holdDownloads?.test(this.url)) await new Promise<void>(r => { this.release = r; });
-    if (this.cancelled) return null;
+    if (holdDownloads?.test(this.url)) await new Promise<void>(r => { this.resolveHeld = r; });
+    // Real `cancel()` REJECTS the pending `downloadAsync()` — a `null`
+    // resolution means the task was *paused*, nothing else. A caller that
+    // reads "cancelled" off a null return would never see one on a device.
+    if (this.cancelled) throw new Error(`download cancelled: ${this.url}`);
     store.set(this.dest.uri, 'mp3-bytes');
     return this.dest;
   }
-  cancel() { this.cancelled = true; this.release?.(); }
+  cancel() { this.cancelled = true; this.resolveHeld?.(); }
   addListener() { return { remove() {} }; }
+  /** Real `release()` frees the native handle and is always present. */
+  release() { this.released = true; }
   /** Test-only: lets a held download proceed, as if the network responded. */
-  releaseHeld() { this.release?.(); }
+  releaseHeld() { this.resolveHeld?.(); }
 }
 export function releaseAllHeld() { downloads.forEach(d => d.task.releaseHeld()); }
 
@@ -182,6 +260,7 @@ export function readSavedPosition(): { surahId: number; ayah: number } | null {
 export function reset(): void {
   store.clear();
   dirs.clear();
+  SEEDED_DIRS.forEach(d => dirs.add(d));
   holdingPositionRead = false;
   heldReads.length = 0;
   FakeFile.downloadFileAsync.mockClear();
