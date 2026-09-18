@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BackIcon } from '../components/NavIcons';
 import logo from '../../assets/logo.png';
+import logoDark from '../../assets/logo-dark.png';
 import { nativeApplicationVersion } from 'expo-application';
 import { getSurahList, getSurahMeta } from '../data/surahs';
 import { cancelDownload, deleteAllDownloads, downloadAll, removeDownload, removeDownloads, useDownloadedSurahs, useDownloadState, useIncompleteDownloads } from '../offline/downloadManager';
@@ -101,7 +102,7 @@ function IncompleteRow({ bytes, onDelete, palette }: { bytes: number; onDelete: 
 
 /** Settings: offline management, the theme picker and the About block (spec Task 7). */
 export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; onOpenSurah: (id: number) => void }) {
-  const { palette } = useTheme();
+  const { palette, scheme } = useTheme();
   const [preference, setPreference] = useThemePreference();
   const downloaded = useDownloadedSurahs();
   const incomplete = useIncompleteDownloads();
@@ -233,7 +234,7 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
 
       {/* No heading: a small centred footer, not a section. */}
       <View style={[styles.section, styles.aboutBlock]}>
-        <Image source={logo} style={styles.logo} accessibilityLabel="Quran Recite logo" />
+        <Image source={scheme === 'dark' ? logoDark : logo} style={styles.logo} accessibilityLabel="Quran Recite logo" />
         <Text style={[styles.about, { color: palette.text }]}>Version {nativeApplicationVersion ?? '—'}</Text>
         <Text style={[styles.about, { color: palette.textMuted }]}>© 2026 — Umair Nawaz</Text>
       </View>

@@ -42,6 +42,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF",
           "dark": {
+            "image": "./assets/splash-icon-dark.png",
             "backgroundColor": "#0F1115"
           }
         }
@@ -53,7 +54,8 @@
         }
       ],
       "expo-font",
-      "./plugins/withDensityConfigChange"
+      "./plugins/withDensityConfigChange",
+      "./plugins/withNotificationIcon"
     ]
   }
 }

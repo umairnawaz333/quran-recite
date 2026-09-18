@@ -1,19 +1,43 @@
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 196a5d5..7fd4ab7 100644
+index 196a5d5..dfb924b 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -122,6 +122,7 @@ class AudioControlsService : MediaSessionService() {
-       .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
+@@ -117,11 +117,20 @@ class AudioControlsService : MediaSessionService() {
+     }
+   }
+ 
++  // The app's own status-bar icon, if it ships `@drawable/notification_icon`
++  // (see the app's `withNotificationIcon` config plugin); media3's generic
++  // play circle otherwise.
++  private fun smallIconRes(): Int {
++    val own = resources.getIdentifier("notification_icon", "drawable", packageName)
++    return if (own != 0) own else androidx.media3.session.R.drawable.media3_icon_circular_play
++  }
++
+   private fun buildPlaceholderNotification(): Notification =
+     NotificationCompat.Builder(this, CHANNEL_ID)
+-      .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
++      .setSmallIcon(smallIconRes())
        .setContentTitle("‎")
        .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
 +      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
        .setSilent(true)
        .setShowWhen(false)
        .build()
-@@ -184,6 +185,10 @@ class AudioControlsService : MediaSessionService() {
+@@ -175,7 +184,7 @@ class AudioControlsService : MediaSessionService() {
+     val session = mediaSession ?: return null
+ 
+     val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+-      .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
++      .setSmallIcon(smallIconRes())
+       // If the title is null or empty string android sets the notification to "<AppName> is running..." we want to keep the notification empty so we \u200E to keep the text empty.
+       .setContentTitle(currentMetadata?.title ?: "\u200E")
+       .setContentText(currentMetadata?.artist)
+@@ -184,6 +193,11 @@ class AudioControlsService : MediaSessionService() {
        .setContentIntent(buildContentIntent())
        .setAutoCancel(false)
        .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
++      .setColor(0xFFFCC758.toInt())
 +      // Media controls belong on the lock screen. Without this the
 +      // notification is VISIBILITY_PRIVATE, and a device set to hide
 +      // notification content on the lock screen hides the player with it.

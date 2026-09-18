@@ -30,3 +30,6 @@ playwright-report/
 # already includes .next/types/** and .next/dev/types/**, so the committed
 # copy has no independent meaning — it only dirtied `git status` after builds.
 next-env.d.ts
+
+# Python venv for the logo generator (design/logo/generate.py)
+design/logo/.venv/
