@@ -6,7 +6,6 @@ import { getSurahList } from '../data/surahs';
 import { SCRIPT_FONTS } from '../reader/fonts';
 import type { Script } from './ReaderScreen';
 import { useTheme } from '../theme/theme';
-import { DownloadControl } from '../components/DownloadControl';
 
 // Where the list was scrolled to when the user last left it, and how tall
 // its (uniform) rows are. The screen unmounts while a surah is open, so
@@ -40,10 +39,6 @@ export function SurahListScreen({ onSelect, script, onOpenSettings }: { onSelect
         <Text style={[styles.simple, { color: palette.text }]}>{item.nameSimple}</Text>
         <Text style={[styles.english, { color: palette.textMuted }]}>{item.nameEnglish} · {item.ayahCount} ayahs</Text>
       </View>
-      {/* Its own `Pressable` — a tap here must not also trigger the row's
-          `onPress` (which opens the surah) — and it subscribes to only this
-          surah's download state, so a tick never re-renders any other row. */}
-      <DownloadControl surahId={item.id} compact />
       {/* The same face the reader uses for the chosen script — the script
           choice is app-wide, so the names on the home page follow it. */}
       <Text

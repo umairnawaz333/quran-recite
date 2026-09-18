@@ -157,22 +157,36 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: palette.textMuted }]}>Offline</Text>
-        {getSurahList().map(s => (
-          <InProgressRow key={s.id} surahId={s.id} name={s.nameSimple} palette={palette} />
-        ))}
-        {downloaded.length === 0 && (
-          <Text style={[styles.empty, { color: palette.textMuted }]}>No surahs downloaded yet.</Text>
-        )}
-        {downloadedSizes.map(({ id, bytes }) => (
-          <DownloadedRow key={id} id={id} bytes={bytes} onOpenSurah={onOpenSurah} palette={palette} />
-        ))}
-        {incomplete.ids.length > 0 && (
-          <IncompleteRow
-            bytes={incomplete.bytes}
-            onDelete={() => removeDownloads(incomplete.ids)}
-            palette={palette}
-          />
-        )}
+        {/*
+          A fixed-height, independently scrolling box for the rows, so with
+          many surahs downloaded the total, "Delete all", "Download all" and
+          the sections below stay where the thumb expects them instead of
+          sliding off the bottom of a 114-row page. `nestedScrollEnabled` is
+          what lets this ScrollView take the gesture inside its parent on
+          Android.
+        */}
+        <ScrollView
+          style={[styles.list, { borderColor: palette.border }]}
+          nestedScrollEnabled
+          testID="offline-list"
+        >
+          {getSurahList().map(s => (
+            <InProgressRow key={s.id} surahId={s.id} name={s.nameSimple} palette={palette} />
+          ))}
+          {downloaded.length === 0 && (
+            <Text style={[styles.empty, { color: palette.textMuted }]}>No surahs downloaded yet.</Text>
+          )}
+          {downloadedSizes.map(({ id, bytes }) => (
+            <DownloadedRow key={id} id={id} bytes={bytes} onOpenSurah={onOpenSurah} palette={palette} />
+          ))}
+          {incomplete.ids.length > 0 && (
+            <IncompleteRow
+              bytes={incomplete.bytes}
+              onDelete={() => removeDownloads(incomplete.ids)}
+              palette={palette}
+            />
+          )}
+        </ScrollView>
         {anythingOnDisk && (
           <View style={styles.totalRow}>
             <Text style={[styles.total, { color: palette.text }]}>Total: {formatBytes(totalBytes)}</Text>
@@ -247,6 +261,7 @@ const styles = StyleSheet.create({
   themeRow: { flexDirection: 'row', gap: 10 },
   themeOption: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, alignItems: 'center' },
   themeLabel: { fontSize: 14, fontWeight: '500' },
+  list: { height: 260, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12 },
   aboutBlock: { alignItems: 'center', marginTop: 32 },
   about: { fontSize: 12, paddingVertical: 2, textAlign: 'center' },
 });
