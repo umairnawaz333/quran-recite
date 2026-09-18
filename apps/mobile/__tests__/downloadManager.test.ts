@@ -246,6 +246,30 @@ describe('downloadManager — leftover .part files', () => {
     await settle();
   });
 
+  it('does not report the download that is running right now as incomplete', async () => {
+    setHoldDownloads(/112003/);
+    startDownload(112);
+    await settle();                                               // 2 of 4 files on disk
+    // Any refresh mid-download — a delete elsewhere, another surah finishing.
+    refreshFromDisk();
+    expect(dl.incomplete()).toEqual({ ids: [], bytes: 0 });
+    expect(dl.getState(112)).toEqual({ status: 'downloading', done: 2, total: 4 });
+    cancelDownload(112);
+    await settle();
+  });
+
+  it('a cancelled download shows up as incomplete straight away, without another refresh', async () => {
+    setHoldDownloads(/112003/);
+    startDownload(112);
+    await settle();
+    cancelDownload(112);
+    await settle();
+    // No refreshFromDisk() here on purpose: the manager must have done it.
+    expect(dl.getState(112)).toEqual({ status: 'idle' });
+    expect(dl.incomplete().ids).toEqual([112]);
+    expect(dl.incomplete().bytes).toBeGreaterThan(0);
+  });
+
   it('reports an incomplete folder\'s surah and the bytes it is holding', () => {
     seedDownloaded(1, 7, 100);                                    // complete
     store.set('file:///doc/offline/112/112001.mp3', 'x'.repeat(50));

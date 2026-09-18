@@ -172,7 +172,10 @@ Reached from the home screen's gear icon (`SettingsScreen.tsx`):
 
 - **Offline**: lists every downloaded surah with its on-disk size (summed
   from the actual audio files, not the manifest) and a running total, each
-  with a delete action; "Download all" shows the manifest's `totalBytes` and
+  with a delete action, plus one "Incomplete downloads" row for the finished
+  files a cancelled or killed download left behind (counted in the total,
+  deletable, and never the download that is running right now); "Download
+  all" shows the manifest's `totalBytes` and
   asks for confirmation before starting, since it can mean gigabytes over a
   live connection.
 - **Appearance**: System / Light / Dark. The preference persists to
@@ -190,7 +193,7 @@ Reached from the home screen's gear icon (`SettingsScreen.tsx`):
 ## Tests
 
 ```bash
-npm test          # from the repo root, or `npm test` inside apps/mobile — 150 vitest tests
+npm test          # from the repo root, or `npm test` inside apps/mobile — 168 vitest tests
 ```
 
 Covers the timing sequencer (`AyahSequencer`), the `expo-audio` player

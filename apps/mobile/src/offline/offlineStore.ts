@@ -68,7 +68,16 @@ export interface OfflineScan {
  * only the download manager knows which surah is being downloaded right now
  * and therefore which `.part` is alive.
  */
-export function scanOffline(expectedFilesFor: (surahId: number) => number): OfflineScan {
+export function scanOffline(
+  expectedFilesFor: (surahId: number) => number,
+  /**
+   * The surah being downloaded right now, if any. Its folder is half-full by
+   * definition and is NOT a leftover: reporting it as incomplete would show
+   * the live download twice in Settings (as progress and as "Incomplete
+   * downloads") and let a Delete there tear down an in-flight download.
+   */
+  inFlight?: number,
+): OfflineScan {
   const scan: OfflineScan = { downloaded: [], incomplete: [], incompleteBytes: 0, partFiles: [] };
   const root = new Directory(Paths.document, ROOT);
   if (!root.exists) return scan;
@@ -97,7 +106,7 @@ export function scanOffline(expectedFilesFor: (surahId: number) => number): Offl
     const expected = expectedFilesFor(id);
     if (expected > 0 && audio.length === expected && files.some(f => f.name === TIMINGS_FILE)) {
       scan.downloaded.push(id);
-    } else if (audio.length > 0) {
+    } else if (audio.length > 0 && id !== inFlight) {
       scan.incomplete.push(id);
       scan.incompleteBytes += audio.reduce((sum, f) => sum + (f.size ?? 0), 0);
     }

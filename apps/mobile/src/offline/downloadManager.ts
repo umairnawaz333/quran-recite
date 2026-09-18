@@ -92,7 +92,7 @@ function sameIds(a: number[], b: number[]): boolean {
  * does not force a re-render on a no-op refresh.
  */
 export function refreshFromDisk(): void {
-  const scan = scanOffline(expectedFiles);
+  const scan = scanOffline(expectedFiles, active?.surahId);
   // A `.part` anywhere but the folder being downloaded RIGHT NOW is a
   // leftover from a download that was cancelled or killed with the app: its
   // bytes are unusable (nothing resumes a part file — see the manager's
@@ -186,6 +186,11 @@ async function pump(): Promise<void> {
     // must not clear a *newer* generation's `active` out from under it were
     // one somehow already running by the time this settles.
     if (active === ctl) active = null;
+    // A download that did not finish (cancelled, or failed) leaves finished
+    // files behind that are now leftovers — walk the disk once so Settings'
+    // "Incomplete downloads" row and total show them right away, and the
+    // `.part` sweep can now reach this folder too (`active` is clear).
+    if (downloads.getState(surahId).status !== 'done') refreshFromDisk();
     void pump();
   }
 }
@@ -243,9 +248,7 @@ async function downloadSurah(surahId: number, ctl: { task: DownloadTask | null; 
       set(surahId, { status: 'error', message: err instanceof Error ? err.message : String(err) });
       return;
     } finally {
-      // Optional chaining: the fake's `release` field starts `null` until a
-      // held download sets it, unlike the real API's always-present method.
-      task.release?.();
+      task.release();
       ctl.task = null;
     }
     done++;
@@ -254,5 +257,5 @@ async function downloadSurah(surahId: number, ctl: { task: DownloadTask | null; 
   // Timings last: the folder is self-contained only once every file is there.
   writeOfflineTimings(surahId, timings);
   refreshFromDisk();
-  set(surahId, isSurahDownloaded(surahId, total) ? { status: 'done' } : { status: 'error', message: 'Download incomplete' });
+  set(surahId, isSurahDownloaded(surahId, total) ? DONE_STATE : { status: 'error', message: 'Download incomplete' });
 }
