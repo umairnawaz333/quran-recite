@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "npm run dev --workspace @quran/web",
     "build": "npm run build --workspace @quran/web",
@@ -14,9 +17,11 @@
     "typecheck": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/core/tsconfig.test.json && tsc --noEmit -p apps/mobile/tsconfig.json",
     "fetch:data": "npm run fetch:data --workspace @quran/web",
     "fetch:fonts": "npm run fetch:fonts --workspace @quran/web",
-    "build:audio-sizes": "node packages/quran-data/scripts/build-audio-sizes.mjs"
+    "build:audio-sizes": "node packages/quran-data/scripts/build-audio-sizes.mjs",
+    "postinstall": "patch-package"
   },
   "devDependencies": {
+    "patch-package": "^8.0.1",
     "typescript": "5.9.3"
   }
 }

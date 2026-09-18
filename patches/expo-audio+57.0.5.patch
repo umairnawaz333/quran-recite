@@ -1,0 +1,23 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+index 196a5d5..7fd4ab7 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+@@ -122,6 +122,7 @@ class AudioControlsService : MediaSessionService() {
+       .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
+       .setContentTitle("‎")
+       .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
++      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+       .setSilent(true)
+       .setShowWhen(false)
+       .build()
+@@ -184,6 +185,10 @@ class AudioControlsService : MediaSessionService() {
+       .setContentIntent(buildContentIntent())
+       .setAutoCancel(false)
+       .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
++      // Media controls belong on the lock screen. Without this the
++      // notification is VISIBILITY_PRIVATE, and a device set to hide
++      // notification content on the lock screen hides the player with it.
++      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+ 
+     val style = MediaStyleNotificationHelper.MediaStyle(session)
+ 
