@@ -44,6 +44,27 @@ Every external dataset used by this project, with its licence and how it is used
   purposes, which are outside this project's scope — should confirm the rights
   position for themselves.
 
+## Audio size manifest (mobile offline downloads)
+
+- **Source:** derived, not fetched — `packages/quran-data/scripts/build-audio-sizes.mjs`
+  walks the audio already fetched locally under
+  `apps/web/public/audio/<reciter>/` and measures each file with `statSync`.
+- **Generate it:** `npm run build:audio-sizes` from the repo root (requires
+  the audio to be present locally first: `npm run fetch:data -- --surahs=1-114`).
+  Re-run it whenever that committed-locally-but-gitignored audio set changes
+  — a different reciter, a re-encode, or added/removed files — so the sizes
+  the mobile app shows stay accurate.
+- **Output:** `packages/quran-data/audio-sizes.json`, committed to the repo.
+  Shape: `{ reciterId, generatedAt, totalBytes, totalFiles, surahs: { "<id>":
+  { bytes, files } } }`, one entry per surah plus a grand total.
+- **Use:** bundled into `apps/mobile` and read by its Settings screen and
+  per-surah download controls to show a size — e.g. "Download all (2.7 GB)"
+  — *before* a download starts. `totalBytes` specifically is what drives the
+  confirmation prompt shown before "Download all" begins, since starting it
+  can mean pulling several gigabytes over the user's connection.
+- **Runtime dependency:** none — it is a static JSON file bundled with the
+  app, not fetched.
+
 ## Fonts
 
 | Font | Use | Licence |

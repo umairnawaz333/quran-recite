@@ -116,17 +116,89 @@ scratch. `TajweedLine.tsx` is the one call site that switches between this
 native view (Android, tajweed script only) and plain `<Text>` (iOS, and
 IndoPak on both platforms, which has no colour runs to fragment on).
 
+## Offline downloads
+
+Unlike `apps/web` (see the root [`README.md`](../../README.md#no-offline-support-web-app)),
+this app can download a surah's recitation and play it with no network at
+all. The pieces:
+
+- **The size manifest** (`packages/quran-data/audio-sizes.json`) is built
+  once, ahead of time, by `npm run build:audio-sizes`
+  (`packages/quran-data/scripts/build-audio-sizes.mjs`), which walks the
+  locally fetched audio under `apps/web/public/audio/<reciter>/` and records
+  each surah's byte count and file count, plus a `totalBytes`/`totalFiles`
+  grand total. The app bundles this JSON and reads it to show a size (e.g.
+  "Download all (2.7 GB)") *before* a download starts, rather than issuing
+  hundreds of HEAD requests to learn what this file already knows. **Re-run
+  it** whenever the committed audio under `apps/web/public/audio/` changes —
+  a different reciter, a re-encode, or added/removed files — so the sizes
+  shown in the app stay honest. It requires the audio to be present locally
+  first (`npm run fetch:data -- --surahs=1-114`).
+- **On-disk layout**: each downloaded surah lives in its own folder,
+  `<Paths.document>/offline/<surahId>/`, holding that surah's ayah audio
+  files (`NNNNNN.mp3`, matching the URL's own filename) and a `timings.json`
+  — so a downloaded surah is fully self-contained and plays with the network
+  off, timings included (`src/offline/offlineStore.ts`). There is no
+  separate index of "what's downloaded" kept anywhere: the filesystem is the
+  only authority. A surah counts as downloaded only when its folder has
+  exactly the expected number of audio files *and* a `timings.json` — an
+  index could disagree with reality after a crash or an OS eviction, and the
+  failure mode of trusting one would be the app promising a surah it cannot
+  actually play offline.
+- **Downloads are resumable and crash-safe** (`src/offline/downloadManager.ts`):
+  each file downloads to a `<name>.part` sibling first and is renamed to its
+  final name only once every byte has arrived, so a partial file can never
+  be mistaken for a finished one. `timings.json` is written last, after every
+  audio file — the folder only becomes "complete" once nothing more can fail.
+  Cancelling a download keeps whatever files already finished; starting that
+  surah again skips them and resumes from the first missing file. This is a
+  **per-file** resume (each ayah's file is all-or-nothing), not a byte-range
+  resume within a single file — a `.part` that didn't finish is deleted and
+  re-fetched from the start, not resumed mid-file.
+- **Downloads only run while the app is open.** There is no OS-level
+  background transfer service, so both a single surah's download and
+  "Download all" stop if the app is closed or the process is killed — this
+  applies the same way whether you started one surah from its own control or
+  every surah from Settings. Leave the app open (foreground or backgrounded
+  but still alive) until the download you started finishes.
+- **Playback** prefers the offline file over the network
+  (`offlinePathFor ?? localPathFor` in `PlayerProvider.tsx`) and reads
+  offline timings through `offlineTimingsStore`, so a downloaded surah's
+  audio and highlighting both come from disk with no fetch at all.
+
+### Settings
+
+Reached from the home screen's gear icon (`SettingsScreen.tsx`):
+
+- **Offline**: lists every downloaded surah with its on-disk size (summed
+  from the actual audio files, not the manifest) and a running total, each
+  with a delete action; "Download all" shows the manifest's `totalBytes` and
+  asks for confirmation before starting, since it can mean gigabytes over a
+  live connection.
+- **Appearance**: System / Light / Dark. The preference persists to
+  `<Paths.document>/theme.json` (`src/theme/theme.tsx`) and is read back on
+  launch; "System" is a *live* choice — it re-resolves against
+  `useColorScheme()` on every change, so toggling the device's dark mode
+  while the app is open switches it immediately, no restart needed. Every
+  screen's colours, including the native tajweed highlight
+  (`TajweedTextView`'s `highlightColor` prop), come from this one palette.
+- **About**: the app version, read from the native app info via
+  `expo-application` (so it reflects `app.json`'s `version` as it was built
+  into that binary, not the source tree you happen to have checked out), and
+  a fixed credit line, "Umair Nawaz 2026".
+
 ## Tests
 
 ```bash
-npm test          # from the repo root, or `npm test` inside apps/mobile — 91 vitest tests
+npm test          # from the repo root, or `npm test` inside apps/mobile — 150 vitest tests
 ```
 
 Covers the timing sequencer (`AyahSequencer`), the `expo-audio` player
-adapter, the tajweed colour palette, and the single-string line builder that
-feeds `TajweedTextView`. Root `npm test` also runs `packages/core`'s 90 tests
+adapter, the tajweed colour palette, the single-string line builder that
+feeds `TajweedTextView`, the offline store and download manager, and the
+theme provider. Root `npm test` also runs `packages/core`'s 91 tests
 (including the platform-free guard that this app is proof of) and
-`apps/web`'s 83.
+`apps/web`'s 91.
 
 ## Data
 

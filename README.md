@@ -131,7 +131,7 @@ useful for offline development.
 ## Tests
 
 ```bash
-npm test          # 273 unit tests (vitest): 91 in packages/core, 91 in apps/mobile, 91 in apps/web
+npm test          # 332 unit tests (vitest): 91 in packages/core, 150 in apps/mobile, 91 in apps/web
 npm run test:e2e  # 4 Playwright tests, driving a real browser (apps/web only)
 ```
 
@@ -209,9 +209,13 @@ staying unhighlighted while another surah plays, the loading-state ordering
   GitHub Release when `NEXT_PUBLIC_AUDIO_BASE_URL` is configured; see "No
   offline support" below for why that indirection exists.
 
-### No offline support
+### No offline support (web app)
 
-There is no service worker and no offline download feature. This was
+This is about `apps/web` specifically — the Android app (`apps/mobile`) has
+its own, separate offline download feature; see
+[`apps/mobile/README.md`](apps/mobile/README.md#offline-downloads).
+
+The web app has no service worker and no offline download feature. This was
 considered and dropped: a service worker can only read a cross-origin
 response if that origin sends CORS headers. When `NEXT_PUBLIC_AUDIO_BASE_URL`
 is configured, `packages/core/src/data/audioUrl.ts` resolves audio to a
