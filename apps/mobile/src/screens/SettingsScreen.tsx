@@ -215,8 +215,8 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
         </View>
       </View>
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: palette.textMuted }]}>About</Text>
+      {/* No heading: a small centred footer, not a section. */}
+      <View style={[styles.section, styles.aboutBlock]}>
         <Text style={[styles.about, { color: palette.text }]}>Version {nativeApplicationVersion ?? '—'}</Text>
         <Text style={[styles.about, { color: palette.textMuted }]}>© 2026 — Umair Nawaz</Text>
       </View>
@@ -246,5 +246,6 @@ const styles = StyleSheet.create({
   themeRow: { flexDirection: 'row', gap: 10 },
   themeOption: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, alignItems: 'center' },
   themeLabel: { fontSize: 14, fontWeight: '500' },
-  about: { fontSize: 14, paddingVertical: 4 },
+  aboutBlock: { alignItems: 'center' },
+  about: { fontSize: 12, paddingVertical: 2, textAlign: 'center' },
 });

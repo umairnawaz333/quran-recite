@@ -185,7 +185,7 @@ Reached from the home screen's gear icon (`SettingsScreen.tsx`):
   while the app is open switches it immediately, no restart needed. Every
   screen's colours, including the native tajweed highlight
   (`TajweedTextView`'s `highlightColor` prop), come from this one palette.
-- **About**: the app version, read from the native app info via
+- **Footer** (no heading, centred): the app version, read from the native app info via
   `expo-application` (so it reflects `app.json`'s `version` as it was built
   into that binary, not the source tree you happen to have checked out), and
   a fixed credit line, "© 2026 — Umair Nawaz".
