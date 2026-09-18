@@ -165,7 +165,7 @@ describe('PlayerBar — what it shows', () => {
 
   it('greys a disabled prev/next with the disabled tone, not the border colour', () => {
     const stroke = (tree: ReactTestRenderer, label: string) =>
-      control(tree, label).findAll(node => node.type === 'Path')[0].props.stroke;
+      control(tree, label).findAll(node => String(node.type) === 'Path')[0].props.stroke;
 
     const disabled = renderBar({ surahId: 1, isLoading: true, pendingSurahId: 1 }).tree;
     const enabled = renderBar({ surahId: 1, isPlaying: true }).tree;
