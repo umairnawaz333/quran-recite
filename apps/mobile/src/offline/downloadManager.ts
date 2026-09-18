@@ -3,7 +3,7 @@ import { Directory, File, DownloadTask } from 'expo-file-system';
 import { loadTimings, resolveAudioUrl } from '@quran/core';
 import type { SurahTimings } from '@quran/core';
 import { getSurahList } from '../data/surahs';
-import { audioFileName, deleteSurah, downloadedSurahs, isSurahDownloaded, offlineDir, writeOfflineTimings } from './offlineStore';
+import { audioFileName, deleteSurah, isSurahDownloaded, offlineDir, scanOffline, writeOfflineTimings } from './offlineStore';
 
 export type DownloadState =
   | { status: 'idle' }
@@ -34,14 +34,28 @@ function expectedFiles(surahId: number): number { return getSurahList().find(s =
 // `Object.is`: a new object on every call reads as "changed" on every
 // render and forces an infinite re-render loop for any surah still idle.
 const IDLE_STATE: DownloadState = { status: 'idle' };
+// Shared for the same reason, one step further on: `refreshFromDisk` runs
+// on every state change and used to hand each downloaded surah a FRESH
+// `{ status: 'done' }`, which `useDownloadState`'s `Object.is` snapshot
+// comparison reads as a change — so every done row in a 114-row list
+// re-rendered on every refresh.
+const DONE_STATE: DownloadState = { status: 'done' };
 
 export const downloads = {
   getState(surahId: number): DownloadState { return states.get(surahId) ?? IDLE_STATE; },
   subscribe(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; },
   /** The snapshot backing `useDownloadedSurahs` — same array reference across a no-op `refreshFromDisk()`. */
   downloaded(): number[] { return downloadedSnapshot; },
+  /** The snapshot backing `useIncompleteDownloads`, stable the same way. */
+  incomplete(): IncompleteDownloads { return incompleteSnapshot; },
   /** Test seam: forget everything in memory (the fake disk is reset separately). */
-  __resetForTests() { states.clear(); queue.length = 0; active = null; },
+  __resetForTests() {
+    states.clear();
+    queue.length = 0;
+    active = null;
+    downloadedSnapshot = [];
+    incompleteSnapshot = NOTHING_INCOMPLETE;
+  },
 };
 
 export function useDownloadState(surahId: number): DownloadState {
@@ -51,6 +65,20 @@ export function useDownloadState(surahId: number): DownloadState {
 let downloadedSnapshot: number[] = [];
 export function useDownloadedSurahs(): number[] {
   return useSyncExternalStore(downloads.subscribe, () => downloadedSnapshot);
+}
+
+/** The folders a cancelled or killed download left behind, and their size. */
+export interface IncompleteDownloads { ids: number[]; bytes: number }
+
+const NOTHING_INCOMPLETE: IncompleteDownloads = { ids: [], bytes: 0 };
+let incompleteSnapshot: IncompleteDownloads = NOTHING_INCOMPLETE;
+
+/**
+ * What Settings shows as "Incomplete downloads": leftovers that are not
+ * playable, are taking up space, and belong in the disk total.
+ */
+export function useIncompleteDownloads(): IncompleteDownloads {
+  return useSyncExternalStore(downloads.subscribe, () => incompleteSnapshot);
 }
 
 function sameIds(a: number[], b: number[]): boolean {
@@ -64,12 +92,26 @@ function sameIds(a: number[], b: number[]): boolean {
  * does not force a re-render on a no-op refresh.
  */
 export function refreshFromDisk(): void {
-  const next = downloadedSurahs(expectedFiles);
-  if (!sameIds(next, downloadedSnapshot)) downloadedSnapshot = next;
+  const scan = scanOffline(expectedFiles);
+  // A `.part` anywhere but the folder being downloaded RIGHT NOW is a
+  // leftover from a download that was cancelled or killed with the app: its
+  // bytes are unusable (nothing resumes a part file — see the manager's
+  // header) and nothing else would ever remove them. The active download's
+  // own `.part` is the one file on disk that is still being written to.
+  for (const { surahId, file } of scan.partFiles) {
+    if (surahId === active?.surahId) continue;
+    try { file.delete(); } catch { /* it will be found again next refresh */ }
+  }
+  if (!sameIds(scan.downloaded, downloadedSnapshot)) downloadedSnapshot = scan.downloaded;
+  if (!sameIds(scan.incomplete, incompleteSnapshot.ids) || scan.incompleteBytes !== incompleteSnapshot.bytes) {
+    incompleteSnapshot = scan.incomplete.length === 0
+      ? NOTHING_INCOMPLETE
+      : { ids: scan.incomplete, bytes: scan.incompleteBytes };
+  }
   const done = new Set(downloadedSnapshot);
   for (const s of getSurahList()) {
     const current = states.get(s.id);
-    if (done.has(s.id)) states.set(s.id, { status: 'done' });
+    if (done.has(s.id)) { if (current?.status !== 'done') states.set(s.id, DONE_STATE); }
     else if (current?.status === 'done') states.delete(s.id);
   }
   emit();
@@ -96,10 +138,38 @@ export function cancelDownload(surahId: number): void {
 }
 
 export function removeDownload(surahId: number): void {
-  cancelDownload(surahId);
-  deleteSurah(surahId);
-  states.delete(surahId);
+  removeDownloads([surahId]);
+}
+
+/**
+ * Delete several surahs' folders with ONE disk walk, at the end.
+ *
+ * `ids.forEach(removeDownload)` was one full `refreshFromDisk()` — the
+ * `offline/` root plus every folder under it — per surah, all of it
+ * synchronous JSI work inside an Alert callback: at 114 surahs that is an
+ * ANR, not a delay.
+ */
+export function removeDownloads(ids: number[]): void {
+  for (const surahId of ids) {
+    cancelDownload(surahId);
+    deleteSurah(surahId);
+    states.delete(surahId);
+  }
   refreshFromDisk();
+}
+
+/**
+ * Everything the app is holding on disk: the complete downloads and the
+ * incomplete leftovers, which are what the Settings total counts.
+ *
+ * The leading refresh is the confirm-time re-read — a surah that finished
+ * downloading while the confirmation dialog was open is on disk by the time
+ * this fires and must not be left behind — so this is two walks in total,
+ * whatever the number of surahs.
+ */
+export function deleteAllDownloads(): void {
+  refreshFromDisk();
+  removeDownloads([...downloadedSnapshot, ...incompleteSnapshot.ids]);
 }
 
 async function pump(): Promise<void> {

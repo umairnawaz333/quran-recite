@@ -14,6 +14,8 @@ const ROOT = 'offline';
 const TIMINGS_FILE = 'timings.json';
 const TIMINGS_CACHE = 'timings';
 const AUDIO = /^\d{6}\.mp3$/;
+/** The temp name a file is downloaded under until all of its bytes are there. */
+const PART = '.part';
 
 export function offlineDir(surahId: number): Directory {
   return new Directory(Paths.document, ROOT, String(surahId));
@@ -40,22 +42,73 @@ export function isSurahDownloaded(surahId: number, expectedFiles: number): boole
   return audioFilesIn(dir).length === expectedFiles;
 }
 
-export function downloadedSurahs(expectedFilesFor: (surahId: number) => number): number[] {
+export interface OfflineScan {
+  /** Complete, playable surahs: timings plus every ayah file. */
+  downloaded: number[];
+  /**
+   * Folders holding ayah files but not complete — what a cancelled or
+   * killed download leaves behind. Invisible before this: no Settings row,
+   * not in the total, skipped by Delete all, never cleaned up.
+   */
+  incomplete: number[];
+  /** Bytes of the ayah files in those incomplete folders. */
+  incompleteBytes: number;
+  /** Every `.part` file found, with the surah whose folder holds it. */
+  partFiles: { surahId: number; file: File }[];
+}
+
+/**
+ * One walk of `offline/` answering everything the app asks of the disk.
+ *
+ * One walk, not one per question: a directory listing is a synchronous hop
+ * into native code per folder, and the caller (`refreshFromDisk`) runs on
+ * every state change with up to 114 folders under it.
+ *
+ * Deliberately pure — `partFiles` is reported, never deleted here, because
+ * only the download manager knows which surah is being downloaded right now
+ * and therefore which `.part` is alive.
+ */
+export function scanOffline(expectedFilesFor: (surahId: number) => number): OfflineScan {
+  const scan: OfflineScan = { downloaded: [], incomplete: [], incompleteBytes: 0, partFiles: [] };
   const root = new Directory(Paths.document, ROOT);
-  if (!root.exists) return [];
-  const ids: number[] = [];
+  if (!root.exists) return scan;
+  let entries: (Directory | File)[];
   try {
-    for (const entry of root.list()) {
-      if (!(entry instanceof Directory)) continue;
-      // `name`, never `uri.split('/').pop()`: a real `Directory.uri` ends
-      // with a slash, so popping its last segment yields the empty string —
-      // `Number('')` is 0, and every folder was silently discarded, which on
-      // a device meant nothing was ever "downloaded" after a restart.
-      const id = Number(entry.name);
-      if (Number.isInteger(id) && isSurahDownloaded(id, expectedFilesFor(id))) ids.push(id);
+    entries = root.list();
+  } catch {
+    return scan;            // an unreadable root reads as nothing downloaded
+  }
+  for (const entry of entries) {
+    if (!(entry instanceof Directory)) continue;
+    // `name`, never `uri.split('/').pop()`: a real `Directory.uri` ends
+    // with a slash, so popping its last segment yields the empty string —
+    // `Number('')` is 0, and every folder was silently discarded, which on
+    // a device meant nothing was ever "downloaded" after a restart.
+    const id = Number(entry.name);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    let files: File[];
+    try {
+      files = entry.list().filter((e): e is File => e instanceof File);
+    } catch {
+      continue;             // a folder that vanished mid-walk is simply not there
     }
-  } catch { /* an unreadable root reads as nothing downloaded */ }
-  return ids.sort((a, b) => a - b);
+    for (const file of files) if (file.name.endsWith(PART)) scan.partFiles.push({ surahId: id, file });
+    const audio = files.filter(f => AUDIO.test(f.name));
+    const expected = expectedFilesFor(id);
+    if (expected > 0 && audio.length === expected && files.some(f => f.name === TIMINGS_FILE)) {
+      scan.downloaded.push(id);
+    } else if (audio.length > 0) {
+      scan.incomplete.push(id);
+      scan.incompleteBytes += audio.reduce((sum, f) => sum + (f.size ?? 0), 0);
+    }
+  }
+  scan.downloaded.sort((a, b) => a - b);
+  scan.incomplete.sort((a, b) => a - b);
+  return scan;
+}
+
+export function downloadedSurahs(expectedFilesFor: (surahId: number) => number): number[] {
+  return scanOffline(expectedFilesFor).downloaded;
 }
 
 export function surahBytesOnDisk(surahId: number): number {

@@ -10,7 +10,7 @@ import { act, create } from 'react-test-renderer';
 import type { ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
 import { Alert } from 'react-native';
 import { configureAudioBase, configureTimings, primeTimings, resetTimingsCache } from '@quran/core';
-import { store, reset, setHoldDownloads } from './helpers/fakeFileSystem';
+import { store, reset, listedDirs, setHoldDownloads } from './helpers/fakeFileSystem';
 import { resetReactNative } from './helpers/reactNativeMock';
 import { downloads as dl, downloadAll, startDownload, refreshFromDisk } from '../src/offline/downloadManager';
 import { writeOfflineTimings } from '../src/offline/offlineStore';
@@ -35,6 +35,25 @@ function seedDownloaded(surah: number, count: number, bytesPerFile: number) {
     const name = `${String(surah).padStart(3, '0')}${String(n).padStart(3, '0')}.mp3`;
     store.set(`file:///doc/offline/${surah}/${name}`, 'x'.repeat(bytesPerFile));
   }
+}
+
+/**
+ * The bytes a cancelled or killed download left behind: some finished ayah
+ * files, no timings, fewer files than the surah has.
+ */
+function seedIncomplete(surah: number, count: number, bytesPerFile: number) {
+  for (let n = 1; n <= count; n++) {
+    const name = `${String(surah).padStart(3, '0')}${String(n).padStart(3, '0')}.mp3`;
+    store.set(`file:///doc/offline/${surah}/${name}`, 'x'.repeat(bytesPerFile));
+  }
+}
+
+/** The destructive button of the most recent `Alert.alert` call. */
+function confirmDestructive(): void {
+  const calls = vi.mocked(Alert.alert).mock.calls;
+  const [, , buttons] = calls[calls.length - 1] as [string, string, { text: string; style?: string; onPress?: () => void }[]];
+  const destructive = buttons.find(b => b.style === 'destructive');
+  act(() => { destructive!.onPress!(); });
 }
 
 /** Host nodes only — a `<Pressable>` also appears as the element it renders. */
@@ -168,6 +187,45 @@ describe('SettingsScreen — offline management', () => {
     expect(dl.downloaded()).toEqual([]);
     expect([...store.keys()].some(k => k.startsWith('file:///doc/offline/'))).toBe(false);
     expect(renderedText(tree)).toContain('No surahs downloaded yet.');
+  });
+
+  it('shows incomplete downloads as one row, counts their bytes in the total, and deletes them', async () => {
+    seedDownloaded(1, 7, 100_000);      // 0.7 MB, complete
+    seedIncomplete(112, 2, 100_000);    // 0.2 MB of a surah that needs 4 files
+    refreshFromDisk();
+    const { tree } = await renderScreen();
+
+    const text = renderedText(tree);
+    expect(text).toContain('Incomplete downloads');
+    expect(text).toContain('0.2 MB');
+    // Space that is actually being used is space the total has to admit to.
+    expect(text).toContain('Total: 0.9 MB');
+
+    press(control(tree, 'Delete incomplete downloads'));
+    confirmDestructive();
+
+    expect([...store.keys()].some(k => k.startsWith('file:///doc/offline/112/'))).toBe(false);
+    expect(store.has('file:///doc/offline/1/001001.mp3')).toBe(true);
+    expect(renderedText(tree)).not.toContain('Incomplete downloads');
+  });
+
+  it('"Delete all" clears the incomplete leftovers too, with one disk walk at each end', async () => {
+    seedDownloaded(1, 7, 100_000);
+    seedDownloaded(108, 3, 100_000);
+    seedIncomplete(112, 2, 100_000);
+    refreshFromDisk();
+    const { tree } = await renderScreen();
+
+    press(control(tree, 'Delete all'));
+    listedDirs.length = 0;
+    confirmDestructive();
+
+    // Two walks of `offline/` — the confirm-time re-read and the publish —
+    // not one per surah (the ANR risk at 114).
+    expect(listedDirs.filter(uri => uri === 'file:///doc/offline/')).toHaveLength(2);
+    expect(dl.downloaded()).toEqual([]);
+    expect(dl.incomplete().ids).toEqual([]);
+    expect([...store.keys()].some(k => k.startsWith('file:///doc/offline/'))).toBe(false);
   });
 
   it('shows no surahs downloaded yet when nothing is on disk', async () => {

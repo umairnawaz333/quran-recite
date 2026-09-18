@@ -63,6 +63,13 @@ function parentOf(path: string): string | null {
   return path.slice(0, cut);
 }
 
+/**
+ * Every `list()` a test has caused, in order — a real directory walk is a
+ * synchronous JSI hop per folder, so "how many times did this walk the
+ * disk?" is a behaviour worth asserting (see the Delete-all test).
+ */
+export const listedDirs: string[] = [];
+
 export class FakeDirectory {
   /** The normalised path — no trailing slash, which is what `store`/`dirs` key on. */
   readonly path: string;
@@ -101,6 +108,7 @@ export class FakeDirectory {
   /** Real `list()` throws when the directory does not exist; it does not read as empty. */
   list(): (FakeDirectory | FakeFile)[] {
     if (!this.exists) throw new Error(`Directory does not exist: ${this.uri}`);
+    listedDirs.push(this.uri);
     const names = new Set<string>();
     for (const k of store.keys()) if (k.startsWith(this.path + '/')) names.add(k.slice(this.path.length + 1).split('/')[0]);
     for (const d of dirs) if (d.startsWith(this.path + '/')) names.add(d.slice(this.path.length + 1).split('/')[0]);
@@ -261,6 +269,7 @@ export function reset(): void {
   store.clear();
   dirs.clear();
   SEEDED_DIRS.forEach(d => dirs.add(d));
+  listedDirs.length = 0;
   holdingPositionRead = false;
   heldReads.length = 0;
   FakeFile.downloadFileAsync.mockClear();

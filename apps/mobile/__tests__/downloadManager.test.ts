@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('expo-file-system', async () => (await import('./helpers/fakeFileSystem')).fakeFileSystemModule);
-import { store, reset, downloads, setHoldDownloads, setFailDownloads, setFailMovesMatching, releaseAllHeld } from './helpers/fakeFileSystem';
+import { store, reset, downloads, FakeDirectory, listedDirs, setHoldDownloads, setFailDownloads, setFailMovesMatching, releaseAllHeld } from './helpers/fakeFileSystem';
 import { configureTimings, primeTimings, resetTimingsCache, configureAudioBase } from '@quran/core';
 import type { TimingsStore } from '@quran/core';
-import { downloads as dl, startDownload, cancelDownload, removeDownload, downloadAll, refreshFromDisk } from '../src/offline/downloadManager';
+import { downloads as dl, startDownload, cancelDownload, removeDownload, removeDownloads, deleteAllDownloads, downloadAll, refreshFromDisk } from '../src/offline/downloadManager';
 import { isSurahDownloaded } from '../src/offline/offlineStore';
 
 const timings = (surah: number, count: number) => ({
@@ -18,6 +18,10 @@ const settle = async (n = 20) => { for (let i = 0; i < n; i++) await flush(); };
 
 beforeEach(() => {
   reset();
+  // `offline/` itself, as the first download of the app's life creates it
+  // (`intermediates: true`). It outlives the surah folders inside it, which
+  // is what makes "how many times was the root walked?" meaningful.
+  new FakeDirectory('file:///doc/offline').create();
   resetTimingsCache();
   configureTimings({ baseUrl: 'https://example.test' });
   configureAudioBase('https://github.com/umairnawaz333/quran-recite/releases/download');
@@ -151,5 +155,124 @@ describe('downloadManager', () => {
     const second = dl.downloaded();
     expect(second).toBe(first); // same reference: useSyncExternalStore must not see a "change" here
     expect(second).toEqual([112]);
+  });
+});
+
+/** Puts one complete surah on the fake disk, bypassing the download manager. */
+function seedDownloaded(surah: number, count: number, bytesPerFile = 4) {
+  for (let n = 1; n <= count; n++) {
+    const name = `${String(surah).padStart(3, '0')}${String(n).padStart(3, '0')}.mp3`;
+    store.set(`file:///doc/offline/${surah}/${name}`, 'x'.repeat(bytesPerFile));
+  }
+  store.set(`file:///doc/offline/${surah}/timings.json`, JSON.stringify(timings(surah, count)));
+}
+
+const rootWalks = () => listedDirs.filter(uri => uri === 'file:///doc/offline/').length;
+
+describe('downloadManager — deleting in bulk', () => {
+  it('deletes every download with one disk walk at each end, not one per surah', () => {
+    seedDownloaded(1, 7); seedDownloaded(112, 4); seedDownloaded(114, 6);
+    refreshFromDisk();
+    expect(dl.downloaded()).toEqual([1, 112, 114]);
+
+    listedDirs.length = 0;
+    deleteAllDownloads();
+
+    // One refresh to re-read the disk at confirm time, one to publish the
+    // result — NOT one per surah, which is the O(N**2) walk that risked an
+    // ANR inside the Alert callback at 114 surahs.
+    expect(rootWalks()).toBe(2);
+    expect(dl.downloaded()).toEqual([]);
+    expect([...store.keys()].some(k => k.startsWith('file:///doc/offline/'))).toBe(false);
+  });
+
+  it('deletes a surah that finished while the confirmation was open', () => {
+    seedDownloaded(1, 7);
+    refreshFromDisk();
+    seedDownloaded(112, 4);            // lands after the button was rendered
+
+    deleteAllDownloads();
+
+    expect(dl.downloaded()).toEqual([]);
+    expect([...store.keys()].some(k => k.startsWith('file:///doc/offline/112/'))).toBe(false);
+  });
+
+  it('removeDownloads deletes just the surahs named, in one pass', () => {
+    seedDownloaded(1, 7); seedDownloaded(112, 4);
+    refreshFromDisk();
+
+    listedDirs.length = 0;
+    removeDownloads([112]);
+
+    expect(rootWalks()).toBe(1);
+    expect(dl.downloaded()).toEqual([1]);
+    expect(dl.getState(112)).toEqual({ status: 'idle' });
+  });
+
+  it('keeps the same "done" state object across refreshes, so done rows do not re-render', () => {
+    seedDownloaded(112, 4);
+    refreshFromDisk();
+    const first = dl.getState(112);
+    refreshFromDisk();
+    expect(dl.getState(112)).toBe(first);
+  });
+});
+
+describe('downloadManager — leftover .part files', () => {
+  it('sweeps a .part left behind by a killed download, keeping the finished files', () => {
+    store.set('file:///doc/offline/112/112001.mp3', 'x');
+    store.set('file:///doc/offline/112/112002.mp3.part', 'half');
+
+    refreshFromDisk();
+
+    expect(store.has('file:///doc/offline/112/112002.mp3.part')).toBe(false);
+    expect(store.has('file:///doc/offline/112/112001.mp3')).toBe(true);
+  });
+
+  it('never touches the .part of the download that is running right now', async () => {
+    setHoldDownloads(/112003/);
+    startDownload(112);
+    await settle();
+    // The in-flight file, as the real DownloadTask has it on disk mid-transfer.
+    store.set('file:///doc/offline/112/112003.mp3.part', 'half');
+    // And a leftover in some other surah's folder, which must still go.
+    store.set('file:///doc/offline/1/001001.mp3.part', 'half');
+
+    refreshFromDisk();
+
+    expect(store.has('file:///doc/offline/112/112003.mp3.part')).toBe(true);
+    expect(store.has('file:///doc/offline/1/001001.mp3.part')).toBe(false);
+    cancelDownload(112);
+    await settle();
+  });
+
+  it('reports an incomplete folder\'s surah and the bytes it is holding', () => {
+    seedDownloaded(1, 7, 100);                                    // complete
+    store.set('file:///doc/offline/112/112001.mp3', 'x'.repeat(50));
+    store.set('file:///doc/offline/112/112002.mp3', 'x'.repeat(50));   // 112 needs 4
+
+    refreshFromDisk();
+
+    expect(dl.downloaded()).toEqual([1]);
+    expect(dl.incomplete()).toEqual({ ids: [112], bytes: 100 });
+  });
+
+  it('keeps the same incomplete snapshot when nothing on disk changed', () => {
+    store.set('file:///doc/offline/112/112001.mp3', 'x');
+    refreshFromDisk();
+    const first = dl.incomplete();
+    refreshFromDisk();
+    expect(dl.incomplete()).toBe(first);
+  });
+
+  it('deleteAllDownloads also clears the incomplete folders', () => {
+    seedDownloaded(1, 7);
+    store.set('file:///doc/offline/112/112001.mp3', 'x');
+    refreshFromDisk();
+
+    deleteAllDownloads();
+
+    expect(dl.incomplete().ids).toEqual([]);
+    expect([...store.keys()].some(k => k.startsWith('file:///doc/offline/'))).toBe(false);
   });
 });

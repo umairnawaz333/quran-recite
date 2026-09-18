@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { nativeApplicationVersion } from 'expo-application';
 import { getSurahList, getSurahMeta } from '../data/surahs';
-import { cancelDownload, downloadAll, downloads, refreshFromDisk, removeDownload, useDownloadedSurahs, useDownloadState } from '../offline/downloadManager';
+import { cancelDownload, deleteAllDownloads, downloadAll, removeDownload, removeDownloads, useDownloadedSurahs, useDownloadState, useIncompleteDownloads } from '../offline/downloadManager';
 import { surahBytesOnDisk } from '../offline/offlineStore';
 import { allAudioSize, formatBytes } from '../offline/audioSizes';
 import { useTheme, useThemePreference } from '../theme/theme';
@@ -69,11 +69,40 @@ function DownloadedRow({ id, bytes, onOpenSurah, palette }: { id: number; bytes:
   );
 }
 
+/**
+ * The one row standing for every folder a cancelled or killed download left
+ * behind. Not playable, so it is not offered as a surah — but it is real
+ * bytes, so it is named, counted in the total, and deletable.
+ */
+function IncompleteRow({ bytes, onDelete, palette }: { bytes: number; onDelete: () => void; palette: Palette }) {
+  const size = formatBytes(bytes);
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowMain}>
+        <Text style={[styles.rowName, { color: palette.text }]}>Incomplete downloads</Text>
+        <Text style={[styles.rowMeta, { color: palette.textMuted }]}>{size}</Text>
+      </View>
+      <Pressable
+        onPress={() => Alert.alert('Delete incomplete downloads?', `Frees ${size} of storage.`, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: onDelete },
+        ])}
+        accessibilityRole="button"
+        accessibilityLabel="Delete incomplete downloads"
+        style={styles.rowAction}
+      >
+        <Text style={[styles.action, { color: palette.errorText }]}>Delete</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 /** Settings: offline management, the theme picker and the About block (spec Task 7). */
 export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; onOpenSurah: (id: number) => void }) {
   const { palette } = useTheme();
   const [preference, setPreference] = useThemePreference();
   const downloaded = useDownloadedSurahs();
+  const incomplete = useIncompleteDownloads();
   // Walked once per surah per render, not once for the total and again per
   // row: `DownloadedRow` takes its size as a prop rather than re-reading
   // disk itself.
@@ -81,7 +110,10 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
     () => downloaded.map(id => ({ id, bytes: surahBytesOnDisk(id) })),
     [downloaded],
   );
-  const totalBytes = downloadedSizes.reduce((sum, s) => sum + s.bytes, 0);
+  // The leftovers count: the total is what this app is costing the device,
+  // not what it can play.
+  const totalBytes = downloadedSizes.reduce((sum, s) => sum + s.bytes, 0) + incomplete.bytes;
+  const anythingOnDisk = downloaded.length > 0 || incomplete.ids.length > 0;
   const { bytes: allBytes, files: allFiles } = allAudioSize();
   const downloadAllLabel = `Download all (${formatBytes(allBytes)})`;
 
@@ -89,13 +121,15 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
     Alert.alert('Delete all downloads?', `Frees ${formatBytes(totalBytes)} of storage.`, [
       { text: 'Cancel', style: 'cancel' },
       {
+        // `deleteAllDownloads` re-reads the disk at confirm time (not the
+        // `downloaded` binding captured when the row was tapped): a surah
+        // that finishes downloading while this dialog is open is on disk by
+        // the time this fires and must not be left behind. It walks the disk
+        // once at each end rather than once per surah — the whole thing runs
+        // synchronously inside this callback.
         text: 'Delete all',
         style: 'destructive',
-        // Re-reads the disk at confirm time (not the `downloaded` binding
-        // captured when the row was tapped): a surah that finishes
-        // downloading while this dialog is open is on disk by the time this
-        // fires, and must not be left behind.
-        onPress: () => { refreshFromDisk(); downloads.downloaded().forEach(removeDownload); },
+        onPress: deleteAllDownloads,
       },
     ]);
   };
@@ -125,20 +159,26 @@ export function SettingsScreen({ onBack, onOpenSurah }: { onBack: () => void; on
         {getSurahList().map(s => (
           <InProgressRow key={s.id} surahId={s.id} name={s.nameSimple} palette={palette} />
         ))}
-        {downloaded.length === 0 ? (
+        {downloaded.length === 0 && (
           <Text style={[styles.empty, { color: palette.textMuted }]}>No surahs downloaded yet.</Text>
-        ) : (
-          <>
-            {downloadedSizes.map(({ id, bytes }) => (
-              <DownloadedRow key={id} id={id} bytes={bytes} onOpenSurah={onOpenSurah} palette={palette} />
-            ))}
-            <View style={styles.totalRow}>
-              <Text style={[styles.total, { color: palette.text }]}>Total: {formatBytes(totalBytes)}</Text>
-              <Pressable onPress={confirmDeleteAll} accessibilityRole="button" accessibilityLabel="Delete all">
-                <Text style={[styles.action, { color: palette.errorText }]}>Delete all</Text>
-              </Pressable>
-            </View>
-          </>
+        )}
+        {downloadedSizes.map(({ id, bytes }) => (
+          <DownloadedRow key={id} id={id} bytes={bytes} onOpenSurah={onOpenSurah} palette={palette} />
+        ))}
+        {incomplete.ids.length > 0 && (
+          <IncompleteRow
+            bytes={incomplete.bytes}
+            onDelete={() => removeDownloads(incomplete.ids)}
+            palette={palette}
+          />
+        )}
+        {anythingOnDisk && (
+          <View style={styles.totalRow}>
+            <Text style={[styles.total, { color: palette.text }]}>Total: {formatBytes(totalBytes)}</Text>
+            <Pressable onPress={confirmDeleteAll} accessibilityRole="button" accessibilityLabel="Delete all">
+              <Text style={[styles.action, { color: palette.errorText }]}>Delete all</Text>
+            </Pressable>
+          </View>
         )}
         <Pressable
           onPress={confirmDownloadAll}
