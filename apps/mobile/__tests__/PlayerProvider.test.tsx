@@ -33,7 +33,7 @@ import {
   audio, lockScreenPlayer, releaseHeldLoads, setAudioModeAsync, setNowPlaying,
 } from './helpers/fakeAudio';
 import {
-  holdLastPosition, releaseLastPosition, saveLastPosition, store as fakeDisk,
+  FakeFile, holdLastPosition, releaseLastPosition, saveLastPosition, store as fakeDisk,
 } from './helpers/fakeFileSystem';
 import {
   buildTimings, failTimings, holdTimings, provideTimings, releaseTimings, timingsReads,
@@ -212,6 +212,29 @@ describe('PlayerProvider — playing a downloaded surah', () => {
     // Never touched the fake network-backed store: proof this played with
     // the network off.
     expect(timingsReads).not.toContain(112);
+  });
+
+  it('warms nothing over the network for a downloaded surah — the files are already on disk', async () => {
+    configureTimings({ store: offlineTimingsStore });
+
+    const timings = buildTimings(112, 4);
+    fakeDisk.set('file:///doc/offline/112/timings.json', JSON.stringify(timings));
+    for (let n = 1; n <= 4; n++) {
+      fakeDisk.set(`file:///doc/offline/112/11200${n}.mp3`, 'x');
+    }
+
+    const player = mountPlayer();
+    await playFully(player, 112);
+    // Past the first ayah, so the sequencer's prefetch and a second
+    // `ayahchange` have both had their turn.
+    await actFlush(async () => { await player.current.next(); });
+
+    // The warm cache is for STREAMED ayahs. A downloaded surah has its own
+    // copy, so warming it would re-fetch every ayah over the network into
+    // the 300-file cache directory — exactly what "downloaded" is meant to
+    // avoid.
+    expect(FakeFile.downloadFileAsync).not.toHaveBeenCalled();
+    expect([...fakeDisk.keys()].some(k => k.includes('ayah-cache'))).toBe(false);
   });
 });
 

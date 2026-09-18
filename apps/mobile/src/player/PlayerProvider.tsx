@@ -41,6 +41,20 @@ function localAudioFor(ayah: AyahTiming): string | null {
   return offlinePathFor(ayah) ?? localPathFor(ayah);
 }
 
+/**
+ * The warm cache, but only for ayahs that would otherwise stream.
+ *
+ * `cacheAyah` knows nothing about the offline folder, so without this gate a
+ * downloaded surah re-downloaded every one of its ayahs over the network
+ * into the 300-file cache directory — the exact cost "downloaded" exists to
+ * remove, paid twice over (bytes, and an eviction of someone else's cached
+ * ayah). Used at every site that warms: the sequencer's prefetch seam, each
+ * `ayahchange`, and the first ayah of a play.
+ */
+function warmCache(ayah: AyahTiming): Promise<void> {
+  return offlinePathFor(ayah) ? Promise.resolve() : cacheAyah(ayah);
+}
+
 export interface PlayerState {
   surahId: number | null;
   surahName: string | null;
@@ -300,12 +314,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const reuse = sequencerRef.current !== null && engineRef.current !== null;
     const engine = engineRef.current ?? new SyncEngine();
     // The next ayah is prefetched to disk while the current one plays
-    // (`cacheAyah`), and every load goes through `localAudioFor` (offline
-    // folder, then warm cache), so the single player's boundary reload —
-    // and "previous", and replays — come from a local file rather than the
-    // network, offline surahs included.
+    // (`warmCache`, a no-op for an ayah already in the offline folder), and
+    // every load goes through `localAudioFor` (offline folder, then warm
+    // cache), so the single player's boundary reload — and "previous", and
+    // replays — come from a local file rather than the network, offline
+    // surahs included.
     const sequencer = sequencerRef.current
-      ?? new AyahSequencer(timings.ayahs, createExpoPlayer, localAudioFor, cacheAyah);
+      ?? new AyahSequencer(timings.ayahs, createExpoPlayer, localAudioFor, warmCache);
 
     // Nothing from here until the switch-over touches the visible state.
     // The old surah stays the surah every ref and every state field
@@ -369,7 +384,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         // Bookmark for the next launch, and warm the cache with the ayah now
         // reciting so "previous" and replays come from disk.
         writeLastPosition({ surahId, ayah: timing.ayah, localMs: 0 });
-        void cacheAyah(timing);
+        void warmCache(timing);
       }
     };
     const onStateChange = (playing: boolean) => {
@@ -508,7 +523,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const first = timings.ayahs[startIndex];
     if (first) {
       writeLastPosition({ surahId, ayah: first.ayah, localMs: 0 });
-      void cacheAyah(first);
+      void warmCache(first);
     }
 
     await sequencer.play();
