@@ -53,8 +53,8 @@ AMBER = (0xFC, 0xC7, 0x58)
 INK_LIGHT = (0xF2, 0xF2, 0xF2)                # ink on dark backgrounds
 
 # The sound wave above the pill: relative bar heights, left to right (tallest = 1.0).
-# Bars are stadium-shaped (fully rounded ends), bottom-aligned, centred on the
-# pill. Change the list to change the wave; widths and gaps scale with the pill.
+# Bars are stadium-shaped (fully rounded ends), centred on one horizontal
+# midline like a waveform display, and centred on the pill. Change the list to change the wave; widths and gaps scale with the pill.
 WAVE = [0.34, 0.62, 1.0, 0.72, 0.46, 0.8, 0.3]
 WAVE_BAR_W = 0.09          # bar width, as a fraction of the pill's width
 WAVE_GAP = 0.055           # gap between bars, same unit
@@ -140,24 +140,25 @@ def trace(mask: np.ndarray) -> str:
     return ''.join(parts)
 
 
-def stadium(cx: float, bottom: float, w: float, h: float) -> str:
-    """A vertical bar with fully rounded ends, centred on `cx`, standing on `bottom`."""
+def stadium(cx: float, cy: float, w: float, h: float) -> str:
+    """A vertical bar with fully rounded ends, centred on (cx, cy)."""
     r = w / 2
-    top = bottom - h
+    top, bottom = cy - h / 2, cy + h / 2
     return (f'M{cx - r:.1f} {top + r:.1f}A{r:.1f} {r:.1f} 0 0 1 {cx + r:.1f} {top + r:.1f}'
             f'L{cx + r:.1f} {bottom - r:.1f}A{r:.1f} {r:.1f} 0 0 1 {cx - r:.1f} {bottom - r:.1f}Z')
 
 
 def wave_paths(pill):
-    """[(id, d)] for the sound wave, laid out over the pill's box."""
+    """[(id, d)] for the sound wave: bars centred on ONE horizontal midline
+    (like a waveform display), laid out over the pill's box."""
     x0, y0, x1, _ = pill
     pw = x1 - x0
     bw, gap = pw * WAVE_BAR_W, pw * WAVE_GAP
     total = len(WAVE) * bw + (len(WAVE) - 1) * gap
     left = (x0 + x1) / 2 - total / 2 + bw / 2
-    bottom = y0 - pw * WAVE_LIFT
     tallest = pw * WAVE_TALLEST
-    return [(f'bar-{i + 1}', stadium(left + i * (bw + gap), bottom, bw, max(tallest * h, bw)))
+    mid = y0 - pw * WAVE_LIFT - tallest / 2
+    return [(f'bar-{i + 1}', stadium(left + i * (bw + gap), mid, bw, max(tallest * h, bw)))
             for i, h in enumerate(WAVE)]
 
 
