@@ -60,7 +60,7 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
           accessibilityRole="button"
           accessibilityLabel="Previous ayah"
         >
-          <PrevIcon size={18} color={transportDisabled ? palette.border : palette.textMuted} />
+          <PrevIcon size={18} color={transportDisabled ? palette.disabled : palette.textMuted} />
         </Pressable>
 
         <Pressable
@@ -82,7 +82,7 @@ export function PlayerBar({ onNavigate }: { onNavigate: (surahId: number) => voi
           accessibilityRole="button"
           accessibilityLabel="Next ayah"
         >
-          <NextIcon size={18} color={transportDisabled ? palette.border : palette.textMuted} />
+          <NextIcon size={18} color={transportDisabled ? palette.disabled : palette.textMuted} />
         </Pressable>
       </View>
     </View>

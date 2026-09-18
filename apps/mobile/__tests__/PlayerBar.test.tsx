@@ -34,6 +34,7 @@ vi.mock('../src/player/PlayerProvider', async importOriginal => {
 import { act, create } from 'react-test-renderer';
 import type { ReactTestInstance, ReactTestRenderer, ReactTestRendererNode } from 'react-test-renderer';
 import { PlayerBar } from '../src/player/PlayerBar';
+import { DARK, LIGHT } from '../src/theme/theme';
 import type { PlayerContextValue } from '../src/player/PlayerProvider';
 import { playerStub, resetPlayerStub, stubPlayer } from './helpers/playerStub';
 import { provideTimings } from './helpers/fakeTimings';
@@ -160,6 +161,22 @@ describe('PlayerBar — what it shows', () => {
     expect(control(loadingOtherSurah, 'Loading').props.disabled).toBe(true);
     expect(control(loadingOtherSurah, 'Previous ayah').props.disabled).toBe(true);
     expect(control(loadingOtherSurah, 'Next ayah').props.disabled).toBe(true);
+  });
+
+  it('greys a disabled prev/next with the disabled tone, not the border colour', () => {
+    const stroke = (tree: ReactTestRenderer, label: string) =>
+      control(tree, label).findAll(node => node.type === 'Path')[0].props.stroke;
+
+    const disabled = renderBar({ surahId: 1, isLoading: true, pendingSurahId: 1 }).tree;
+    const enabled = renderBar({ surahId: 1, isPlaying: true }).tree;
+
+    expect(stroke(disabled, 'Previous ayah')).toBe(LIGHT.disabled);
+    expect(stroke(disabled, 'Next ayah')).toBe(LIGHT.disabled);
+    expect(stroke(enabled, 'Previous ayah')).toBe(LIGHT.textMuted);
+    // `border` is tuned to disappear as a hairline. An icon painted with it
+    // is not "dimmed", it is gone — the palette needs its own disabled tone.
+    expect(LIGHT.disabled).not.toBe(LIGHT.border);
+    expect(DARK.disabled).not.toBe(DARK.border);
   });
 
   it('offers prev, toggle and next as the three transport controls', () => {

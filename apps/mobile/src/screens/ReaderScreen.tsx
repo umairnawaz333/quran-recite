@@ -250,7 +250,13 @@ export function ReaderScreen({
             <Text style={[styles.back, { color: palette.textMuted }]}>All surahs</Text>
           </Pressable>
           <Text style={[styles.title, { color: palette.text }]}>{meta?.nameSimple ?? `Surah ${surahId}`}</Text>
-          <DownloadControl surahId={surahId} />
+          {/*
+            `compact` — the header already carries four items (back, the
+            surah name, this, the script toggle); the size text beside the
+            arrow is what pushes the row over on a narrow phone. The surah
+            list uses the same compact form.
+          */}
+          <DownloadControl surahId={surahId} compact />
           <Pressable
             style={[styles.toggle, { backgroundColor: palette.surface }]}
             onPress={() => onScriptChange(script === 'tajweed' ? 'indopak' : 'tajweed')}

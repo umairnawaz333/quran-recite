@@ -16,15 +16,24 @@ export type Scheme = 'light' | 'dark';
 export interface Palette {
   background: string; surface: string; text: string; textMuted: string; border: string;
   accent: string; accentText: string; highlight: string; error: string; errorText: string; loadingBg: string;
+  /**
+   * A control that is there but cannot be used. Dimmer than `textMuted` and
+   * deliberately NOT `border`, which is tuned to vanish as a hairline: an
+   * icon painted in the border colour does not read as disabled, it reads as
+   * missing.
+   */
+  disabled: string;
 }
 
 export const LIGHT: Palette = {
   background: '#ffffff', surface: '#f3f4f6', text: '#1a1a1a', textMuted: '#777777', border: '#e5e7eb',
   accent: '#1a1a1a', accentText: '#ffffff', highlight: '#fde68a', error: '#fee2e2', errorText: '#991b1b', loadingBg: '#f3f4f6',
+  disabled: '#c0c4cb',
 };
 export const DARK: Palette = {
   background: '#0f1115', surface: '#1b1f27', text: '#f3f4f6', textMuted: '#9ca3af', border: '#2a2f3a',
   accent: '#f3f4f6', accentText: '#0f1115', highlight: '#6b5b12', error: '#4c1d1d', errorText: '#fecaca', loadingBg: '#1b1f27',
+  disabled: '#4c525f',
 };
 
 /** "system" is a live state: it resolves against whatever the device says NOW. */
