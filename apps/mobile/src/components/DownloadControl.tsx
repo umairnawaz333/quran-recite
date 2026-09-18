@@ -1,5 +1,5 @@
 import { Alert, Pressable, StyleSheet, Text } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { useDownloadState, startDownload, cancelDownload, removeDownload } from '../offline/downloadManager';
 import { surahAudioSize, formatBytes } from '../offline/audioSizes';
 import { getSurahMeta } from '../data/surahs';
@@ -30,7 +30,15 @@ export function DownloadControl({ surahId, compact = false }: { surahId: number;
         ])}
         accessibilityRole="button" accessibilityLabel="Downloaded, tap to delete" style={styles.control}
       >
-        <Svg width={20} height={20} viewBox="0 0 24 24"><Path d="M5 12.5 10 17.5 19 7" stroke={palette.text} strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" /></Svg>
+        {/* The same download arrow, now in full text weight, with a check
+            badge tucked into its corner: "this download is complete", not a
+            bare tick that could mean anything. The tray is shortened so the
+            badge does not sit on it. */}
+        <Svg width={22} height={22} viewBox="0 0 24 24">
+          <Path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h7" stroke={palette.text} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <Circle cx={18} cy={18} r={5.5} fill={palette.accent} />
+          <Path d="M15.4 18 17.3 19.9 20.8 16.3" stroke={palette.accentText} strokeWidth={1.8} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
       </Pressable>
     );
   }
