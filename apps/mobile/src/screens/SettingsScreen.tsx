@@ -246,6 +246,6 @@ const styles = StyleSheet.create({
   themeRow: { flexDirection: 'row', gap: 10 },
   themeOption: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, alignItems: 'center' },
   themeLabel: { fontSize: 14, fontWeight: '500' },
-  aboutBlock: { alignItems: 'center' },
+  aboutBlock: { alignItems: 'center', marginTop: 32 },
   about: { fontSize: 12, paddingVertical: 2, textAlign: 'center' },
 });
