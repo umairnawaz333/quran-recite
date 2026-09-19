@@ -1,5 +1,5 @@
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 196a5d5..89eeb69 100644
+index 196a5d5..d6eb972 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 @@ -19,8 +19,9 @@ import androidx.media3.common.ForwardingPlayer
@@ -97,29 +97,32 @@ index 196a5d5..89eeb69 100644
      postOrStartForegroundNotification(startInForegroundRequired)
    }
  
-@@ -362,7 +391,7 @@ class AudioControlsService : MediaSessionService() {
+@@ -362,7 +391,6 @@ class AudioControlsService : MediaSessionService() {
      player?.isActiveForLockScreen = true
  
      if (player != null) {
 -      mediaSession?.release()
-+      releaseSessionUnlessPending()
        sessionMetadataPlayer = null
  
        appContext?.mainQueue?.launch {
-@@ -370,15 +399,18 @@ class AudioControlsService : MediaSessionService() {
+@@ -370,15 +398,20 @@ class AudioControlsService : MediaSessionService() {
          val sessionPlayer = MetadataInjectingPlayer(resolveSessionPlayer(player, options)).apply {
            updateMetadata(metadata)
          }
 -        val session = MediaSession.Builder(context, sessionPlayer)
 -          .setCallback(AudioMediaSessionCallback())
-+        val reused = reusePendingSession(sessionPlayer)
++        val reused = reuseSession(sessionPlayer)
 +        val session = reused ?: MediaLibrarySession.Builder(context, sessionPlayer, CarSessionCallback())
 +          .setId(SESSION_ID)
            .build()
  
          // Replace the basic media session with a session connected to our playback service.
-         player.mediaSession.release()
-         player.mediaSession = session
+-        player.mediaSession.release()
+-        player.mediaSession = session
++        if (player.mediaSession !== session) {
++          player.mediaSession.release()
++          player.mediaSession = session
++        }
  
 -        addSession(session)
 +        if (reused == null) {
@@ -128,7 +131,7 @@ index 196a5d5..89eeb69 100644
          mediaSession = session
          sessionMetadataPlayer = sessionPlayer
  
-@@ -417,18 +449,58 @@ class AudioControlsService : MediaSessionService() {
+@@ -417,18 +450,53 @@ class AudioControlsService : MediaSessionService() {
      currentMetadata = null
      mediaSession?.release()
      mediaSession = null
@@ -140,32 +143,21 @@ index 196a5d5..89eeb69 100644
  
 -  override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
 -    return mediaSession
-+  // A session still showing the stand-in player is kept and re-used: releasing it
-+  // would drop the controller (the car) that is waiting on it.
-+  private fun releaseSessionUnlessPending() {
-+    if (pendingPlayer == null) {
-+      mediaSession?.release()
-+      mediaSession = null
-+    }
++  /**
++   * Hands the existing session the new player instead of building a second one:
++   * releasing and rebuilding would drop every connected controller, including a
++   * car's browse UI. Returns null only when there is no session at all yet.
++   */
++  private fun reuseSession(sessionPlayer: Player): MediaLibrarySession? {
++    val session = mediaSession ?: return null
++    session.player = sessionPlayer
++    pendingPlayer = null
++    return session
    }
  
 -  override fun onBind(intent: Intent?): IBinder {
 -    super.onBind(intent)
 -    return binder
-+  /**
-+   * Hands the existing session the real player instead of building a second one.
-+   * Returns null when there is nothing to re-use, i.e. the caller should build a session.
-+   */
-+  private fun reusePendingSession(sessionPlayer: Player): MediaLibrarySession? {
-+    val session = mediaSession ?: return null
-+    if (pendingPlayer == null) {
-+      return null
-+    }
-+    session.player = sessionPlayer
-+    pendingPlayer = null
-+    return session
-+  }
-+
 +  /**
 +   * A controller (a car, typically) bound before any JS player was activated.
 +   * It gets the one session with a stand-in player rather than no session at all.
@@ -186,18 +178,23 @@ index 196a5d5..89eeb69 100644
 +  }
 +
 +  override fun onBind(intent: Intent?): IBinder? {
-+    // media3 answers the session/library/browser bind actions; everything else
-+    // (expo's own explicit bind) gets the service binder as before.
-+    return super.onBind(intent) ?: binder
++    // A browsing controller (a car, the Assistant) must reach media3's binder.
++    // Everything else — including expo's own connection, which binds with
++    // MediaSessionService.SERVICE_INTERFACE — gets the service binder, and
++    // super is still called for its side effects exactly as before this patch.
++    val mediaBinder = super.onBind(intent)
++    return when (intent?.action) {
++      MediaLibraryService.SERVICE_INTERFACE, LEGACY_BROWSER_SERVICE_INTERFACE -> mediaBinder
++      else -> binder
++    }
    }
  
    fun setPlayerMetadata(player: AudioPlayer, metadata: Metadata?) {
-@@ -444,21 +516,24 @@ class AudioControlsService : MediaSessionService() {
+@@ -444,21 +512,25 @@ class AudioControlsService : MediaSessionService() {
        currentMetadata = metadata
        currentOptions = options
  
 -      mediaSession?.release()
-+      releaseSessionUnlessPending()
        sessionMetadataPlayer = null
        appContext?.mainQueue?.launch {
          val context = appContext?.reactContext ?: return@launch
@@ -206,13 +203,17 @@ index 196a5d5..89eeb69 100644
          }
 -        val session = MediaSession.Builder(context, sessionPlayer)
 -          .setCallback(AudioMediaSessionCallback())
-+        val reused = reusePendingSession(sessionPlayer)
++        val reused = reuseSession(sessionPlayer)
 +        val session = reused ?: MediaLibrarySession.Builder(context, sessionPlayer, CarSessionCallback())
 +          .setId(SESSION_ID)
            .build()
  
-         player.mediaSession.release()
-         player.mediaSession = session
+-        player.mediaSession.release()
+-        player.mediaSession = session
++        if (player.mediaSession !== session) {
++          player.mediaSession.release()
++          player.mediaSession = session
++        }
  
 -        addSession(session)
 +        if (reused == null) {
@@ -221,7 +222,7 @@ index 196a5d5..89eeb69 100644
          mediaSession = session
          sessionMetadataPlayer = sessionPlayer
  
-@@ -518,6 +593,8 @@ class AudioControlsService : MediaSessionService() {
+@@ -518,6 +590,8 @@ class AudioControlsService : MediaSessionService() {
      scope.cancel()
      mediaSession?.release()
      mediaSession = null
@@ -230,11 +231,14 @@ index 196a5d5..89eeb69 100644
      sessionMetadataPlayer = null
      currentPlayer = null
      currentMetadata = null
-@@ -552,6 +629,7 @@ class AudioControlsService : MediaSessionService() {
+@@ -552,6 +626,10 @@ class AudioControlsService : MediaSessionService() {
  
    companion object {
      private const val CHANNEL_ID = "expo_audio_channel"
 +    private const val SESSION_ID = "quran"
++    // MediaBrowserServiceCompat.SERVICE_INTERFACE, spelled out so expo-audio
++    // keeps its current dependency set.
++    private const val LEGACY_BROWSER_SERVICE_INTERFACE = "android.media.browse.MediaBrowserService"
      private const val ACTION_PLAY = "expo.modules.audio.action.PLAY"
      private const val ACTION_PAUSE = "expo.modules.audio.action.PAUSE"
      private const val ACTION_TOGGLE = "expo.modules.audio.action.TOGGLE"
@@ -279,10 +283,10 @@ index 0000000..61bfaf3
 +}
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarSessionCallback.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarSessionCallback.kt
 new file mode 100644
-index 0000000..d98c7d5
+index 0000000..74fcf89
 --- /dev/null
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarSessionCallback.kt
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,193 @@
 +package expo.modules.audio.service
 +
 +import android.os.Bundle
@@ -428,6 +432,8 @@ index 0000000..d98c7d5
 +  // The JS engine sequences ayah files itself, so a request to play `surah:<id>` is
 +  // forwarded as a command and the player's own queue is left EMPTY on purpose: an
 +  // empty result never hands ExoPlayer a URI it would fight the engine over.
++  // With no provider the calls go to media3's defaults, which reject the request
++  // and leave the running player untouched — an empty result would clear it.
 +  private fun nothingToQueue(): ListenableFuture<MediaSession.MediaItemsWithStartPosition> =
 +    Futures.immediateFuture(
 +      MediaSession.MediaItemsWithStartPosition(emptyList(), C.INDEX_UNSET, C.TIME_UNSET)
@@ -440,10 +446,12 @@ index 0000000..d98c7d5
 +    startIndex: Int,
 +    startPositionMs: Long
 +  ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
++    val p = provider
++      ?: return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
 +    val id = mediaItems.firstOrNull()?.mediaId ?: return nothingToQueue()
 +    val surah = id.removePrefix("surah:").toLongOrNull()
 +    if (surah != null) {
-+      provider?.onCommand("playSurah", surah)
++      p.onCommand("playSurah", surah)
 +    }
 +    return nothingToQueue()
 +  }
@@ -453,8 +461,9 @@ index 0000000..d98c7d5
 +    controller: MediaSession.ControllerInfo,
 +    mediaItems: MutableList<MediaItem>
 +  ): ListenableFuture<MutableList<MediaItem>> {
++    val p = provider ?: return super.onAddMediaItems(mediaSession, controller, mediaItems)
 +    mediaItems.firstOrNull()?.mediaId?.removePrefix("surah:")?.toLongOrNull()?.let {
-+      provider?.onCommand("playSurah", it)
++      p.onCommand("playSurah", it)
 +    }
 +    return Futures.immediateFuture(mutableListOf())
 +  }
@@ -466,12 +475,13 @@ index 0000000..d98c7d5
 +    mediaSession: MediaSession,
 +    controller: MediaSession.ControllerInfo
 +  ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
-+    provider?.onCommand("resume", null)
++    val p = provider ?: return super.onPlaybackResumption(mediaSession, controller)
++    p.onCommand("resume", null)
 +    return nothingToQueue()
 +  }
 +}
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
-index 18203a3..ec2b146 100644
+index 18203a3..f5e8de6 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
 @@ -1,14 +1,18 @@
@@ -493,24 +503,54 @@ index 18203a3..ec2b146 100644
  import java.util.IdentityHashMap
  
  // MediaSession reads artwork from Player.mediaMetadata, but expo-audio lock-screen metadata can
-@@ -21,6 +25,64 @@ internal class MetadataInjectingPlayer(
+@@ -21,6 +25,94 @@ internal class MetadataInjectingPlayer(
    private val handler = Handler(applicationLooper)
    private val listeners = IdentityHashMap<Player.Listener, Player.Listener>()
    private var injectedMetadata: Metadata? = null
-+  private var errorMessage: String? = null
++  private var injectedError: PlaybackException? = null
 +  private var artworkSource: Bitmap? = null
 +  private var artworkBytes: ByteArray? = null
 +
-+  /** Surfaces a provider-side failure (no network, missing file) on the session. */
++  /**
++   * Surfaces a provider-side failure (no network, missing file) on the session.
++   * MediaSession only reads the error out of `Player.Listener.onPlayerError`, so
++   * storing it is not enough — it has to be dispatched like a real player error.
++   */
 +  fun reportError(message: String) {
-+    // listeners re-read getPlayerError via onEvents
-+    errorMessage = message
++    if (Looper.myLooper() != applicationLooper) {
++      handler.post { reportError(message) }
++      return
++    }
++
++    val error = PlaybackException(message, null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
++    injectedError = error
++    dispatchPlayerError(error)
 +  }
 +
-+  override fun getPlayerError(): PlaybackException? =
-+    errorMessage?.let {
-+      PlaybackException(it, null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
-+    } ?: super.getPlayerError()
++  private fun dispatchPlayerError(error: PlaybackException?) {
++    val events = Player.Events(
++      FlagSet.Builder()
++        .add(Player.EVENT_PLAYER_ERROR)
++        .build()
++    )
++    val currentListeners = synchronized(listeners) {
++      listeners.keys.toList()
++    }
++
++    if (error != null) {
++      currentListeners.forEach {
++        it.onPlayerError(error)
++      }
++    }
++    currentListeners.forEach {
++      it.onPlayerErrorChanged(error)
++    }
++    currentListeners.forEach {
++      it.onEvents(this, events)
++    }
++  }
++
++  override fun getPlayerError(): PlaybackException? = injectedError ?: super.getPlayerError()
 +
 +  // A car shows one surah as one track: position and duration are surah-level
 +  // (spec §5.4) whenever the app has published an offset/override.
@@ -558,7 +598,7 @@ index 18203a3..ec2b146 100644
  
    override fun addListener(listener: Player.Listener) {
      val forwardingListener = synchronized(listeners) {
-@@ -38,14 +100,20 @@ internal class MetadataInjectingPlayer(
+@@ -38,14 +130,20 @@ internal class MetadataInjectingPlayer(
  
    override fun getMediaMetadata(): MediaMetadata {
      val metadata = injectedMetadata
@@ -582,15 +622,19 @@ index 18203a3..ec2b146 100644
    }
  
    fun updateMetadata(metadata: Metadata?) {
-@@ -56,6 +124,8 @@ internal class MetadataInjectingPlayer(
+@@ -54,6 +152,12 @@ internal class MetadataInjectingPlayer(
+       return
+     }
  
++    // A fresh ayah's metadata means playback recovered.
++    if (injectedError != null) {
++      injectedError = null
++      dispatchPlayerError(null)
++    }
++
      val previousMetadata = mediaMetadata
      injectedMetadata = metadata
-+    // A fresh ayah's metadata means playback recovered.
-+    errorMessage = null
      val newMetadata = mediaMetadata
- 
-     if (previousMetadata == newMetadata) {
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/PendingPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/PendingPlayer.kt
 new file mode 100644
 index 0000000..7dbce13
