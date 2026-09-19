@@ -11,7 +11,16 @@ import { CarMedia } from '../../modules/car-media/src';
 let active: (() => void) | null = null;
 
 export function registerCarEngine(): () => void {
-  if (active) return active;
+  if (active) {
+    // Already wired, but still announce: `engineReady()` is what flushes the
+    // native queue, and a re-boot inside a live runtime (the booter reset
+    // itself after a delivery found no sink, or a second headless task
+    // started) has commands waiting behind a boot that this runtime has
+    // already completed. Announcing only on the first call leaves them there
+    // until they time out. The native side is idempotent.
+    CarMedia.engineReady();
+    return active;
+  }
   engine.start();
   const commands = CarMedia.addCommandListener(c => {
     switch (c.type) {

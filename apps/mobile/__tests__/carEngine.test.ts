@@ -92,8 +92,12 @@ describe('carEngine — what it tells the car', () => {
     expect(calls.errors).toEqual([engine.getState().error]);
     expect(calls.errors[0]).not.toBe('No connection — download this surah on your phone');
   });
-  it('registers once: a second call is a no-op and the first unregister undoes it', async () => {
-    const again = registerCarEngine(); expect(calls.engineReady).toBe(1);
+  it('wires up once, but announces the engine on every registration', async () => {
+    // The native side is idempotent, and a second registration is how a
+    // re-boot inside a live runtime (a booter that reset after its sink
+    // vanished, or a second headless task) gets its queue flushed at all —
+    // without this the commands that caused the re-boot time out.
+    const again = registerCarEngine(); expect(calls.engineReady).toBe(2);
     again(); unregister();
     emitCommand('playSurah', 2); await settle();
     expect(engine.getState().surahId).toBe(1);
