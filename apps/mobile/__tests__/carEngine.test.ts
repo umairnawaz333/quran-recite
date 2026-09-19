@@ -12,6 +12,7 @@ import { registerCarEngine } from '../src/car/carEngine';
 import { resetPlayerEnvironment } from './helpers/renderPlayer';
 import { provideTimings, failTimings } from './helpers/fakeTimings';
 import { calls, emitCommand, resetCarMedia } from './helpers/fakeCarMedia';
+import { audio } from './helpers/fakeAudio';
 
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(r => setTimeout(r, 0)); };
 let unregister: () => void;
@@ -61,6 +62,17 @@ describe('carEngine — what it tells the car', () => {
     failTimings(3);
     emitCommand('playSurah', 3); await settle();
     expect(calls.errors).toEqual(['No connection — download this surah on your phone']);
+  });
+  it('reports a mid-surah playback failure with the engine\'s own text, not the connection copy', async () => {
+    emitCommand('playSurah', 1); await settle();
+    const t = engine.currentTimings()!;
+    // A later ayah's file cannot load — the sequencer's own `onError`, not a
+    // surah-start failure (spec §7's "Audio load failure mid-surah" row).
+    audio.failLoadsMatching = /001003\.mp3/;
+    emitCommand('seekTo', t.ayahs[2].startOffsetMs); await settle();
+    expect(engine.getState().errorKind).toBe('playback');
+    expect(calls.errors).toEqual([engine.getState().error]);
+    expect(calls.errors[0]).not.toBe('No connection — download this surah on your phone');
   });
   it('registers once: a second call is a no-op and the first unregister undoes it', async () => {
     const again = registerCarEngine(); expect(calls.engineReady).toBe(1);

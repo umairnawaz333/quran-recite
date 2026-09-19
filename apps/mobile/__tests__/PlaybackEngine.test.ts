@@ -27,7 +27,7 @@ vi.mock('../src/audio/nowPlaying', async () => {
 
 import { engine } from '../src/player/PlaybackEngine';
 import { resetPlayerEnvironment } from './helpers/renderPlayer';
-import { provideTimings } from './helpers/fakeTimings';
+import { provideTimings, failTimings } from './helpers/fakeTimings';
 import { audio } from './helpers/fakeAudio';
 import { saveLastPosition } from './helpers/fakeFileSystem';
 
@@ -95,6 +95,16 @@ describe('PlaybackEngine — surah-level seek', () => {
     await engine.seekToSurahPosition(5000); await settle();
     expect(engine.getState().surahId).toBe(1);   // still the offer, untouched
     expect(audio.players).toHaveLength(0);
+  });
+});
+
+describe('PlaybackEngine — errorKind (spec §7)', () => {
+  it('is \'load\' after a surah fails to start, and clears to null on the next successful play', async () => {
+    failTimings(2);
+    await engine.play(2); await settle();
+    expect(engine.getState().errorKind).toBe('load');
+    await engine.play(1); await settle();
+    expect(engine.getState().errorKind).toBeNull();
   });
 });
 

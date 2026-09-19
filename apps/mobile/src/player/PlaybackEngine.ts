@@ -61,6 +61,19 @@ export interface EngineState {
   isLoading: boolean;
   error: string | null;
   /**
+   * What kind of failure `error` is describing, for a consumer (the car
+   * bridge) that shows different copy for the two spec §7 cases: `'load'`
+   * is a surah that could not start at all (its timings, or a mid-play
+   * switch/seek, failed to load) — the car shows its own connection copy
+   * for this, since the engine's own message names an offline surah the
+   * car cannot do anything about. `'playback'` is the sequencer failing
+   * mid-surah (a boundary reload that could not fetch) — the car shows the
+   * engine's own text here, since it names the actual failure. `null` when
+   * `error` is `null`. Screens still read `error` directly and are
+   * unaffected by this field.
+   */
+  errorKind: 'load' | 'playback' | null;
+  /**
    * Which surah `isLoading`/`error` are currently *about*. `surahId` names
    * the surah that is actually live (loaded, playing or paused) — it does
    * not move until a load finishes — so while a load is in flight for a
@@ -137,6 +150,7 @@ const INITIAL: EngineState = {
   isPlaying: false,
   isLoading: false,
   error: null,
+  errorKind: null,
   pendingSurahId: null,
 };
 
@@ -267,7 +281,7 @@ function createEngine(): PlaybackEngine {
       // Clears any transient state left by a superseded load of some other
       // surah — including `isLoading`, or a consumer could be left showing a
       // spinner for a load that stale-bailed and will never resolve it.
-      patch({ error: null, isLoading: false, pendingSurahId: null });
+      patch({ error: null, errorKind: null, isLoading: false, pendingSurahId: null });
       if (ayah !== undefined) {
         const index = timings.ayahs.findIndex(a => a.ayah === ayah);
         if (index !== -1) await sequencer.seekToAyah(index, localMsFor(timings, index));
@@ -292,10 +306,11 @@ function createEngine(): PlaybackEngine {
         isPlaying: false,
         isLoading: true,
         error: null,
+        errorKind: null,
         pendingSurahId: surahId,
       });
     } else {
-      patch({ isLoading: true, error: null, pendingSurahId: surahId });
+      patch({ isLoading: true, error: null, errorKind: null, pendingSurahId: surahId });
     }
 
     // `shouldPlayInBackground` keeps the audio session alive once the app
@@ -325,6 +340,7 @@ function createEngine(): PlaybackEngine {
       // `surahName` still name whatever is actually live (or stay null).
       patch({
         error: 'Could not load this surah. Please try again.',
+        errorKind: 'load',
         isLoading: false,
         pendingSurahId: surahId,
       });
@@ -411,7 +427,7 @@ function createEngine(): PlaybackEngine {
       sync.setWords(timings.ayahs[index]?.words ?? []);
       ayahIndex = index;
       const timing = timings.ayahs[index];
-      patch({ ayah: timing?.ayah ?? 1, error: null });
+      patch({ ayah: timing?.ayah ?? 1, error: null, errorKind: null });
       registerLockScreen();
       if (timing) {
         // Bookmark for the next launch, and warm the cache with the ayah now
@@ -434,7 +450,7 @@ function createEngine(): PlaybackEngine {
       patch({ isPlaying: playing });
     };
     const onError = (message: string) => {
-      if (mine()) patch({ error: message, isPlaying: false, isLoading: false, pendingSurahId: surahId });
+      if (mine()) patch({ error: message, errorKind: 'playback', isPlaying: false, isLoading: false, pendingSurahId: surahId });
     };
     const onEnded = () => {
       if (!mine()) return;
@@ -507,6 +523,7 @@ function createEngine(): PlaybackEngine {
       sync.detach();
       patch({
         error: 'Could not load this recitation. Please try again.',
+        errorKind: 'load',
         isLoading: false,
         isPlaying: false,
         pendingSurahId: surahId,
@@ -547,6 +564,7 @@ function createEngine(): PlaybackEngine {
       ayah: timings.ayahs[startIndex]?.ayah ?? 1,
       isLoading: false,
       error: null,
+      errorKind: null,
       pendingSurahId: null,
     });
     // The first ayah's `ayahchange` fired before `live`, so do here what

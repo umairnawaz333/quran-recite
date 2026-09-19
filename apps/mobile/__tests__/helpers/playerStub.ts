@@ -22,6 +22,7 @@ export function stubPlayer(overrides: Partial<PlayerContextValue> = {}): PlayerC
     isPlaying: false,
     isLoading: false,
     error: null,
+    errorKind: null,
     pendingSurahId: null,
     play: vi.fn(async () => {}),
     toggle: vi.fn(),

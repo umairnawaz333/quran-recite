@@ -34,7 +34,14 @@ export function registerCarEngine(): () => void {
       const key = `${s.surahId}:${index}`;
       if (key !== lastKey) { lastKey = key; CarMedia.setPosition({ positionOffsetMs: t.ayahs[index].startOffsetMs, durationMs: t.surahDurationMs }); }
     } else if (lastKey) { lastKey = ''; CarMedia.clearPosition(); }
-    if (s.error && s.error !== lastError) CarMedia.setError('No connection — download this surah on your phone');
+    if (s.error && s.error !== lastError) {
+      // Spec §7: a surah that never started (its timings, or a mid-play
+      // switch/seek, failed to load) gets the connection copy — the
+      // engine's own message names an offline surah the car cannot act on.
+      // A failure mid-surah (the sequencer's own `onError`) shows the
+      // engine's text as-is, since it already names the real failure.
+      CarMedia.setError(s.errorKind === 'playback' ? s.error : 'No connection — download this surah on your phone');
+    }
     lastError = s.error;
   });
   CarMedia.engineReady();
