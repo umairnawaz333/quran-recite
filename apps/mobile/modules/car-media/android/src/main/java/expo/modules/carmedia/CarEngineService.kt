@@ -6,14 +6,21 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import com.facebook.react.HeadlessJsTaskService
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
 
 /** Foreground first, then the headless task — the car can start us with no Activity. */
 class CarEngineService : HeadlessJsTaskService() {
+  private val main = Handler(Looper.getMainLooper())
+
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    // expo-audio's channel: one notification slot, no duplicate channel in Settings.
+    // Reusing expo-audio's channel id keeps this out of Settings as a second
+    // channel. The card itself is a separate notification (expo-audio owns its
+    // own id), so it is removed again as soon as the engine is ready — see
+    // dismissBootNotification below.
     val channelId = "expo_audio_channel"
     val nm = getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(channelId) == null) {
@@ -32,7 +39,17 @@ class CarEngineService : HeadlessJsTaskService() {
     } else {
       startForeground(NOTIFICATION_ID, n)
     }
+    // Once JS reports in, expo-audio's media notification is what the car should
+    // see. Drop ours and stay in the background; the headless task keeps running.
+    CarMediaProvider.instance?.dismissBootNotification = {
+      main.post { stopForeground(STOP_FOREGROUND_REMOVE) }
+    }
     return super.onStartCommand(intent, flags, startId)
+  }
+
+  override fun onDestroy() {
+    CarMediaProvider.instance?.dismissBootNotification = null
+    super.onDestroy()
   }
 
   // timeout 0 = no timeout in RN 0.86 (HeadlessJsTaskConfig kdoc: "A value of 0

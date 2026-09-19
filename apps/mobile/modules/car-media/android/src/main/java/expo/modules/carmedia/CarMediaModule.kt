@@ -18,12 +18,14 @@ class CarMediaModule : Module() {
     }
 
     OnDestroy {
-      CarMediaProvider.instance?.let { it.jsSink = null; it.booter.engineGone() }
+      // engineGone() first: while `ready` is still true a command would take the
+      // deliver path, and a null sink would swallow it.
+      CarMediaProvider.instance?.let { it.booter.engineGone(); it.jsSink = null }
       CarLibraryRegistry.positionOffsetMs = 0
       CarLibraryRegistry.durationOverrideMs = C.TIME_UNSET
     }
 
-    Function("engineReady") { CarMediaProvider.instance?.booter?.engineReady() }
+    Function("engineReady") { CarMediaProvider.instance?.engineReady() }
 
     Function("setPosition") { offsetMs: Double, durationMs: Double ->
       CarLibraryRegistry.positionOffsetMs = offsetMs.toLong()

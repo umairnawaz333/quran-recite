@@ -31,7 +31,9 @@ class CarLibrary(private val surahs: List<Surah>, private val artworkUri: Uri? =
     if (q.isBlank()) return emptyList()
     q.toIntOrNull()?.let { n -> surahs.firstOrNull { it.id == n }?.let { return listOf(row(it)) } }
     val scored = surahs.mapNotNull { s ->
-      val names = listOf(fold(s.nameSimple), fold(s.nameEnglish), s.nameArabic)
+      // The Arabic name is folded too: NFD strips the hamza carriers, so a name
+      // like المائدة only ever matches a query that went through the same fold.
+      val names = listOf(fold(s.nameSimple), fold(s.nameEnglish), fold(s.nameArabic))
       val score = when {
         names.any { it == q } -> 3
         names.any { it.startsWith(q) } -> 2
