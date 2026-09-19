@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Registers the CarLibraryProvider at process start, before any controller can bind. -->
+    <provider
+      android:name="expo.modules.carmedia.CarMediaInitProvider"
+      android:authorities="${applicationId}.carmedia-init"
+      android:exported="false"
+      android:initOrder="50" />
+    <!-- Boots the JS engine with no Activity when the car asks to play (spec §5.1). -->
+    <service
+      android:name="expo.modules.carmedia.CarEngineService"
+      android:exported="false"
+      android:foregroundServiceType="mediaPlayback" />
+  </application>
+</manifest>

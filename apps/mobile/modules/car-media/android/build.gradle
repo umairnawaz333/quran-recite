@@ -1,0 +1,40 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.carmedia'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.carmedia"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+  testOptions {
+    // CarLibrary/CarController reference android.net.Uri and media3 types that
+    // only exist as stubs on the JVM; the pure logic under test never calls
+    // them, so returning defaults keeps the stubs from throwing.
+    unitTests.returnDefaultValues = true
+  }
+}
+
+dependencies {
+  // HeadlessJsTaskService — boots the JS engine with no Activity.
+  implementation 'com.facebook.react:react-android'
+  // CarLibraryProvider / CarLibraryRegistry live in the patched expo-audio.
+  implementation project(':expo-audio')
+  // MediaItem/MediaMetadata for the browse tree, MediaSession.ControllerInfo
+  // for controller routing. Same version expo-audio builds against.
+  implementation "androidx.media3:media3-session:1.9.0"
+
+  testImplementation 'junit:junit:4.13.2'
+  // android.jar's org.json is a stub that returns defaults; the real
+  // implementation shadows it on the unit-test classpath so CarLibrary.parse
+  // can be tested as it runs on a device.
+  testImplementation 'org.json:json:20240303'
+}
