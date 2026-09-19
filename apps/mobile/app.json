@@ -49,6 +49,7 @@
           }
         }
       ],
+      "./plugins/withCarMedia",
       [
         "expo-audio",
         {
