@@ -190,10 +190,77 @@ Reached from the home screen's gear icon (`SettingsScreen.tsx`):
   into that binary, not the source tree you happen to have checked out), and
   a fixed credit line, "© 2026 — Umair Nawaz".
 
+## Android Auto
+
+Plug the phone into a car (or run Google's Desktop Head Unit) and Quran
+shows up on the car screen with no setup: one engine, one media session.
+`src/player/PlaybackEngine.ts` is a module-scope singleton with no React
+dependency, so it can run from a `HeadlessJsTaskService` even with the app
+process dead and no Activity — `src/car/carEngine.ts`'s
+`registerCarEngine()` wires the car's commands to it and its state back out
+to the car, exactly the same as it wires up the lock screen. If the JS
+runtime isn't already up when a command arrives, `EngineBooter`
+(`modules/car-media`) boots it headless, queues the command, and times out
+to "Open Quran on your phone" after 10 s. Browsing the 114-surah list needs
+no JS at all — it comes straight from the bundled
+`modules/car-media/android/src/main/assets/car-library.json` (see
+[`docs/DATA_SOURCES.md`](../../docs/DATA_SOURCES.md)).
+
+**Skip rule:** next/previous from a car controller (head unit or Auto's
+projected UI) skip a whole **surah**; the phone's lock screen and
+headphones keep skipping an **ayah**, exactly as before — the same media
+session serves both, told apart per-command by the controller's package,
+never a global mode flag.
+
+**Errors the car shows** (session state, cleared on the next successful
+play): a surah that's neither downloaded nor reachable online — "No
+connection — download this surah on your phone"; the engine taking longer
+than 10 s to boot headless — "Open Quran on your phone"; a mid-surah load
+failure — today's engine error text; the car sending plain "play" with
+nothing selected — resumes the bookmark, or Al-Fatihah 1:1 if there is none.
+
+**Verifying with the Desktop Head Unit** (Google's Android Auto emulator,
+run against a real phone over USB — see the [design
+spec](../../docs/superpowers/specs/2026-09-19-car-media-design.md) §8 for
+the full checklist):
+
+1. Install the DHU once: `sdkmanager --install "extras;google;auto"`
+   (binary ends up at `$ANDROID_HOME/extras/google/auto/desktop-head-unit`).
+2. On the phone: Android Auto app → Settings → tap "Version" 10× →
+   Developer settings → "Start head unit server"; enable "Unknown sources"
+   for a sideloaded build. Then `adb forward tcp:5277 tcp:5277`.
+3. Build and install the release APK (see "Running it" above for the plain
+   build; installing is `adb install -r
+   app/build/outputs/apk/release/app-release.apk` afterwards).
+4. Run `$ANDROID_HOME/extras/google/auto/desktop-head-unit` — its window is
+   the car screen. Walk: cold start (force-stop the app, tap Quran, the
+   114-surah list appears with no JS running, play Al-Fatihah), surah skip
+   on the DHU against ayah skip on the phone at the same moment, dragging
+   the seek bar to a mid-surah ayah, voice search ("play Al-Kahf in
+   Quran"), auto-continue at the end of a surah, resume with nothing live,
+   unplugging (audio keeps playing on the phone), and a non-downloaded
+   surah in airplane mode showing the connection error — then confirm
+   nothing on the phone itself regressed (lock screen, status bar, word
+   highlighting, Settings).
+
+**Rebuilding the library:** run `npm run build:car-library` from the repo
+root (writes
+`modules/car-media/android/src/main/assets/car-library.json` from
+`@quran/data`'s surah list) whenever that surah list changes — a test
+asserts the committed JSON still matches it, so a stale file fails CI
+rather than silently drifting.
+
+**Plugin ordering matters:** `app.json` lists `./plugins/withCarMedia`
+*before* `expo-audio` — config-plugin manifest mods compose in reverse, so
+`withCarMedia` must run after expo-audio's own manifest mod has already
+added the `AudioControlsService` declaration it extends with the car's
+intent filters and meta-data. Listing them the other way around silently
+drops the car support from the generated manifest.
+
 ## Tests
 
 ```bash
-npm test          # from the repo root, or `npm test` inside apps/mobile — 168 vitest tests
+npm test          # from the repo root, or `npm test` inside apps/mobile — 192 vitest tests
 ```
 
 Covers the timing sequencer (`AyahSequencer`), the `expo-audio` player

@@ -65,6 +65,32 @@ Every external dataset used by this project, with its licence and how it is used
 - **Runtime dependency:** none — it is a static JSON file bundled with the
   app, not fetched.
 
+## Car media browse tree (Android Auto)
+
+- **Source:** derived, not fetched — `apps/mobile/scripts/build-car-library.mjs`
+  reads `@quran/data`'s surah list (`packages/quran-data/surahs.json`), the
+  same list `apps/mobile`'s own surah screen uses.
+- **Generate it:** `npm run build:car-library` from the repo root. Re-run it
+  whenever the surah list changes (a new field, a corrected name/ayah count)
+  — a vitest test (`carLibrary` data test, see the design spec's §8) asserts
+  the committed JSON still matches `getSurahList()`, so a stale file fails
+  the test suite rather than silently drifting from the app it's supposed to
+  mirror.
+- **Output:** `modules/car-media/android/src/main/assets/car-library.json`,
+  committed to the repo. Shape: `[{ id, nameSimple, nameArabic, nameEnglish,
+  ayahCount }]`, one entry per surah, 114 total.
+- **Use:** bundled into the Android app and read natively by
+  `CarLibraryProvider` (`modules/car-media`) to answer a car head unit's
+  browse/search requests for the root list of surahs — this is why browsing
+  the car's Now Playing UI needs no JS runtime running at all, only the JS
+  engine for actually starting playback.
+- **Tested by:** the data-parity vitest test above, plus the Kotlin unit
+  tests in `modules/car-media` that build the browse tree from this file and
+  check search ranking against it; end-to-end via Google's Desktop Head Unit
+  (see [`apps/mobile/README.md`](../apps/mobile/README.md#android-auto)).
+- **Runtime dependency:** none — it is a static JSON asset bundled with the
+  app, not fetched.
+
 ## Fonts
 
 | Font | Use | Licence |
