@@ -97,6 +97,13 @@ export interface PlaybackEngine {
   next(): Promise<void>;
   /** Previous ayah. */
   prev(): Promise<void>;
+  /** Play the next/previous surah from ayah 1; no-op at 114 / 1 when nothing else applies. */
+  nextSurah(): Promise<void>;
+  prevSurah(): Promise<void>;
+  /** Play the bookmark (or the offered position) — what the car's bare "play" means. */
+  resume(): Promise<void>;
+  /** Seek within the live surah by surah-level position (spec §5.4); ignored when nothing is live. */
+  seekToSurahPosition(positionMs: number): Promise<void>;
   /**
    * Registers `surahId` as the surah currently on screen and returns an
    * unsubscribe to call on unmount (or before re-registering a new id).
@@ -592,6 +599,56 @@ function createEngine(): PlaybackEngine {
     return activeSequencer?.prev() ?? Promise.resolve();
   }
 
+  // The car's skip buttons: always from ayah 1 of the neighbouring surah,
+  // never a resume-in-place — that is what `next()`/`prev()` are for. Reads
+  // `playingSurah` first (what is actually live), falling back to the
+  // offered `state.surahId` so a skip pressed before anything has played
+  // still moves the offer rather than doing nothing.
+  async function nextSurah(): Promise<void> {
+    const surahId = playingSurah ?? state.surahId;
+    if (surahId !== null && surahId < 114) await play(surahId + 1);
+  }
+
+  async function prevSurah(): Promise<void> {
+    const surahId = playingSurah ?? state.surahId;
+    if (surahId !== null && surahId > 1) await play(surahId - 1);
+  }
+
+  // What the car's bare "play" means: resume whatever is already live
+  // (paused or playing — `sequencer.play()` on an already-playing sequencer
+  // is a no-op), else start playback of whatever is offered — the bookmark
+  // once `start()` has read it, or the initial Al-Fatihah 1:1 offer before
+  // that.
+  async function resume(): Promise<void> {
+    if (activeSequencer && playingSurah !== null) {
+      await activeSequencer.play();
+      return;
+    }
+    const { surahId, ayah } = state;
+    if (surahId !== null) await play(surahId, ayah);
+  }
+
+  // Surah-level seek for the car (spec §5.4): maps an absolute position in
+  // the live surah onto (ayah index, ayah-local ms) by `startOffsetMs` — the
+  // last ayah whose start is at or before the position — then hands the
+  // sequencer its own `seekToAyah`. Reads `activeSequencer`/`activeTimings`/
+  // `playingSurah` together into locals before any await, exactly as
+  // `next()` does above: outside the synchronous switch-over window inside
+  // `play()` these three always agree, and capturing them up front is what
+  // keeps that true here too. A no-op when nothing is live.
+  async function seekToSurahPosition(positionMs: number): Promise<void> {
+    const sequencer = activeSequencer;
+    const timings = activeTimings;
+    const surahId = playingSurah;
+    if (!sequencer || !timings || surahId === null) return;
+    let index = 0;
+    for (let i = 0; i < timings.ayahs.length; i++) {
+      if (timings.ayahs[i].startOffsetMs <= positionMs) index = i;
+    }
+    const localMs = Math.max(0, positionMs - timings.ayahs[index].startOffsetMs);
+    await sequencer.seekToAyah(index, localMs);
+  }
+
   function attachViewer(surahId: number): () => void {
     viewedSurah = surahId;
     // Not the surah that's playing: make sure nothing stale is left
@@ -673,6 +730,10 @@ function createEngine(): PlaybackEngine {
     toggle,
     next,
     prev,
+    nextSurah,
+    prevSurah,
+    resume,
+    seekToSurahPosition,
     attachViewer,
     currentAyahIndex: () => (playingSurah === null ? -1 : ayahIndex),
     currentTimings: () => activeTimings,
