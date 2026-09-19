@@ -4,6 +4,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { setAudioModeAsync } from 'expo-audio';
+import { registerCarEngine } from './src/car/carEngine';
 import { SurahListScreen } from './src/screens/SurahListScreen';
 import { ReaderScreen, type Script } from './src/screens/ReaderScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -26,6 +27,11 @@ SplashScreen.setOptions({ fade: true, duration: 250 });
 // permissions it needs). That native change is inert until the audio
 // session is actually told to behave this way, once, at startup.
 void setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true });
+
+// With the app open, commands from the car reach the same engine the
+// screens use — the lock-screen path and the car session are one and the
+// same `PlaybackEngine` (spec §4).
+registerCarEngine();
 
 /**
  * When recitation runs on from one surah into the next (the end of a surah,

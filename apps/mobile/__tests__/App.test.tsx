@@ -21,6 +21,7 @@ vi.mock('../src/audio/nowPlaying', async () => {
   const fake = await import('./helpers/fakeAudio');
   return { setNowPlaying: fake.setNowPlaying, isNowPlaying: fake.isNowPlaying };
 });
+vi.mock('../src/car/carEngine', () => ({ registerCarEngine: () => () => {} }));
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children?: unknown }) => children,
   SafeAreaView: (props: Record<string, unknown>) => createElement('SafeAreaView', props),
