@@ -39,8 +39,14 @@ class CarEngineService : HeadlessJsTaskService() {
     } else {
       startForeground(NOTIFICATION_ID, n)
     }
-    // Once JS reports in, expo-audio's media notification is what the car should
-    // see. Drop ours and stay in the background; the headless task keeps running.
+    // Handed down only once expo-audio's own media notification is really
+    // there — that is, once the session is holding the app's REAL player
+    // (CarLibraryRegistry.onRealPlayerAttached), not merely once JS has
+    // reported in: `PlaybackEngine.play()` still has the audio mode and the
+    // timings to await after that, and dropping this card first would leave
+    // the process with no foreground service and no Activity to start one
+    // from. The provider also has a 60 s safety net for a boot that dies.
+    // Then we stay in the background; the headless task keeps running.
     CarMediaProvider.instance?.dismissBootNotification = {
       main.post { stopForeground(STOP_FOREGROUND_REMOVE) }
     }

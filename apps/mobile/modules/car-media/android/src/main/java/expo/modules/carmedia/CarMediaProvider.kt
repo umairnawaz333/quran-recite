@@ -42,6 +42,7 @@ class CarMediaProvider(private val context: Context) : CarLibraryProvider {
       // plain startService is allowed from the background anyway.
       if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
       scheduleTick()
+      scheduleBootCardSafetyNet()
     },
     deliver = { t, a -> jsSink?.let { sink -> sink(t, a); true } ?: false },
     error = { msg -> CarLibraryRegistry.errorSink?.invoke(msg) },
@@ -56,10 +57,28 @@ class CarMediaProvider(private val context: Context) : CarLibraryProvider {
     handler.postDelayed({ booter.tick(); if (booter.isBooting) scheduleTick() }, 1000)
   }
 
-  /** JS is listening: flush the queue, then drop the boot service's notification. */
+  /**
+   * The boot card is normally taken down by `onRealPlayerAttached` (below).
+   * If the boot fails outright — no engine, or a play that never reaches the
+   * real player — nothing would ever take it down, so it is also given a
+   * bounded life. Generous on purpose: it must outlast a slow cold start
+   * (audio mode + timings over a poor connection), and it exists only so a
+   * failed boot cannot leave a "Starting…" card up for the rest of the day.
+   */
+  private fun scheduleBootCardSafetyNet() {
+    handler.postDelayed({ dismissBootNotification?.invoke() }, BOOT_CARD_MAX_MS)
+  }
+
+  /**
+   * JS is listening: flush the queue. It deliberately does NOT drop the boot
+   * card — expo-audio's own foreground notification does not exist until
+   * `PlaybackEngine.play()` has awaited the audio mode and the timings and
+   * reached `setActiveForLockScreen`, and between the two the process would
+   * have no foreground service at all and no Activity to start one from.
+   * `CarLibraryRegistry.onRealPlayerAttached` fires at the right moment.
+   */
   fun engineReady() {
     booter.engineReady()
-    dismissBootNotification?.invoke()
   }
 
   override fun isCarController(controller: MediaSession.ControllerInfo): Boolean =
@@ -79,5 +98,8 @@ class CarMediaProvider(private val context: Context) : CarLibraryProvider {
 
   companion object {
     @Volatile var instance: CarMediaProvider? = null
+
+    /** Upper bound on the "Starting…" card when a boot never completes. */
+    const val BOOT_CARD_MAX_MS = 60_000L
   }
 }
