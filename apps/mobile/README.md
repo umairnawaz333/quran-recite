@@ -237,7 +237,8 @@ the full checklist):
    114-surah list appears with no JS running, play Al-Fatihah), surah skip
    on the DHU against ayah skip on the phone at the same moment, dragging
    the seek bar to a mid-surah ayah, voice search ("play Al-Kahf in
-   Quran"), auto-continue at the end of a surah, resume with nothing live,
+   Quran"), auto-continue at the end of a surah, resume with nothing live
+   (and the car's recent/resume entry offering the bookmark),
    unplugging (audio keeps playing on the phone), and a non-downloaded
    surah in airplane mode showing the connection error — then confirm
    nothing on the phone itself regressed (lock screen, status bar, word

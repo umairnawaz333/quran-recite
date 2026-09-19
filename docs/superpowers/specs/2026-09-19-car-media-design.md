@@ -171,6 +171,8 @@ ayah-local position`, with the surah's total duration (`surahDurationMs` from ti
 Concretely: position = `ayah.startOffsetMs + localMs`, duration = `surahDurationMs`, both
 straight from the surah's timings (`packages/core`), so no new domain logic. Seeking from the
 car maps a surah position back to (ayah, localMs) by the ayahs' `startOffsetMs`.
+There is one session for every controller, so **the phone notification's seek bar is
+surah-level too** — the same bar, the same numbers, wherever it is shown.
 
 ### 5.5 Manifest and builds (`plugins/withCarMedia.js`)
 
@@ -215,7 +217,8 @@ Errors are session state, never a silent stop; clearing happens on the next succ
   cold start (force-stop app → tap Quran on DHU → browse → play), surah skip from the car vs
   ayah skip on the phone at the same time, voice search, seek, auto-continue, unplug →
   audio continues on the phone, offline surah in airplane mode, error text for a
-  non-downloaded surah offline.
+  non-downloaded surah offline, the recent/resume entry offers the bookmark (the library
+  declines the recent root, so the host falls back to `onPlaybackResumption`).
 - **Device — AAOS:** Android Automotive emulator image (Android Studio) with the automotive
   AAB: install, browse, play, cold start after reboot.
 - **Car review checklist** (Google "Android for Cars app quality") walked before submission:
