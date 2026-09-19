@@ -157,7 +157,9 @@ describe('PlayerProvider — starting playback', () => {
     expect(bound?.id).toBe(sounding().nativePlayer.id);
     expect(bound?.setActiveForLockScreen).toHaveBeenCalledWith(
       true,
-      expect.objectContaining({ title: 'Al-Fatihah' }),
+      // Spec §2's Now Playing card, which the lock screen and the car share:
+      // the surah in both scripts, with the ayah as the subtitle.
+      expect.objectContaining({ title: 'Al-Fatihah · الفاتحة', artist: 'Ayah 1' }),
     );
     // `interruptionMode: 'doNotMix'` is what makes that binding take.
     expect(setAudioModeAsync).toHaveBeenCalledWith(

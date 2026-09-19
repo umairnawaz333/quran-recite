@@ -14,6 +14,7 @@ import { act, create } from 'react-test-renderer';
 import type { ReactTestRenderer } from 'react-test-renderer';
 import type { ReactNode } from 'react';
 import { configureTimings, resetTimingsCache } from '@quran/core';
+import { engine } from '../../src/player/PlaybackEngine';
 import { PlayerProvider, usePlayer } from '../../src/player/PlayerProvider';
 import type { PlayerContextValue } from '../../src/player/PlayerProvider';
 import { activeWordStore } from '../../src/reader/activeWordStore';
@@ -41,6 +42,10 @@ export function resetPlayerEnvironment(): void {
   resetFileSystem();
   resetTimings();
   resetReactNative();
+  // The engine is a module-scope singleton that outlives every React tree
+  // (the car can drive it with no Activity), so unmounting a provider no
+  // longer releases anything: the harness resets it between tests instead.
+  engine.__resetForTests();
   resetTimingsCache();
   configureTimings({ store: timingsStore });
   activeWordStore.set(null);
