@@ -37,4 +37,8 @@ dependencies {
   // implementation shadows it on the unit-test classpath so CarLibrary.parse
   // can be tested as it runs on a device.
   testImplementation 'org.json:json:20240303'
+  // `PendingPlayer` is a real `SimpleBasePlayer`: it needs a Looper that is
+  // also what `Looper.myLooper()` answers, or media3's own thread check
+  // rejects every call. android.jar's stub cannot do that; a static mock can.
+  testImplementation 'org.mockito:mockito-core:5.14.1'
 }

@@ -41,6 +41,24 @@ describe('carEngine — commands drive the engine', () => {
     emitCommand('resume'); await settle();
     expect(engine.getState()).toMatchObject({ surahId: 1, isPlaying: true });
   });
+  it('playSurah wins over the end of the surah it interrupts', async () => {
+    emitCommand('playSurah', 2); await settle();
+    const t = engine.currentTimings()!;
+    const last = t.ayahs[t.ayahs.length - 1];
+    emitCommand('seekTo', last.startOffsetMs); await settle();
+    expect(engine.getState()).toMatchObject({ surahId: 2, ayah: last.ayah });
+
+    // The car asks for surah 1 — and media3 applies the session callback's
+    // empty queue to the real player, so the playlist empties, ExoPlayer
+    // reports STATE_ENDED and expo-audio turns that into `didJustFinish`
+    // (the player ignores the empty queue now, but the race is the one
+    // thing that must never decide which surah plays).
+    emitCommand('playSurah', 1);
+    audio.players.at(-1)!.finish();
+    await settle();
+
+    expect(engine.getState().surahId).toBe(1);
+  });
   it('seekTo maps a surah position to an ayah', async () => {
     emitCommand('playSurah', 1); await settle();
     const t = engine.currentTimings()!;

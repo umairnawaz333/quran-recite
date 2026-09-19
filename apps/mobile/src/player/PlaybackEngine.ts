@@ -192,6 +192,15 @@ function createEngine(): PlaybackEngine {
    * checks it is still current before mutating anything.
    */
   let request = 0;
+  /**
+   * How many `play()` calls have been made and not yet settled. A call that
+   * is still loading has already named the surah that is meant to be playing
+   * next, so the live surah reaching its own end must not auto-continue over
+   * it: the car's `playSurah` empties the session queue as it arrives, and
+   * ExoPlayer reports that emptying as the end of the file — an "ended" that
+   * would otherwise start surah+1 and supersede the surah the car asked for.
+   */
+  let playsInFlight = 0;
   /** Index into the live surah's `ayahs` that the sequencer is on. */
   let ayahIndex = 0;
   /** Removes the live surah's sequencer handlers; replaced at each switch-over. */
@@ -264,6 +273,17 @@ function createEngine(): PlaybackEngine {
   }
 
   async function play(surahId: number, ayah?: number, wordId?: string): Promise<void> {
+    playsInFlight++;
+    try {
+      await playInternal(surahId, ayah, wordId);
+    } finally {
+      // Never below zero: `__resetForTests` can zero it while a call is still
+      // awaiting, and a negative count would disable auto-continue for good.
+      playsInFlight = Math.max(0, playsInFlight - 1);
+    }
+  }
+
+  async function playInternal(surahId: number, ayah?: number, wordId?: string): Promise<void> {
     const token = ++request;
 
     // Word taps recite from that word, as clicking a word does on the web.
@@ -457,6 +477,9 @@ function createEngine(): PlaybackEngine {
       sync.detach();
       paint(null);
       patch({ isPlaying: false });
+      // Something else has already been asked for (a car `playSurah`, a tap)
+      // and is still loading: that request owns what plays next.
+      if (playsInFlight > 0) return;
       // Recitation runs on into the next surah rather than stopping at the
       // end of this one — asked for from the device. The web stops here.
       if (surahId < 114) void play(surahId + 1);
@@ -731,6 +754,7 @@ function createEngine(): PlaybackEngine {
     started = false;
     state = INITIAL;
     request = 0;
+    playsInFlight = 0;
     handlerEpoch = 0;
     ayahIndex = 0;
     viewedSurah = null;

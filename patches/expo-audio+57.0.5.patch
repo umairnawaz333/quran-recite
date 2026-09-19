@@ -1,19 +1,27 @@
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 196a5d5..d6eb972 100644
+index 196a5d5..0131449 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -19,8 +19,9 @@ import androidx.media3.common.ForwardingPlayer
+@@ -12,13 +12,18 @@ import android.graphics.Bitmap
+ import android.graphics.BitmapFactory
+ import android.os.Build
+ import android.os.Bundle
++import android.os.Binder
++import android.os.Handler
+ import android.os.IBinder
++import android.os.Process
+ import androidx.annotation.OptIn
+ import androidx.core.app.NotificationCompat
+ import androidx.media3.common.ForwardingPlayer
  import androidx.media3.common.Player
  import androidx.media3.common.util.UnstableApi
  import androidx.media3.session.CommandButton
 +import androidx.media3.session.MediaLibraryService
 +import androidx.media3.session.MediaLibraryService.MediaLibrarySession
  import androidx.media3.session.MediaSession
--import androidx.media3.session.MediaSessionService
+ import androidx.media3.session.MediaSessionService
  import androidx.media3.session.MediaStyleNotificationHelper
- import androidx.media3.session.SessionCommand
- import expo.modules.audio.AudioLockScreenOptions
-@@ -38,10 +39,14 @@ import java.lang.ref.WeakReference
+@@ -38,10 +43,14 @@ import java.lang.ref.WeakReference
  import java.net.URL
  
  @OptIn(UnstableApi::class)
@@ -30,7 +38,7 @@ index 196a5d5..d6eb972 100644
    private var sessionMetadataPlayer: MetadataInjectingPlayer? = null
    private var currentMetadata: Metadata? = null
    private var currentPlayer: AudioPlayer? = null
-@@ -117,11 +122,20 @@ class AudioControlsService : MediaSessionService() {
+@@ -117,11 +126,20 @@ class AudioControlsService : MediaSessionService() {
      }
    }
  
@@ -52,19 +60,31 @@ index 196a5d5..d6eb972 100644
        .setSilent(true)
        .setShowWhen(false)
        .build()
-@@ -130,6 +144,11 @@ class AudioControlsService : MediaSessionService() {
+@@ -130,6 +148,23 @@ class AudioControlsService : MediaSessionService() {
      super.onCreate()
      audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
      createNotificationChannelIfNeeded()
++    // `mediaSession` is written on the main queue and the sink is called from
++    // the JS/module thread, so the whole body is posted to the main looper:
++    // that is also media3's application thread, which is where both players
++    // below have to be touched.
++    val main = Handler(mainLooper)
 +    CarLibraryRegistry.errorSink = { message ->
-+      mediaSession?.let { session ->
-+        (session.player as? MetadataInjectingPlayer)?.reportError(message)
++      main.post {
++        // A cold bind from the car is still on the stand-in player when the
++        // boot times out — "Open Quran on your phone" has to reach the head
++        // unit through it, or the car spins on BUFFERING forever.
++        when (val player = mediaSession?.player) {
++          is MetadataInjectingPlayer -> player.reportError(message)
++          is PendingPlayer -> player.reportError(message)
++          else -> Unit
++        }
 +      }
 +    }
    }
  
    private fun shouldPlayInSilentMode(): Boolean {
-@@ -175,7 +194,7 @@ class AudioControlsService : MediaSessionService() {
+@@ -175,7 +210,7 @@ class AudioControlsService : MediaSessionService() {
      val session = mediaSession ?: return null
  
      val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -73,7 +93,7 @@ index 196a5d5..d6eb972 100644
        // If the title is null or empty string android sets the notification to "<AppName> is running..." we want to keep the notification empty so we \u200E to keep the text empty.
        .setContentTitle(currentMetadata?.title ?: "\u200E")
        .setContentText(currentMetadata?.artist)
-@@ -184,6 +203,11 @@ class AudioControlsService : MediaSessionService() {
+@@ -184,6 +219,11 @@ class AudioControlsService : MediaSessionService() {
        .setContentIntent(buildContentIntent())
        .setAutoCancel(false)
        .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
@@ -85,7 +105,7 @@ index 196a5d5..d6eb972 100644
  
      val style = MediaStyleNotificationHelper.MediaStyle(session)
  
-@@ -317,6 +341,11 @@ class AudioControlsService : MediaSessionService() {
+@@ -317,6 +357,11 @@ class AudioControlsService : MediaSessionService() {
    }
  
    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
@@ -97,7 +117,7 @@ index 196a5d5..d6eb972 100644
      postOrStartForegroundNotification(startInForegroundRequired)
    }
  
-@@ -362,7 +391,6 @@ class AudioControlsService : MediaSessionService() {
+@@ -362,7 +407,6 @@ class AudioControlsService : MediaSessionService() {
      player?.isActiveForLockScreen = true
  
      if (player != null) {
@@ -105,7 +125,7 @@ index 196a5d5..d6eb972 100644
        sessionMetadataPlayer = null
  
        appContext?.mainQueue?.launch {
-@@ -370,15 +398,20 @@ class AudioControlsService : MediaSessionService() {
+@@ -370,17 +414,23 @@ class AudioControlsService : MediaSessionService() {
          val sessionPlayer = MetadataInjectingPlayer(resolveSessionPlayer(player, options)).apply {
            updateMetadata(metadata)
          }
@@ -130,8 +150,11 @@ index 196a5d5..d6eb972 100644
 +        }
          mediaSession = session
          sessionMetadataPlayer = sessionPlayer
++        CarLibraryRegistry.onRealPlayerAttached?.invoke()
  
-@@ -417,18 +450,53 @@ class AudioControlsService : MediaSessionService() {
+         updateSessionCustomLayout(player.ref.isPlaying)
+ 
+@@ -417,18 +467,55 @@ class AudioControlsService : MediaSessionService() {
      currentMetadata = null
      mediaSession?.release()
      mediaSession = null
@@ -153,11 +176,8 @@ index 196a5d5..d6eb972 100644
 +    session.player = sessionPlayer
 +    pendingPlayer = null
 +    return session
-   }
- 
--  override fun onBind(intent: Intent?): IBinder {
--    super.onBind(intent)
--    return binder
++  }
++
 +  /**
 +   * A controller (a car, typically) bound before any JS player was activated.
 +   * It gets the one session with a stand-in player rather than no session at all.
@@ -171,26 +191,31 @@ index 196a5d5..d6eb972 100644
 +    pendingPlayer = pending
 +    mediaSession = session
 +    return session
-+  }
-+
+   }
+ 
+-  override fun onBind(intent: Intent?): IBinder {
+-    super.onBind(intent)
+-    return binder
 +  override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession {
 +    return mediaSession ?: createPendingSession()
 +  }
 +
 +  override fun onBind(intent: Intent?): IBinder? {
-+    // A browsing controller (a car, the Assistant) must reach media3's binder.
-+    // Everything else — including expo's own connection, which binds with
-+    // MediaSessionService.SERVICE_INTERFACE — gets the service binder, and
-+    // super is still called for its side effects exactly as before this patch.
++    // Routed by CALLER, not by action: expo's own connection binds with
++    // MediaSessionService.SERVICE_INTERFACE from this very process and needs
++    // the local service binder — but so does a media3 `MediaController` in a
++    // car or the Assistant, and handing *that* the local binder gives it a
++    // binder it cannot speak to. Same pid + that action is the only case that
++    // is really expo's own; everyone else gets media3's. `super.onBind` is
++    // still called first, for its side effects, exactly as before this patch.
 +    val mediaBinder = super.onBind(intent)
-+    return when (intent?.action) {
-+      MediaLibraryService.SERVICE_INTERFACE, LEGACY_BROWSER_SERVICE_INTERFACE -> mediaBinder
-+      else -> binder
-+    }
++    val isOwnConnection = Binder.getCallingPid() == Process.myPid() &&
++      intent?.action == MediaSessionService.SERVICE_INTERFACE
++    return if (isOwnConnection) binder else mediaBinder
    }
  
    fun setPlayerMetadata(player: AudioPlayer, metadata: Metadata?) {
-@@ -444,21 +512,25 @@ class AudioControlsService : MediaSessionService() {
+@@ -444,23 +531,28 @@ class AudioControlsService : MediaSessionService() {
        currentMetadata = metadata
        currentOptions = options
  
@@ -221,8 +246,11 @@ index 196a5d5..d6eb972 100644
 +        }
          mediaSession = session
          sessionMetadataPlayer = sessionPlayer
++        CarLibraryRegistry.onRealPlayerAttached?.invoke()
  
-@@ -518,6 +590,8 @@ class AudioControlsService : MediaSessionService() {
+         updateSessionCustomLayout(player.ref.isPlaying)
+         postOrStartForegroundNotification(startInForeground = false)
+@@ -518,6 +610,8 @@ class AudioControlsService : MediaSessionService() {
      scope.cancel()
      mediaSession?.release()
      mediaSession = null
@@ -231,23 +259,20 @@ index 196a5d5..d6eb972 100644
      sessionMetadataPlayer = null
      currentPlayer = null
      currentMetadata = null
-@@ -552,6 +626,10 @@ class AudioControlsService : MediaSessionService() {
+@@ -552,6 +646,7 @@ class AudioControlsService : MediaSessionService() {
  
    companion object {
      private const val CHANNEL_ID = "expo_audio_channel"
 +    private const val SESSION_ID = "quran"
-+    // MediaBrowserServiceCompat.SERVICE_INTERFACE, spelled out so expo-audio
-+    // keeps its current dependency set.
-+    private const val LEGACY_BROWSER_SERVICE_INTERFACE = "android.media.browse.MediaBrowserService"
      private const val ACTION_PLAY = "expo.modules.audio.action.PLAY"
      private const val ACTION_PAUSE = "expo.modules.audio.action.PAUSE"
      private const val ACTION_TOGGLE = "expo.modules.audio.action.TOGGLE"
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarLibrary.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarLibrary.kt
 new file mode 100644
-index 0000000..61bfaf3
+index 0000000..0b9a00a
 --- /dev/null
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarLibrary.kt
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,43 @@
 +package expo.modules.audio.service
 +
 +import android.graphics.Bitmap
@@ -280,13 +305,23 @@ index 0000000..61bfaf3
 +  @Volatile var durationOverrideMs: Long = androidx.media3.common.C.TIME_UNSET
 +  /** Set by the service when it exists, so a provider can push an error into the session. */
 +  @Volatile var errorSink: ((String) -> Unit)? = null
++
++  /**
++   * Fired when the session's player is the app's REAL player — never the
++   * `PendingPlayer` stand-in. Whoever put a "starting…" card up for a cold
++   * bind uses this to take it down: only now does expo-audio's own media
++   * notification exist, so dismissing any earlier leaves the process with no
++   * foreground service at all while `PlaybackEngine.play()` is still awaiting
++   * the audio mode and the network.
++   */
++  @Volatile var onRealPlayerAttached: (() -> Unit)? = null
 +}
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarSessionCallback.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarSessionCallback.kt
 new file mode 100644
-index 0000000..74fcf89
+index 0000000..0636877
 --- /dev/null
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/CarSessionCallback.kt
-@@ -0,0 +1,193 @@
+@@ -0,0 +1,197 @@
 +package expo.modules.audio.service
 +
 +import android.os.Bundle
@@ -379,6 +414,10 @@ index 0000000..74fcf89
 +    params: LibraryParams?
 +  ): ListenableFuture<LibraryResult<MediaItem>> {
 +    val p = provider ?: return unsupported()
++    // A host asking for the RECENT root wants one resumable item, not the
++    // 114-surah tree. Declining it is what makes the host fall back to
++    // `onPlaybackResumption`, which resumes the bookmark (spec §7).
++    if (params?.isRecent == true) return unsupported()
 +    return Futures.immediateFuture(LibraryResult.ofItem(p.root(), params))
 +  }
 +
@@ -481,10 +520,10 @@ index 0000000..74fcf89
 +  }
 +}
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
-index 18203a3..f5e8de6 100644
+index 18203a3..0af7345 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
-@@ -1,14 +1,18 @@
+@@ -1,14 +1,19 @@
  package expo.modules.audio.service
  
 +import android.graphics.Bitmap
@@ -494,6 +533,7 @@ index 18203a3..f5e8de6 100644
 +import androidx.media3.common.C
  import androidx.media3.common.FlagSet
  import androidx.media3.common.ForwardingPlayer
++import androidx.media3.common.MediaItem
  import androidx.media3.common.MediaMetadata
 +import androidx.media3.common.PlaybackException
  import androidx.media3.common.Player
@@ -503,7 +543,7 @@ index 18203a3..f5e8de6 100644
  import java.util.IdentityHashMap
  
  // MediaSession reads artwork from Player.mediaMetadata, but expo-audio lock-screen metadata can
-@@ -21,6 +25,94 @@ internal class MetadataInjectingPlayer(
+@@ -21,6 +26,130 @@ internal class MetadataInjectingPlayer(
    private val handler = Handler(applicationLooper)
    private val listeners = IdentityHashMap<Player.Listener, Player.Listener>()
    private var injectedMetadata: Metadata? = null
@@ -560,6 +600,9 @@ index 18203a3..f5e8de6 100644
 +
 +  override fun getBufferedPosition(): Long = CarLibraryRegistry.positionOffsetMs + super.getBufferedPosition()
 +
++  override fun getContentBufferedPosition(): Long =
++    CarLibraryRegistry.positionOffsetMs + super.getContentBufferedPosition()
++
 +  override fun getDuration(): Long =
 +    CarLibraryRegistry.durationOverrideMs.takeIf { it != C.TIME_UNSET } ?: super.getDuration()
 +
@@ -576,6 +619,39 @@ index 18203a3..f5e8de6 100644
 +  }
 +
 +  override fun seekTo(mediaItemIndex: Int, positionMs: Long) = seekTo(positionMs)
++
++  // JS owns the queue — but only when this app has registered a car library;
++  // with no provider the player is stock expo-audio, exactly as before.
++  // `CarSessionCallback` answers a car's play request with an empty result on
++  // purpose (the engine sequences the ayah files itself), and media3 applies
++  // that result to this player as `setMediaItems(emptyList, resetPosition =
++  // true)`. On the warm path the wrapped player is the live ExoPlayer: emptying
++  // its playlist ends playback, which expo-audio reports as `didJustFinish` —
++  // the engine's auto-continue then starts the *next* surah and supersedes the
++  // one the car just asked for. So an empty list (and a bare clear) is ignored;
++  // a real queue still passes through, and the commands stay advertised so the
++  // car keeps sending them.
++  private fun jsOwnsTheQueue(): Boolean = CarLibraryRegistry.provider != null
++
++  override fun setMediaItems(mediaItems: MutableList<MediaItem>, resetPosition: Boolean) {
++    if (mediaItems.isEmpty() && jsOwnsTheQueue()) return
++    super.setMediaItems(mediaItems, resetPosition)
++  }
++
++  override fun setMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long) {
++    if (mediaItems.isEmpty() && jsOwnsTheQueue()) return
++    super.setMediaItems(mediaItems, startIndex, startPositionMs)
++  }
++
++  override fun setMediaItems(mediaItems: MutableList<MediaItem>) {
++    if (mediaItems.isEmpty() && jsOwnsTheQueue()) return
++    super.setMediaItems(mediaItems)
++  }
++
++  override fun clearMediaItems() {
++    if (jsOwnsTheQueue()) return
++    super.clearMediaItems()
++  }
 +
 +  /** PNG bytes for the provider's artwork, compressed once per bitmap. */
 +  private fun providerArtworkBytes(): ByteArray? {
@@ -598,7 +674,7 @@ index 18203a3..f5e8de6 100644
  
    override fun addListener(listener: Player.Listener) {
      val forwardingListener = synchronized(listeners) {
-@@ -38,14 +130,20 @@ internal class MetadataInjectingPlayer(
+@@ -38,14 +167,20 @@ internal class MetadataInjectingPlayer(
  
    override fun getMediaMetadata(): MediaMetadata {
      val metadata = injectedMetadata
@@ -622,7 +698,7 @@ index 18203a3..f5e8de6 100644
    }
  
    fun updateMetadata(metadata: Metadata?) {
-@@ -54,6 +152,12 @@ internal class MetadataInjectingPlayer(
+@@ -54,6 +189,12 @@ internal class MetadataInjectingPlayer(
        return
      }
  
@@ -637,16 +713,17 @@ index 18203a3..f5e8de6 100644
      val newMetadata = mediaMetadata
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/PendingPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/PendingPlayer.kt
 new file mode 100644
-index 0000000..7dbce13
+index 0000000..d337cd9
 --- /dev/null
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/PendingPlayer.kt
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,96 @@
 +package expo.modules.audio.service
 +
 +import android.os.Looper
 +import androidx.annotation.OptIn
 +import androidx.media3.common.MediaItem
 +import androidx.media3.common.MediaMetadata
++import androidx.media3.common.PlaybackException
 +import androidx.media3.common.Player
 +import androidx.media3.common.SimpleBasePlayer
 +import androidx.media3.common.util.UnstableApi
@@ -663,6 +740,20 @@ index 0000000..7dbce13
 +@OptIn(UnstableApi::class)
 +class PendingPlayer(looper: Looper) : SimpleBasePlayer(looper) {
 +  private var playWhenReady = false
++  private var error: PlaybackException? = null
++
++  /**
++   * The boot gave up (spec §7's "Open Quran on your phone"). A controller that
++   * bound cold is still looking at THIS player, so the message has to become a
++   * real player error here — otherwise the head unit keeps the spinner up for
++   * a session that will never start. `SimpleBasePlayer` only accepts an error
++   * in STATE_IDLE, which is also what stops the spinner.
++   */
++  fun reportError(message: String) {
++    error = PlaybackException(message, null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
++    playWhenReady = false
++    invalidateState()
++  }
 +
 +  override fun getState(): State = State.Builder()
 +    .setAvailableCommands(
@@ -676,11 +767,14 @@ index 0000000..7dbce13
 +    // SimpleBasePlayer.State rejects an empty playlist outside STATE_IDLE/STATE_ENDED,
 +    // so the stub carries a single placeholder item while it reports BUFFERING.
 +    .setPlaylist(PLACEHOLDER_PLAYLIST)
-+    .setPlaybackState(if (playWhenReady) Player.STATE_BUFFERING else Player.STATE_IDLE)
++    .setPlaybackState(if (playWhenReady && error == null) Player.STATE_BUFFERING else Player.STATE_IDLE)
 +    .setPlayWhenReady(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
++    .setPlayerError(error)
 +    .build()
 +
 +  override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
++    // A fresh press clears the last failure: the booter tries again.
++    if (playWhenReady) error = null
 +    this.playWhenReady = playWhenReady
 +    return Futures.immediateVoidFuture()
 +  }
