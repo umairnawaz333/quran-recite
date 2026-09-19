@@ -18,6 +18,7 @@
     "fetch:data": "npm run fetch:data --workspace @quran/web",
     "fetch:fonts": "npm run fetch:fonts --workspace @quran/web",
     "build:audio-sizes": "node packages/quran-data/scripts/build-audio-sizes.mjs",
+    "build:car-library": "node apps/mobile/scripts/build-car-library.mjs",
     "postinstall": "patch-package"
   },
   "devDependencies": {
